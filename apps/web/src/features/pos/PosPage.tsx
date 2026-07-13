@@ -1,7 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { PAYMENT_METHODS } from '@ventafacil/shared';
-import { Check, CloudOff, Minus, Plus, Printer, ScanLine, Search, Trash2, UserPlus } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Banknote,
+  Check,
+  CloudOff,
+  CreditCard,
+  Minus,
+  Plus,
+  Printer,
+  QrCode,
+  ScanLine,
+  Search,
+  ShoppingCart,
+  Trash2,
+  UserPlus,
+} from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -188,6 +203,12 @@ export function PosPage() {
   const canCheckout = cart.length > 0 && !!activeLocation && !busy;
   // Sin fiado: el método 'credit' no se ofrece nunca.
   const methods = PAYMENT_METHODS.filter((m) => m !== 'credit');
+  const PAY_ICON: Record<string, typeof Banknote> = {
+    cash: Banknote,
+    card: CreditCard,
+    qr: QrCode,
+    transfer: ArrowRightLeft,
+  };
 
   return (
     <div className="grid gap-4 p-4 md:grid-cols-[1fr_360px]">
@@ -220,32 +241,34 @@ export function PosPage() {
             const out = remaining != null && remaining <= 0;
             const low = remaining != null && p.minStock != null && remaining <= p.minStock && !out;
             const stockClass = out
-              ? 'bg-red-500/15 text-red-600 dark:text-red-400'
+              ? 'bg-danger-bg text-danger'
               : low
-                ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
-                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400';
+                ? 'bg-warning-bg text-warning'
+                : 'bg-success-bg text-success';
+            const dot = out ? '#c25848' : low ? '#c99a1e' : '#2f8f5b';
             const cardBorder = out
-              ? 'border-red-500/50'
+              ? 'border-danger/40'
               : low
-                ? 'border-amber-500/50'
+                ? 'border-warning/40'
                 : 'border-border hover:border-primary';
             return (
               <button
                 key={p.id}
                 onClick={() => addToCart(p)}
                 disabled={out}
-                className={`flex flex-col rounded-theme border bg-surface p-3 text-left transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${cardBorder}`}
+                className={`flex min-h-[112px] flex-col gap-2 rounded-theme border bg-surface p-3.5 text-left transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${cardBorder}`}
               >
-                <span className="line-clamp-2 min-h-[2.5rem] text-sm font-medium">{p.name}</span>
-                <span className="mt-1 text-xs text-muted">{p.sku}</span>
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <span className="font-semibold text-primary">{money(p.price)}</span>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-mono text-[10px] font-medium text-muted">{p.sku}</span>
                   {remaining != null && (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${stockClass}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${stockClass}`}>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
                       {out ? 'Agotado' : `${remaining} u.`}
                     </span>
                   )}
                 </div>
+                <span className="line-clamp-2 flex-1 text-[15px] font-semibold leading-tight">{p.name}</span>
+                <span className="text-[17px] font-bold">{money(p.price)}</span>
               </button>
             );
           })}
@@ -256,7 +279,21 @@ export function PosPage() {
       </div>
 
       <Card className="flex flex-col self-start">
-        <CardContent className="flex max-h-[70vh] flex-col gap-3">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3.5">
+          <span className="text-base font-bold">Carrito</span>
+          {cart.length > 0 && (
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-xs font-bold text-primary">
+              {cart.reduce((n, l) => n + l.quantity, 0)}
+            </span>
+          )}
+          <div className="flex-1" />
+          {cart.length > 0 && (
+            <button onClick={() => setCart([])} className="text-sm text-muted hover:text-fg">
+              Vaciar
+            </button>
+          )}
+        </div>
+        <CardContent className="flex max-h-[70vh] flex-col gap-3 pt-4">
           {user?.role === 'admin' && locations.length > 0 && (
             <Select value={activeLocation} onChange={(e) => setLocationId(e.target.value)}>
               {locations.map((l) => (
@@ -269,22 +306,31 @@ export function PosPage() {
 
           <div className="flex-1 overflow-y-auto">
             {cart.length === 0 ? (
-              <p className="py-8 text-center text-muted">Toca un producto para agregarlo</p>
+              <div className="flex flex-col items-center justify-center gap-2 py-12 text-center text-muted">
+                <ShoppingCart size={28} className="opacity-40" />
+                <span className="font-semibold">Carrito vacío</span>
+                <span className="text-sm">Toca un producto para agregarlo.</span>
+              </div>
             ) : (
               cart.map((l) => (
-                <div key={l.product.id} className="flex items-center gap-2 border-b border-border py-2">
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">{l.product.name}</div>
-                    <div className="text-xs text-muted">{money(l.product.price)}</div>
+                <div key={l.product.id} className="flex items-center gap-3 border-b border-border/70 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{l.product.name}</div>
+                    <div className="text-xs text-muted">{money(l.product.price)} c/u</div>
                   </div>
-                  <button onClick={() => setQty(l.product.id, -1)} className="rounded border border-border p-1">
-                    <Minus size={14} />
-                  </button>
-                  <span className="w-6 text-center">{l.quantity}</span>
-                  <button onClick={() => setQty(l.product.id, 1)} className="rounded border border-border p-1">
-                    <Plus size={14} />
-                  </button>
-                  <button onClick={() => setQty(l.product.id, -l.quantity)} className="p-1 text-red-500">
+                  <div className="flex items-center overflow-hidden rounded-[11px] border border-border">
+                    <button onClick={() => setQty(l.product.id, -1)} className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10">
+                      <Minus size={14} />
+                    </button>
+                    <span className="w-7 text-center text-sm font-semibold">{l.quantity}</span>
+                    <button onClick={() => setQty(l.product.id, 1)} className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10">
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <span className="min-w-[64px] text-right text-sm font-bold">
+                    {money((Number(l.product.price) * l.quantity).toFixed(2))}
+                  </span>
+                  <button onClick={() => setQty(l.product.id, -l.quantity)} className="text-danger" title="Eliminar">
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -292,13 +338,29 @@ export function PosPage() {
             )}
           </div>
 
-          <Select value={payment} onChange={(e) => setPayment(e.target.value)}>
-            {methods.map((m) => (
-              <option key={m} value={m}>
-                {PAYMENT_LABELS[m]}
-              </option>
-            ))}
-          </Select>
+          {/* Método de pago: grilla de iconos (como el prototipo). */}
+          <div>
+            <div className="mb-2 text-xs font-semibold text-muted">Método de pago</div>
+            <div className="grid grid-cols-4 gap-2">
+              {methods.map((m) => {
+                const Icon = PAY_ICON[m] ?? Banknote;
+                const active = payment === m;
+                const shortLabel = m === 'transfer' ? 'Transf.' : PAYMENT_LABELS[m];
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setPayment(m)}
+                    className={`flex flex-col items-center gap-1 rounded-theme border py-2.5 text-[11px] font-semibold transition active:scale-95 ${
+                      active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-muted hover:bg-muted/10'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    {shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Comprador en la venta (opcional). Sólo con conexión. */}
           {online && (
@@ -343,13 +405,13 @@ export function PosPage() {
               <span>{money(subtotal)}</span>
             </div>
           )}
-          <div className="flex items-center justify-between text-2xl font-bold">
-            <span>Total</span>
-            <span>{money(total)}</span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm font-semibold text-muted">Total</span>
+            <span className="text-[32px] font-extrabold tracking-tight">{money(total)}</span>
           </div>
 
-          <Button size="xl" className="w-full" disabled={!canCheckout} onClick={checkout}>
-            {busy ? 'Cobrando…' : 'COBRAR'}
+          <Button size="xl" className="h-14 w-full text-base" disabled={!canCheckout} onClick={checkout}>
+            {busy ? 'Cobrando…' : `Cobrar · ${money(total)}`}
           </Button>
         </CardContent>
       </Card>
