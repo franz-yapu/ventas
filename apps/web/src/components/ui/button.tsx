@@ -7,14 +7,14 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-fg hover:opacity-90',
+        primary: 'bg-primary text-primary-fg font-bold hover:opacity-90',
         secondary: 'bg-secondary text-secondary-fg hover:opacity-90',
         outline: 'border border-border bg-surface text-fg hover:bg-muted/10',
         ghost: 'text-fg hover:bg-muted/10',
         danger: 'border border-danger/30 bg-danger-bg text-danger hover:bg-danger/10',
       },
       size: {
-        md: 'h-10 px-4 text-sm',
+        md: 'h-11 px-[18px] text-sm',
         lg: 'h-12 px-6 text-base',
         xl: 'h-16 px-8 text-xl', // botón COBRAR gigante del POS
       },

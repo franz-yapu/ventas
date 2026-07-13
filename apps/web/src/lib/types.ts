@@ -102,7 +102,7 @@ export interface SaleDetail extends SaleRow {
 }
 
 export interface DashboardData {
-  kpi: { todayTotal: string; todayCount: number; avgTicket: string };
+  kpi: { todayTotal: string; todayCount: number; yesterdayTotal: string; avgTicket: string };
   trend: Array<{ date: string; total: number }>;
   byLocation: Array<{ name: string; total: string; count: number }>;
   bySeller: Array<{ name: string; total: string; count: number }>;

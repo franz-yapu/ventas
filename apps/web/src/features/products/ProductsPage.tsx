@@ -79,7 +79,7 @@ export function ProductsPage() {
         )}
       </div>
 
-      <Card>
+      <Card className="hidden md:block">
         <CardContent className="overflow-x-auto p-0">
           <table className="ds-table w-full">
             <thead className="text-left text-muted">
@@ -129,6 +129,44 @@ export function ProductsPage() {
           {items.length === 0 && <p className="py-8 text-center text-muted">Sin productos</p>}
         </CardContent>
       </Card>
+
+      {/* Móvil: tarjetas apiladas en vez de tabla con scroll. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {items.map((p) => (
+          <div key={p.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[14px] font-semibold">{p.name}</span>
+              <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">{money(p.price)}</span>
+            </div>
+            <div className="mt-1 text-[12px] leading-[1.5] text-muted">
+              <span className="font-mono">{p.sku}</span> · {p.locationName ?? '—'}
+            </div>
+            {isAdmin && p.cost && (
+              <div className="mt-1 text-[12px] text-muted">
+                Costo {money(p.cost)} · Ganancia{' '}
+                <span className="font-semibold text-success">{money(Number(p.price) - Number(p.cost))}</span>
+              </div>
+            )}
+            <div className="mt-3.5 flex gap-2">
+              <button
+                onClick={() => setHistory({ id: p.id, name: p.name })}
+                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+              >
+                <History size={16} /> Historial
+              </button>
+              {p.canManage && (
+                <button
+                  onClick={() => setEditing(p)}
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                >
+                  <Pencil size={16} /> Editar
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <p className="py-8 text-center text-muted">Sin productos</p>}
+      </div>
 
       {hasNextPage && (
         <Button variant="outline" className="self-center" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>

@@ -36,7 +36,7 @@ export function LocationsPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
@@ -60,6 +60,19 @@ export function LocationsPage() {
           </table>
         </CardContent>
       </Card>
+
+      {/* Móvil: tarjetas apiladas en vez de tabla. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {data?.map((l) => (
+          <div key={l.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[14px] font-semibold">{l.name}</span>
+              <Badge tone={l.isActive ? 'success' : 'neutral'}>{l.isActive ? 'Activa' : 'Inactiva'}</Badge>
+            </div>
+            <div className="mt-1 text-[12px] leading-[1.5] text-muted">{l.address ?? '—'}</div>
+          </div>
+        ))}
+      </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Nueva ubicación">
         <div className="flex flex-col gap-3">

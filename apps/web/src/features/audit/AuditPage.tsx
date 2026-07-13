@@ -104,7 +104,7 @@ export function AuditPage() {
         </div>
       </div>
 
-      <Card>
+      <Card className="hidden md:block">
         <CardContent className="overflow-x-auto p-0">
           <table className="ds-table w-full">
             <thead className="text-left text-muted">
@@ -143,6 +143,31 @@ export function AuditPage() {
           {items.length === 0 && <p className="py-8 text-center text-muted">Sin actividad</p>}
         </CardContent>
       </Card>
+
+      {/* Móvil: tarjetas apiladas en vez de tabla. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {items.map((a) => (
+          <div key={a.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+            <div className="flex items-center justify-between gap-3">
+              <Badge tone={ACTION_TONE[a.action] ?? 'neutral'}>{ACTION_LABELS[a.action] ?? a.action}</Badge>
+              <span className="text-[12px] text-muted">{dateTime(a.createdAt)}</span>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between gap-3">
+              <div className="text-[12px] leading-[1.5] text-muted">
+                <span className="font-medium text-fg">{a.userName ?? '—'}</span> · {ENTITY_LABELS[a.entity] ?? a.entity}
+                <br />
+                {a.locationName ?? '—'}
+              </div>
+              {(a.before || a.after) && (
+                <button onClick={() => setDetail(a)} className="shrink-0 text-muted hover:text-primary" title="Ver detalle">
+                  <Eye size={18} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <p className="py-8 text-center text-muted">Sin actividad</p>}
+      </div>
 
       {hasNextPage && (
         <Button variant="outline" className="self-center" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>

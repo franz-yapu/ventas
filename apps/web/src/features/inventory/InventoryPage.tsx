@@ -54,7 +54,7 @@ export function InventoryPage() {
         </Select>
       )}
 
-      <Card>
+      <Card className="hidden md:block">
         <CardContent className="overflow-x-auto p-0">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
@@ -101,6 +101,50 @@ export function InventoryPage() {
           {rows && rows.length === 0 && <p className="py-8 text-center text-muted">Sin inventario</p>}
         </CardContent>
       </Card>
+
+      {/* Móvil: tarjetas apiladas; fila baja resaltada en rojo como en el prototipo. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {rows?.map((r) => {
+          const low = r.minStock != null && r.quantity <= r.minStock;
+          return (
+            <div
+              key={r.id}
+              className="rounded-[14px] border border-border p-[15px]"
+              style={{ background: low ? '#fdf5f3' : 'var(--color-surface)' }}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <div>
+                  <span className="text-[14px] font-semibold">{r.productName}</span>{' '}
+                  <span className="font-mono text-xs text-muted">{r.sku}</span>
+                </div>
+                <span className="shrink-0 text-[22px] font-extrabold tracking-[-0.02em]" style={{ color: low ? '#b8402f' : '#17171a' }}>
+                  {r.quantity}
+                </span>
+              </div>
+              <div className="mt-1 text-[12px] leading-[1.5] text-muted">
+                {r.locationName} · Mínimo {r.minStock ?? '—'}
+              </div>
+              <div className="mt-3.5 flex gap-2">
+                <button
+                  onClick={() => setHistory({ productId: r.productId, name: r.productName })}
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                >
+                  <History size={16} /> Historial
+                </button>
+                {r.canAdjust && (
+                  <button
+                    onClick={() => setAdjust(r)}
+                    className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                  >
+                    <SlidersHorizontal size={16} /> Ajustar
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {rows && rows.length === 0 && <p className="py-8 text-center text-muted">Sin inventario</p>}
+      </div>
 
       {adjust && (
         <AdjustModal

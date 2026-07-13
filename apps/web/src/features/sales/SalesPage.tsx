@@ -93,7 +93,7 @@ export function SalesPage() {
         </div>
       </div>
 
-      <Card>
+      <Card className="hidden md:block">
         <CardContent className="overflow-x-auto p-0">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
@@ -154,6 +154,50 @@ export function SalesPage() {
           {items.length === 0 && <p className="py-8 text-center text-muted">Sin ventas</p>}
         </CardContent>
       </Card>
+
+      {/* Móvil: tarjetas apiladas en vez de tabla con scroll (calcado del prototipo). */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {items.map((s) => (
+          <div key={s.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+            <div className="mb-2.5 flex items-center justify-between">
+              <span className="font-mono text-[13px] font-semibold">#{s.receiptNumber}</span>
+              <Badge tone={s.status === 'cancelled' ? 'neutral' : 'success'}>
+                {s.status === 'cancelled' ? 'Cancelada' : 'Completada'}
+              </Badge>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <div className="text-[12px] leading-[1.5] text-muted">
+                {dateTime(s.clientCreatedAt)} · {s.sellerName}
+                <br />
+                {s.locationName} · {PAYMENT_LABELS[s.paymentMethod]}
+              </div>
+              <div className="text-[22px] font-extrabold tracking-[-0.02em]">{money(s.total)}</div>
+            </div>
+            <div className="mt-3.5 flex gap-2">
+              <button
+                onClick={() => openReceipt(s.id)}
+                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+              >
+                <Printer size={16} /> Recibo
+              </button>
+              {isAdmin && s.status === 'completed' && (
+                <button
+                  onClick={() => setCancelId(s.id)}
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-danger/40 bg-surface text-[13px] font-semibold text-danger"
+                >
+                  <Ban size={16} /> Cancelar
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <p className="py-8 text-center text-muted">Sin ventas</p>}
+        {items.length > 0 && (
+          <div className="p-2.5 text-center text-[15px] font-extrabold">
+            Total: {money(sumTotal ?? '0')} · {total} venta{total === 1 ? '' : 's'}
+          </div>
+        )}
+      </div>
 
       {hasNextPage && (
         <Button variant="outline" className="self-center" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>

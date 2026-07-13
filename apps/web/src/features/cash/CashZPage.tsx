@@ -44,7 +44,7 @@ export function CashZPage() {
             <span className="text-lg font-bold">{money(data?.grandTotal ?? '0')}</span>
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto p-0">
+        <CardContent className="hidden overflow-x-auto p-0 md:block">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
               <tr>
@@ -69,6 +69,22 @@ export function CashZPage() {
           </table>
           {data && data.rows.length === 0 && <p className="py-8 text-center text-muted">Sin ventas en la fecha</p>}
         </CardContent>
+
+        {/* Móvil: tarjetas apiladas en vez de tabla. */}
+        <div className="flex flex-col gap-2.5 p-3 md:hidden">
+          {data?.rows.map((r, i) => (
+            <div key={i} className="rounded-[14px] border border-border bg-surface p-[15px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[14px] font-semibold">{r.seller}</span>
+                <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">{money(r.total)}</span>
+              </div>
+              <div className="mt-1 text-[12px] leading-[1.5] text-muted">
+                {r.location} · {PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod} · {r.count} venta{r.count === 1 ? '' : 's'}
+              </div>
+            </div>
+          ))}
+          {data && data.rows.length === 0 && <p className="py-8 text-center text-muted">Sin ventas en la fecha</p>}
+        </div>
       </Card>
     </div>
   );

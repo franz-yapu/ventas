@@ -47,7 +47,7 @@ export function UsersPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
@@ -75,6 +75,23 @@ export function UsersPage() {
           </table>
         </CardContent>
       </Card>
+
+      {/* Móvil: tarjetas apiladas en vez de tabla. */}
+      <div className="flex flex-col gap-2.5 md:hidden">
+        {users?.map((u) => (
+          <div key={u.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[14px] font-semibold">{u.name}</span>
+              <Badge tone={u.isActive ? 'success' : 'neutral'}>{u.isActive ? 'Activo' : 'Inactivo'}</Badge>
+            </div>
+            <div className="mt-1 text-[12px] leading-[1.5] text-muted">
+              <span className="font-mono">{u.username}</span> · {u.role === 'admin' ? 'Administrador' : 'Vendedor'}
+              <br />
+              {locName(u.locationId)}
+            </div>
+          </div>
+        ))}
+      </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Nuevo usuario">
         <div className="flex flex-col gap-3">

@@ -25,42 +25,64 @@ function WidgetCard({ title, children }: { title: string; children: ReactNode })
   );
 }
 
-export function KpiToday({ data }: { data: DashboardData }) {
+// Tarjeta KPI calcada del prototipo: etiqueta 12px, valor 27px w800, delta 12px.
+// El delta va verde cuando sube ('up'), rojo cuando baja ('down') y gris si es informativo.
+function KpiCard({
+  label,
+  value,
+  delta,
+  tone = 'muted',
+}: {
+  label: string;
+  value: string;
+  delta?: ReactNode;
+  tone?: 'up' | 'down' | 'muted';
+}) {
+  const deltaColor = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-muted';
   return (
-    <WidgetCard title="Ventas de hoy">
-      <div className="text-3xl font-bold">{money(data.kpi.todayTotal)}</div>
-      <div className="text-sm text-muted">{data.kpi.todayCount} ventas</div>
-    </WidgetCard>
+    <Card>
+      <CardContent className="p-[18px]">
+        <div className="text-xs font-semibold text-muted">{label}</div>
+        <div className="mt-1.5 text-[27px] font-extrabold leading-none tracking-[-0.03em]">{value}</div>
+        {delta != null && <div className={`mt-1.5 text-xs font-semibold ${deltaColor}`}>{delta}</div>}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function KpiToday({ data }: { data: DashboardData }) {
+  // Delta real "vs ayer": total de hoy contra el de ayer (mismas cifras autoritativas del KPI).
+  const today = Number(data.kpi.todayTotal);
+  const yesterday = Number(data.kpi.yesterdayTotal);
+  const pct = yesterday > 0 ? Math.round(((today - yesterday) / yesterday) * 100) : null;
+  return (
+    <KpiCard
+      label="Ventas de hoy"
+      value={money(data.kpi.todayTotal)}
+      tone={pct == null ? 'muted' : pct >= 0 ? 'up' : 'down'}
+      delta={pct == null ? `${data.kpi.todayCount} ventas` : `${pct >= 0 ? '+' : ''}${pct}% vs ayer`}
+    />
   );
 }
 
 export function MonthTotal({ data }: { data: DashboardData }) {
   const total = data.byLocation.reduce((a, l) => a + Number(l.total), 0);
-  return (
-    <WidgetCard title="Ventas del mes">
-      <div className="text-3xl font-bold">{money(total)}</div>
-    </WidgetCard>
-  );
+  const count = data.byLocation.reduce((a, l) => a + l.count, 0);
+  return <KpiCard label="Ventas del mes" value={money(total)} delta={`${count} venta${count === 1 ? '' : 's'}`} />;
 }
 
 export function AvgTicket({ data }: { data: DashboardData }) {
-  return (
-    <WidgetCard title="Ticket promedio (mes)">
-      <div className="text-3xl font-bold">{money(data.kpi.avgTicket)}</div>
-    </WidgetCard>
-  );
+  return <KpiCard label="Ticket promedio (mes)" value={money(data.kpi.avgTicket)} delta={`${data.kpi.todayCount} ventas hoy`} />;
 }
 
 export function Projection({ data }: { data: DashboardData }) {
   const p = data.projection;
   return (
-    <WidgetCard title="Proyección próximo mes">
-      <div className="text-3xl font-bold text-primary">{money(p.nextMonth)}</div>
-      <div className="text-sm text-muted">
-        Rango {money(p.low)} – {money(p.high)}
-      </div>
-      <div className="mt-1 text-xs text-muted">{p.method}</div>
-    </WidgetCard>
+    <KpiCard
+      label="Proyección próximo mes"
+      value={money(p.nextMonth)}
+      delta={`Rango ${money(p.low)} – ${money(p.high)}`}
+    />
   );
 }
 

@@ -20,11 +20,13 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const locInv = scope !== undefined ? sql`AND i.location_id = ${scope}` : sql``;
 
     // 1) KPIs de hoy y ticket promedio del mes.
-    const [kpi] = await db.execute<{ today_total: string; today_count: number; avg_ticket: string }>(sql`
+    const [kpi] = await db.execute<{ today_total: string; today_count: number; yesterday_total: string; avg_ticket: string }>(sql`
       WITH b AS (SELECT date_trunc('day', timezone(${TZ}, now())) d0, date_trunc('month', timezone(${TZ}, now())) m0)
       SELECT
         COALESCE(SUM(total) FILTER (WHERE timezone(${TZ}, client_created_at) >= b.d0), 0) AS today_total,
         COUNT(*) FILTER (WHERE timezone(${TZ}, client_created_at) >= b.d0)::int AS today_count,
+        COALESCE(SUM(total) FILTER (WHERE timezone(${TZ}, client_created_at) >= b.d0 - interval '1 day'
+          AND timezone(${TZ}, client_created_at) < b.d0), 0) AS yesterday_total,
         COALESCE(AVG(total) FILTER (WHERE timezone(${TZ}, client_created_at) >= b.m0), 0) AS avg_ticket
       FROM sale CROSS JOIN b
       WHERE business_id = ${businessId} AND status = 'completed' ${locBare}
@@ -82,6 +84,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
         kpi: {
           todayTotal: String(kpi?.today_total ?? '0'),
           todayCount: Number(kpi?.today_count ?? 0),
+          yesterdayTotal: String(kpi?.yesterday_total ?? '0'),
           avgTicket: Number(kpi?.avg_ticket ?? 0).toFixed(2),
         },
         trend,

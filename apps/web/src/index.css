@@ -39,6 +39,25 @@
     border-radius: 14px;
     overflow: hidden;
   }
+  /* Etiquetas de formulario dentro de modales (labelStyle del prototipo:
+     13px, peso 600, gris oscuro). El espaciado lo da el flex gap del form. */
+  .ds-modal label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #5c5c56;
+  }
+}
+
+/* Entrada de la hoja/modal (sheetStyle del prototipo): sube y aparece. */
+@keyframes vf-sheet {
+  from {
+    transform: translateY(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* Fuentes auto-alojadas (offline-first): Onest variable + IBM Plex Mono.
