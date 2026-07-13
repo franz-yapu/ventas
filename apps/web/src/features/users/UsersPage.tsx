@@ -79,7 +79,7 @@ export function UsersPage() {
       {/* Móvil: tarjetas apiladas en vez de tabla. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {users?.map((u) => (
-          <div key={u.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+          <div key={u.id} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[14px] font-semibold">{u.name}</span>
               <Badge tone={u.isActive ? 'success' : 'neutral'}>{u.isActive ? 'Activo' : 'Inactivo'}</Badge>

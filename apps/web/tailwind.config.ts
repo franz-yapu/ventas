@@ -30,6 +30,11 @@ export default {
       borderRadius: {
         theme: 'var(--radius)',
       },
+      boxShadow: {
+        // Sombra sutil para elevar las tarjetas del fondo (conserva el borde gris).
+        card: '0 1px 3px 0 rgba(0, 0, 0, 0.06)',
+        'card-hover': '0 4px 14px -4px rgba(0, 0, 0, 0.12)',
+      },
     },
   },
   plugins: [],

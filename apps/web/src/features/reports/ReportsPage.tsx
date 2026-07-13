@@ -153,7 +153,7 @@ export function ReportsPage() {
         {/* Móvil: tarjetas apiladas con rejilla de cifras en vez de tabla ancha. */}
         <div className="flex flex-col gap-2.5 p-3 md:hidden">
           {data?.byLocation.map((l) => (
-            <div key={l.locationId} className="rounded-[14px] border border-border bg-surface p-[15px]">
+            <div key={l.locationId} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
               <div className="mb-2 text-[14px] font-semibold">{l.locationName}</div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <Stat label="Vendido hoy" value={money(l.today)} />
@@ -168,7 +168,7 @@ export function ReportsPage() {
             </div>
           ))}
           {data && data.byLocation.length > 0 && (
-            <div className="rounded-[14px] border-2 border-border bg-surface p-[15px]">
+            <div className="rounded-[14px] border-2 border-border bg-surface p-[15px] shadow-card">
               <div className="mb-2 text-[14px] font-semibold">Suma</div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <Stat label="Vendido hoy" value={money(data.totals.today)} />

@@ -158,7 +158,7 @@ export function SalesPage() {
       {/* Móvil: tarjetas apiladas en vez de tabla con scroll (calcado del prototipo). */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {items.map((s) => (
-          <div key={s.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+          <div key={s.id} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
             <div className="mb-2.5 flex items-center justify-between">
               <span className="font-mono text-[13px] font-semibold">#{s.receiptNumber}</span>
               <Badge tone={s.status === 'cancelled' ? 'neutral' : 'success'}>

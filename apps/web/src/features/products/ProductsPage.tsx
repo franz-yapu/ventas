@@ -133,7 +133,7 @@ export function ProductsPage() {
       {/* Móvil: tarjetas apiladas en vez de tabla con scroll. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {items.map((p) => (
-          <div key={p.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+          <div key={p.id} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[14px] font-semibold">{p.name}</span>
               <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">{money(p.price)}</span>

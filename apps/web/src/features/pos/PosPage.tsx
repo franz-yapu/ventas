@@ -257,7 +257,7 @@ export function PosPage() {
                 key={p.id}
                 onClick={() => addToCart(p)}
                 disabled={out}
-                className={`flex min-h-[112px] flex-col gap-2 rounded-theme border bg-surface p-3.5 text-left transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${cardBorder}`}
+                className={`flex min-h-[112px] flex-col gap-2 rounded-theme border bg-surface p-3.5 text-left shadow-card transition hover:shadow-card-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-card disabled:active:scale-100 ${cardBorder}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-mono text-[10px] font-medium text-muted">{p.sku}</span>

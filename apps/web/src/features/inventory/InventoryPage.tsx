@@ -109,7 +109,7 @@ export function InventoryPage() {
           return (
             <div
               key={r.id}
-              className="rounded-[14px] border border-border p-[15px]"
+              className="rounded-[14px] border border-border p-[15px] shadow-card"
               style={{ background: low ? '#fdf5f3' : 'var(--color-surface)' }}
             >
               <div className="flex items-baseline justify-between gap-3">

@@ -147,7 +147,7 @@ export function AuditPage() {
       {/* Móvil: tarjetas apiladas en vez de tabla. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {items.map((a) => (
-          <div key={a.id} className="rounded-[14px] border border-border bg-surface p-[15px]">
+          <div key={a.id} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
             <div className="flex items-center justify-between gap-3">
               <Badge tone={ACTION_TONE[a.action] ?? 'neutral'}>{ACTION_LABELS[a.action] ?? a.action}</Badge>
               <span className="text-[12px] text-muted">{dateTime(a.createdAt)}</span>
