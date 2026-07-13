@@ -21,6 +21,7 @@ async function main() {
     .insert(s.business)
     .values({
       name: 'Llantas El Rapido',
+      slug: 'llantas-el-rapido',
       themeJson: { primary: '#2f68d8', secondary: '#f59e0b', radius: '12px' },
       textsJson: { app_name: 'Llantas El Rapido', receipt_footer: '¡Gracias por su compra!' },
       productSchemaJson: DEMO_ATTR_SCHEMA,

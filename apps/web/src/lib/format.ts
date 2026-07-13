@@ -13,6 +13,18 @@ export function dateTime(iso: string): string {
   });
 }
 
+// Rango de la semana actual (lunes a domingo) en formato YYYY-MM-DD (hora local),
+// para usar como valor por defecto de los filtros de rango de fecha.
+export function currentWeek(): { from: string; to: string } {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date();
+  const daysSinceMonday = (now.getDay() + 6) % 7; // getDay(): 0=domingo … 6=sábado
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday);
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  return { from: fmt(monday), to: fmt(sunday) };
+}
+
 export const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Efectivo',
   card: 'Tarjeta',

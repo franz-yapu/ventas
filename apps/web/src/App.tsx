@@ -15,6 +15,7 @@ const DashboardPage = lazy(() =>
 import { LocationsPage } from '@/features/locations/LocationsPage';
 import { PosPage } from '@/features/pos/PosPage';
 import { ProductsPage } from '@/features/products/ProductsPage';
+import { ProfilePage } from '@/features/profile/ProfilePage';
 // Reportes usa Recharts (pesado): se carga sólo al abrirlo, no penaliza el POS del vendedor.
 const ReportsPage = lazy(() =>
   import('@/features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
@@ -43,6 +44,7 @@ export function App() {
         <Route path="/ventas" element={<Protected><SalesPage /></Protected>} />
         <Route path="/productos" element={<Protected><ProductsPage /></Protected>} />
         <Route path="/inventario" element={<Protected><InventoryPage /></Protected>} />
+        <Route path="/perfil" element={<Protected><ProfilePage /></Protected>} />
         <Route
           path="/panel"
           element={

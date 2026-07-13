@@ -24,6 +24,11 @@ function describe(e: HistoryEntry): string {
       return `Precio ${b.price} → ${a.price}`;
     case 'transfer':
       return `${a.quantity} u. transferidas`;
+    case 'sale': {
+      const cancelled = a.status === 'cancelled';
+      const recibo = a.receiptNumber ? ` · Recibo #${a.receiptNumber}` : '';
+      return `${a.quantity} u. vendidas${recibo}${cancelled ? ' · CANCELADA' : ''}`;
+    }
     default:
       return '';
   }

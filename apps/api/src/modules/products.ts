@@ -133,7 +133,8 @@ export async function productRoutes(app: FastifyInstance) {
     if (scope !== undefined && prod.locationId !== scope) {
       return reply.code(403).send({ data: null, error: 'No puedes ver el historial de productos de otra ubicación' });
     }
-    const rows = await db
+    // 1) Acciones administrativas (alta, edición, ajuste de stock, transferencia, importación).
+    const auditRows = await db
       .select({
         id: schema.auditLog.id,
         action: schema.auditLog.action,
@@ -148,7 +149,51 @@ export async function productRoutes(app: FastifyInstance) {
       .where(and(eq(schema.auditLog.businessId, req.authUser!.businessId), eq(schema.auditLog.entityId, id)))
       .orderBy(desc(schema.auditLog.createdAt))
       .limit(50);
-    return reply.send({ data: rows, error: null });
+
+    // 2) Ventas del producto: no quedan en audit_log con entityId=producto, así que
+    //    las tomamos de sale_item + sale para que el vendedor vea su movimiento diario.
+    //    Alcance: la sucursal sólo ve las ventas de su ubicación; la central, todas.
+    const saleFilters = [eq(schema.saleItem.productId, id), eq(schema.sale.businessId, user.businessId)];
+    if (scope !== undefined) saleFilters.push(eq(schema.sale.locationId, scope));
+    const saleRows = await db
+      .select({
+        id: schema.saleItem.id,
+        receiptNumber: schema.sale.receiptNumber,
+        quantity: schema.saleItem.quantity,
+        lineTotal: schema.saleItem.lineTotal,
+        status: schema.sale.status,
+        paymentMethod: schema.sale.paymentMethod,
+        createdAt: schema.sale.clientCreatedAt,
+        userName: schema.appUser.name,
+      })
+      .from(schema.saleItem)
+      .innerJoin(schema.sale, eq(schema.sale.id, schema.saleItem.saleId))
+      .leftJoin(schema.appUser, eq(schema.appUser.id, schema.sale.userId))
+      .where(and(...saleFilters))
+      .orderBy(desc(schema.sale.clientCreatedAt))
+      .limit(50);
+
+    const saleEntries = saleRows.map((s) => ({
+      id: s.id,
+      action: 'sale',
+      entity: 'sale',
+      before: null as unknown,
+      after: {
+        receiptNumber: s.receiptNumber,
+        quantity: s.quantity,
+        lineTotal: s.lineTotal,
+        status: s.status,
+        paymentMethod: s.paymentMethod,
+      } as unknown,
+      createdAt: s.createdAt,
+      userName: s.userName,
+    }));
+
+    // Fusionamos ambos orígenes en una sola línea de tiempo (más recientes primero).
+    const merged = [...auditRows, ...saleEntries]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 50);
+    return reply.send({ data: merged, error: null });
   });
 
   // POST /products (sólo central) — la central elige a qué ubicación se asigna

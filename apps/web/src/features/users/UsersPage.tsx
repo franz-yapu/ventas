@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Check, Copy, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,31 +10,20 @@ import { Select } from '@/components/ui/select';
 import { api, ApiError } from '@/lib/api';
 import type { AppUserRow, Location } from '@/lib/types';
 
+interface Credentials {
+  username: string;
+  password: string;
+}
+
 export function UsersPage() {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'seller', locationId: '' });
+  const [editing, setEditing] = useState<AppUserRow | 'new' | null>(null);
+  // Cuando el admin asigna/cambia una contraseña, se muestra este modal para que
+  // la copie y se la envíe al usuario.
+  const [credentials, setCredentials] = useState<Credentials | null>(null);
 
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get<AppUserRow[]>('/users') });
   const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: () => api.get<Location[]>('/locations') });
-
-  const create = useMutation({
-    mutationFn: () =>
-      api.post('/users', {
-        name: form.name,
-        username: form.username,
-        password: form.password,
-        role: form.role,
-        locationId: form.locationId || null,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['users'] });
-      setOpen(false);
-      setForm({ name: '', username: '', password: '', role: 'seller', locationId: '' });
-    },
-    onError: (e) => setError(e instanceof ApiError ? e.message : 'Error al crear'),
-  });
 
   const locName = (id: string | null) => locations?.find((l) => l.id === id)?.name ?? '—';
 
@@ -42,7 +31,7 @@ export function UsersPage() {
     <div className="flex flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Usuarios</h1>
-        <Button onClick={() => { setError(null); setOpen(true); }}>
+        <Button onClick={() => setEditing('new')}>
           <Plus size={18} /> Nuevo
         </Button>
       </div>
@@ -57,6 +46,7 @@ export function UsersPage() {
                 <th className="p-3">Rol</th>
                 <th className="p-3">Ubicación</th>
                 <th className="p-3">Estado</th>
+                <th className="p-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -68,6 +58,13 @@ export function UsersPage() {
                   <td className="p-3 text-muted">{locName(u.locationId)}</td>
                   <td className="p-3">
                     <Badge tone={u.isActive ? 'success' : 'neutral'}>{u.isActive ? 'Activo' : 'Inactivo'}</Badge>
+                  </td>
+                  <td className="p-3">
+                    <div className="flex justify-end">
+                      <button onClick={() => setEditing(u)} className="text-muted hover:text-primary" title="Editar">
+                        <Pencil size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -89,41 +86,191 @@ export function UsersPage() {
               <br />
               {locName(u.locationId)}
             </div>
+            <button
+              onClick={() => setEditing(u)}
+              className="mt-3.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+            >
+              <Pencil size={16} /> Editar
+            </button>
           </div>
         ))}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Nuevo usuario">
-        <div className="flex flex-col gap-3">
-          <label className="text-sm text-muted">Nombre</label>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <label className="text-sm text-muted">Usuario</label>
-          <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-          <label className="text-sm text-muted">Contraseña</label>
-          <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-          <label className="text-sm text-muted">Rol</label>
-          <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            <option value="seller">Vendedor</option>
-            <option value="admin">Administrador</option>
-          </Select>
-          <label className="text-sm text-muted">Ubicación (opcional)</label>
-          <Select value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
-            <option value="">Sin asignar</option>
-            {locations?.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </Select>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button
-            disabled={form.name.length < 1 || form.username.length < 3 || form.password.length < 6 || create.isPending}
-            onClick={() => create.mutate()}
-          >
-            Guardar
+      {editing && (
+        <UserForm
+          user={editing === 'new' ? null : editing}
+          locations={locations ?? []}
+          onClose={() => setEditing(null)}
+          onSaved={(creds) => {
+            qc.invalidateQueries({ queryKey: ['users'] });
+            setEditing(null);
+            if (creds) setCredentials(creds);
+          }}
+        />
+      )}
+
+      {credentials && <CredentialsModal creds={credentials} onClose={() => setCredentials(null)} />}
+    </div>
+  );
+}
+
+function UserForm({
+  user,
+  locations,
+  onClose,
+  onSaved,
+}: {
+  user: AppUserRow | null;
+  locations: Location[];
+  onClose: () => void;
+  onSaved: (creds: Credentials | null) => void;
+}) {
+  const isNew = !user;
+  const [form, setForm] = useState({
+    name: user?.name ?? '',
+    username: user?.username ?? '',
+    password: '',
+    role: user?.role ?? 'seller',
+    locationId: user?.locationId ?? '',
+    isActive: user?.isActive ?? true,
+  });
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () => {
+      if (isNew) {
+        return api.post('/users', {
+          name: form.name,
+          username: form.username,
+          password: form.password,
+          role: form.role,
+          locationId: form.locationId || null,
+        });
+      }
+      const patch: Record<string, unknown> = {
+        name: form.name,
+        role: form.role,
+        locationId: form.locationId || null,
+        isActive: form.isActive,
+      };
+      if (form.password) patch.password = form.password;
+      return api.patch(`/users/${user!.id}`, patch);
+    },
+    // Si se asignó una contraseña, la devolvemos para mostrar el modal de "copiar y enviar".
+    onSuccess: () => onSaved(form.password ? { username: form.username, password: form.password } : null),
+    onError: (e) => setError(e instanceof ApiError ? e.message : 'Error al guardar'),
+  });
+
+  const passwordInvalid = form.password.length > 0 && form.password.length < 6;
+  const canSave =
+    form.name.length >= 1 &&
+    (isNew ? form.username.length >= 3 && form.password.length >= 6 : !passwordInvalid) &&
+    !save.isPending;
+
+  return (
+    <Modal open onClose={onClose} title={isNew ? 'Nuevo usuario' : `Editar · ${user!.name}`}>
+      <div className="flex flex-col gap-3">
+        <label className="text-sm text-muted">Nombre</label>
+        <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+
+        <label className="text-sm text-muted">Usuario</label>
+        <Input
+          value={form.username}
+          disabled={!isNew}
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
+        />
+        {!isNew && <p className="-mt-2 text-xs text-muted">El nombre de usuario no se puede cambiar.</p>}
+
+        <label className="text-sm text-muted">
+          {isNew ? 'Contraseña' : 'Nueva contraseña (opcional)'}
+        </label>
+        <Input
+          type="text"
+          autoComplete="new-password"
+          placeholder={isNew ? 'Mín. 6 caracteres' : 'Dejar en blanco para no cambiarla'}
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+        />
+        {passwordInvalid && <p className="-mt-2 text-xs text-red-600">Mínimo 6 caracteres.</p>}
+        {!isNew && (
+          <p className="-mt-1 text-xs text-muted">
+            Si la cambias, se te mostrará para que la copies y se la envíes al usuario.
+          </p>
+        )}
+
+        <label className="text-sm text-muted">Rol</label>
+        <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'seller' })}>
+          <option value="seller">Vendedor</option>
+          <option value="admin">Administrador</option>
+        </Select>
+
+        <label className="text-sm text-muted">Ubicación (opcional)</label>
+        <Select value={form.locationId ?? ''} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
+          <option value="">Sin asignar</option>
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </Select>
+
+        {!isNew && (
+          <label className="mt-1 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.isActive}
+              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+            />
+            Usuario activo
+          </label>
+        )}
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <Button disabled={!canSave} onClick={() => { setError(null); save.mutate(); }}>
+          Guardar
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function CredentialsModal({ creds, onClose }: { creds: Credentials; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(creds.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Contraseña asignada">
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted">
+          Copia esta contraseña y envíala al usuario <span className="font-semibold text-fg">{creds.username}</span>.
+          Podrá iniciar sesión con ella y luego cambiarla desde <span className="font-semibold text-fg">Mi perfil</span>.
+        </p>
+        <div className="flex items-center gap-2 rounded-theme border border-border bg-muted/10 p-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs text-muted">Usuario</div>
+            <div className="truncate font-mono text-sm">{creds.username}</div>
+            <div className="mt-2 text-xs text-muted">Contraseña</div>
+            <div className="truncate font-mono text-base font-semibold">{creds.password}</div>
+          </div>
+          <Button variant="outline" onClick={copy} className="shrink-0">
+            {copied ? <Check size={16} /> : <Copy size={16} />}
+            {copied ? 'Copiado' : 'Copiar'}
           </Button>
         </div>
-      </Modal>
-    </div>
+        <p className="text-xs text-muted">
+          Esta contraseña no se volverá a mostrar. Si la pierdes, asígnale una nueva.
+        </p>
+        <Button onClick={onClose}>Listo</Button>
+      </div>
+    </Modal>
   );
 }

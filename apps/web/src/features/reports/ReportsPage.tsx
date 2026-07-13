@@ -14,12 +14,13 @@ import {
   Trend30,
 } from '@/features/dashboard/widgets';
 import { api } from '@/lib/api';
-import { money } from '@/lib/format';
+import { currentWeek, money } from '@/lib/format';
 import type { DashboardData, ReportSummary } from '@/lib/types';
 
 export function ReportsPage() {
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // Por defecto, la semana actual (lunes a domingo).
+  const [from, setFrom] = useState(() => currentWeek().from);
+  const [to, setTo] = useState(() => currentWeek().to);
   const showRange = !!(from && to);
 
   const params = new URLSearchParams();

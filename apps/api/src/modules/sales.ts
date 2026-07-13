@@ -4,7 +4,7 @@ import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { persistSale } from '../lib/sales-service.js';
-import { canActOnLocation, viewScope } from '../lib/scope.js';
+import { canCancelSale, viewScope } from '../lib/scope.js';
 
 const historyQuery = z.object({
   from: z.string().datetime().optional(),
@@ -185,8 +185,9 @@ export async function saleRoutes(app: FastifyInstance) {
     return reply.send({ data: { ...sale, items }, error: null });
   });
 
-  // POST /sales/:id/cancel — solo admin, exige motivo, registra en audit_log.
-  app.post('/sales/:id/cancel', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
+  // POST /sales/:id/cancel — admin (su alcance) o vendedor sobre su propia ubicación.
+  // Exige motivo y registra en audit_log; nunca borra la venta.
+  app.post('/sales/:id/cancel', { preHandler: [app.requireAuth] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = cancelSaleSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ data: null, error: 'Motivo requerido (min 3)' });
@@ -198,7 +199,7 @@ export async function saleRoutes(app: FastifyInstance) {
       .where(and(eq(schema.sale.id, id), eq(schema.sale.businessId, businessId)))
       .limit(1);
     if (!before) return reply.code(404).send({ data: null, error: 'Venta no encontrada' });
-    if (!canActOnLocation(req.authUser!, before.locationId)) {
+    if (!canCancelSale(req.authUser!, before.locationId)) {
       return reply.code(403).send({ data: null, error: 'Sólo puedes cancelar ventas de tu ubicación' });
     }
     if (before.status === 'cancelled') {

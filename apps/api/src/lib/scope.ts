@@ -20,6 +20,17 @@ export function canActOnLocation(user: AuthUser, locationId: string | null | und
 }
 
 /**
+ * ¿Puede ANULAR una venta de esta ubicación?
+ * Admin: central anula cualquiera, sucursal la suya (igual que canActOnLocation).
+ * Vendedor: sólo ventas de SU propia ubicación (para corregir errores en su caja).
+ * Queda auditado con motivo + autor; nunca se borra la venta.
+ */
+export function canCancelSale(user: AuthUser, saleLocationId: string | null | undefined): boolean {
+  if (user.role === 'admin') return canActOnLocation(user, saleLocationId);
+  return !!saleLocationId && user.locationId === saleLocationId;
+}
+
+/**
  * ¿Puede AJUSTAR inventario de esta ubicación?
  * Excepción del plan: la central puede ajustar el de cualquier ubicación; la sucursal sólo la suya.
  */

@@ -38,6 +38,9 @@ export const businessSettingsSchema = z.object({
 export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
+  // Slug del negocio (multi-negocio en una misma BD). Opcional: si hay un solo
+  // negocio, el login lo resuelve solo. Requerido si hay varios.
+  business: z.string().min(1).optional(),
 });
 
 // ── Usuarios / ubicaciones ─────────────────────────────────────
@@ -115,6 +118,23 @@ export const syncSalesSchema = z.object({
 export const cancelSaleSchema = z.object({
   reason: z.string().min(3),
 });
+
+// ── Perfil propio (auto-edición) ───────────────────────────────
+// El usuario autenticado edita su nombre y/o contraseña. Para cambiar la
+// contraseña debe confirmar la actual. No permite tocar rol/ubicación/estado.
+export const updateProfileSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    currentPassword: z.string().min(1).optional(),
+    newPassword: z.string().min(6).optional(),
+  })
+  .refine((d) => d.name !== undefined || d.newPassword !== undefined, {
+    message: 'No hay cambios para guardar',
+  })
+  .refine((d) => d.newPassword === undefined || !!d.currentPassword, {
+    message: 'Ingresa tu contraseña actual',
+    path: ['currentPassword'],
+  });
 
 // ── Clientes / fiado ───────────────────────────────────────────
 export const upsertCustomerSchema = z.object({

@@ -22,6 +22,9 @@ export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'card', 'qr',
 export const business = pgTable('business', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
+  // Identificador corto y único del negocio para resolver el tenant en login
+  // (multi-negocio en una misma BD). Nulo = instalación de un solo negocio.
+  slug: text('slug').unique(),
   logoUrl: text('logo_url'),
   themeJson: jsonb('theme_json').notNull().default({}),
   textsJson: jsonb('texts_json').notNull().default({}),

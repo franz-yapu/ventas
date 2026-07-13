@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { api } from '@/lib/api';
-import { dateTime } from '@/lib/format';
+import { currentWeek, dateTime } from '@/lib/format';
 import type { AppUserRow, AuditRow } from '@/lib/types';
 import { useInfiniteList } from '@/lib/useInfinite';
 
@@ -48,8 +48,9 @@ export function AuditPage() {
   const [action, setAction] = useState('');
   const [entity, setEntity] = useState('');
   const [userId, setUserId] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // Por defecto, la semana actual (lunes a domingo).
+  const [from, setFrom] = useState(() => currentWeek().from);
+  const [to, setTo] = useState(() => currentWeek().to);
   const [detail, setDetail] = useState<AuditRow | null>(null);
 
   const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get<AppUserRow[]>('/users') });

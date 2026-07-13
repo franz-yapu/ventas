@@ -117,9 +117,17 @@ export function Layout({ children }: { children: ReactNode }) {
             </>
           )}
         </nav>
-        {/* Bloque de usuario + salir (pie del sidebar). */}
+        {/* Bloque de usuario (-> Mi perfil) + salir (pie del sidebar). */}
         <div className="border-t border-border p-3">
-          <div className="flex items-center gap-2.5 px-2 pb-2.5 pt-1.5">
+          <NavLink
+            to="/perfil"
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-2.5 rounded-[10px] px-2 py-2 transition-colors',
+                isActive ? 'ds-nav-tint' : 'hover:bg-black/[0.04]',
+              )
+            }
+          >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted/15 text-sm font-bold text-muted">
               {userInitial}
             </div>
@@ -127,10 +135,10 @@ export function Layout({ children }: { children: ReactNode }) {
               <div className="truncate text-[13px] font-semibold">{user?.name ?? 'Usuario'}</div>
               <div className="text-[11px] text-muted">{roleLabel}</div>
             </div>
-          </div>
+          </NavLink>
           <button
             onClick={logout}
-            className="flex w-full items-center justify-center gap-2 rounded-theme border border-border p-2.5 text-[13px] font-semibold text-muted hover:bg-muted/10"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-theme border border-border p-2.5 text-[13px] font-semibold text-muted hover:bg-muted/10"
           >
             <LogOut size={16} /> Salir
           </button>
@@ -161,7 +169,17 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="no-print sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-4">
           <span className="font-medium md:hidden">{business?.name ?? 'VentaFácil'}</span>
           <span className="hidden md:block" />
-          <SyncIndicator />
+          <div className="flex items-center gap-3">
+            <SyncIndicator />
+            {/* Avatar (sólo móvil): acceso a Mi perfil, que incluye "Cerrar sesión". */}
+            <NavLink
+              to="/perfil"
+              aria-label="Mi perfil"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-fg md:hidden"
+            >
+              {userInitial}
+            </NavLink>
+          </div>
         </div>
         {children}
       </main>

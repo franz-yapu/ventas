@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -48,12 +50,24 @@ export function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
-            <Input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Contraseña"
+                className="pr-11"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-muted hover:text-fg"
+                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <Button type="submit" size="lg" disabled={busy} className="mt-1">
               {busy ? 'Ingresando…' : 'Ingresar'}

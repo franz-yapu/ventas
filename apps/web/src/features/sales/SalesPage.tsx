@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/select';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { Receipt } from '@/features/sales/Receipt';
 import { api } from '@/lib/api';
-import { dateTime, money, PAYMENT_LABELS } from '@/lib/format';
+import { currentWeek, dateTime, money, PAYMENT_LABELS } from '@/lib/format';
 import { printReceipt } from '@/lib/print';
 import type { Location, SaleDetail, SaleRow } from '@/lib/types';
 import { useInfiniteList } from '@/lib/useInfinite';
@@ -20,13 +20,15 @@ export function SalesPage() {
   const { user } = useAuth();
   const business = useBusiness();
   const qc = useQueryClient();
-  const isAdmin = user?.role === 'admin';
   // Sólo la central ve varias ubicaciones; una sucursal siempre ve la suya.
+  // Cualquier usuario (admin o vendedor) puede anular ventas de su ubicación,
+  // y sólo ve ventas que puede anular, así que el botón se muestra a todos.
   const isCentral = !!user?.isCentral;
   const [locationId, setLocationId] = useState('');
   const [status, setStatus] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // Por defecto, la semana actual (lunes a domingo).
+  const [from, setFrom] = useState(() => currentWeek().from);
+  const [to, setTo] = useState(() => currentWeek().to);
   const [viewing, setViewing] = useState<SaleDetail | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -129,7 +131,7 @@ export function SalesPage() {
                       <button onClick={() => openReceipt(s.id)} className="text-muted hover:text-primary" title="Ver recibo">
                         <Printer size={16} />
                       </button>
-                      {isAdmin && s.status === 'completed' && (
+                      {s.status === 'completed' && (
                         <button onClick={() => setCancelId(s.id)} className="text-muted hover:text-red-600" title="Cancelar">
                           <Ban size={16} />
                         </button>
@@ -180,7 +182,7 @@ export function SalesPage() {
               >
                 <Printer size={16} /> Recibo
               </button>
-              {isAdmin && s.status === 'completed' && (
+              {s.status === 'completed' && (
                 <button
                   onClick={() => setCancelId(s.id)}
                   className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-danger/40 bg-surface text-[13px] font-semibold text-danger"
