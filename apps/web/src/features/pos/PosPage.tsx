@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   Trash2,
   UserPlus,
+  X,
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { Receipt } from '@/features/sales/Receipt';
 import { api } from '@/lib/api';
 import { money, PAYMENT_LABELS } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { printReceipt } from '@/lib/print';
 import type { Customer, Location, Product, SaleDetail } from '@/lib/types';
 import { getCachedLocations } from '@/offline/db';
@@ -55,6 +57,7 @@ export function PosPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [scanOpen, setScanOpen] = useState(false);
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const showToast = (text: string, ok = true) => {
     setToast({ text, ok });
     setTimeout(() => setToast(null), 2600);
@@ -197,6 +200,7 @@ export function PosPage() {
     setCart([]);
     setDiscount('0');
     setCustomerId('');
+    setMobileCartOpen(false);
     setBusy(false);
   }
 
@@ -240,12 +244,9 @@ export function PosPage() {
             const remaining = p.stock == null ? null : p.stock - (cartQtyById.get(p.id) ?? 0);
             const out = remaining != null && remaining <= 0;
             const low = remaining != null && p.minStock != null && remaining <= p.minStock && !out;
-            const stockClass = out
-              ? 'bg-danger-bg text-danger'
-              : low
-                ? 'bg-warning-bg text-warning'
-                : 'bg-success-bg text-success';
-            const dot = out ? '#c25848' : low ? '#c99a1e' : '#2f8f5b';
+            const textCol = out ? 'text-danger' : low ? 'text-warning' : 'text-success';
+            const dot = out ? '#c25848' : low ? '#c99a1e' : '#4aa06f';
+            const stockLabel = out ? 'Agotado' : low ? `Bajo · ${remaining}` : `Disp. ${remaining}`;
             const cardBorder = out
               ? 'border-danger/40'
               : low
@@ -261,9 +262,9 @@ export function PosPage() {
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-mono text-[10px] font-medium text-muted">{p.sku}</span>
                   {remaining != null && (
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${stockClass}`}>
+                    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[10px] font-bold ${textCol}`}>
                       <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
-                      {out ? 'Agotado' : `${remaining} u.`}
+                      {stockLabel}
                     </span>
                   )}
                 </div>
@@ -278,7 +279,19 @@ export function PosPage() {
         </div>
       </div>
 
-      <Card className="flex flex-col self-start">
+      {/* Backdrop de la hoja de carrito en móvil. */}
+      {mobileCartOpen && (
+        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileCartOpen(false)} />
+      )}
+
+      <Card
+        className={cn(
+          'flex-col self-start',
+          mobileCartOpen
+            ? 'flex max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-50 max-md:max-h-[85vh] max-md:rounded-b-none'
+            : 'hidden md:flex',
+        )}
+      >
         <div className="flex items-center gap-2 border-b border-border px-4 py-3.5">
           <span className="text-base font-bold">Carrito</span>
           {cart.length > 0 && (
@@ -292,6 +305,9 @@ export function PosPage() {
               Vaciar
             </button>
           )}
+          <button onClick={() => setMobileCartOpen(false)} className="text-muted md:hidden" title="Cerrar">
+            <X size={18} />
+          </button>
         </div>
         <CardContent className="flex max-h-[70vh] flex-col gap-3 pt-4">
           {user?.role === 'admin' && locations.length > 0 && (
@@ -453,6 +469,20 @@ export function PosPage() {
           </div>
         )}
       </Modal>
+
+      {/* Barra flotante de carrito (solo móvil): abre la hoja inferior. */}
+      {cart.length > 0 && !mobileCartOpen && (
+        <button
+          onClick={() => setMobileCartOpen(true)}
+          className="fixed inset-x-3 bottom-[76px] z-30 flex items-center justify-between rounded-theme bg-primary px-4 py-3.5 text-primary-fg shadow-lg md:hidden"
+        >
+          <span className="flex items-center gap-2 font-bold">
+            <ShoppingCart size={18} />
+            {cart.reduce((n, l) => n + l.quantity, 0)} · {money(total)}
+          </span>
+          <span className="font-bold">Ver carrito ›</span>
+        </button>
+      )}
 
       {/* Toast inferior (escáner / cobro), estilo del prototipo. */}
       {toast && (

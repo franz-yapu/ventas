@@ -70,12 +70,12 @@ export function InventoryPage() {
               {rows?.map((r) => {
                 const low = r.minStock != null && r.quantity <= r.minStock;
                 return (
-                  <tr key={r.id} className={`border-b border-border last:border-0 ${low ? 'bg-red-50' : ''}`}>
+                  <tr key={r.id} style={low ? { background: '#fdf5f3' } : undefined}>
                     <td className="p-3">
-                      {r.productName} <span className="text-xs text-muted">{r.sku}</span>
+                      <span className="font-medium">{r.productName}</span> <span className="font-mono text-xs text-muted">{r.sku}</span>
                     </td>
-                    <td className="p-3">{r.locationName}</td>
-                    <td className="p-3 text-right font-medium">{r.quantity}</td>
+                    <td className="p-3 text-muted">{r.locationName}</td>
+                    <td className="p-3 text-right font-bold" style={{ color: low ? '#b8402f' : '#17171a' }}>{r.quantity}</td>
                     <td className="p-3 text-right text-muted">{r.minStock ?? '—'}</td>
                     <td className="p-3">
                       <div className="flex justify-end gap-2">
