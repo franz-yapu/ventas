@@ -1,0 +1,1 @@
+ALTER TABLE "business_counter" ADD COLUMN "last_sku" integer DEFAULT 0 NOT NULL;

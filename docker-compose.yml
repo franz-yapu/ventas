@@ -1,0 +1,66 @@
+# Optimizado para Hostinger VPS KVM 1: 1 vCPU, 4 GB RAM, 50 GB NVMe.
+# El frontend NO va aqui: se despliega en Cloudflare Pages (no consume el VPS).
+# La imagen del API se compila en CI/local y solo se corre aqui (nunca "build" en el VPS).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Tuning para 4 GB de RAM (deja ~1.5-2 GB libres para el SO + API)
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=20"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "wal_compression=on"
+    ports:
+      # Host 5434 para no chocar con Postgres locales en 5432/5433
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    # En produccion: image: <tu-registry>/ventafacil-api:latest (compilada en CI)
+    # En local puedes descomentar el build para desarrollo:
+    # build: { context: ., dockerfile: apps/api/Dockerfile }
+    image: ventafacil-api:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      API_PORT: 3000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
+    ports:
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  pgdata:

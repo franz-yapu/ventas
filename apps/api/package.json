@@ -1,0 +1,30 @@
+{
+  "name": "@ventafacil/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "build": "tsup src/index.ts --format esm --target node22 --clean",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/jwt": "^9.0.1",
+    "@ventafacil/db": "workspace:*",
+    "@ventafacil/shared": "workspace:*",
+    "argon2": "^0.41.1",
+    "drizzle-orm": "^0.36.0",
+    "fastify": "^5.1.0",
+    "fastify-plugin": "^5.0.1",
+    "pino-pretty": "^11.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

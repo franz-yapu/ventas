@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+.turbo
+coverage
+*.log
+.env
+.env.local
+.DS_Store
+playwright-report
+test-results
+pnpm-debug.log*
+.vite
+dev-dist

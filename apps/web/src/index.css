@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fuentes auto-alojadas (offline-first): Onest variable + IBM Plex Mono.
+   Subset latin — cubre acentos y ñ. Precacheadas por el PWA (glob woff2). */
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/onest-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-600.woff2') format('woff2');
+}
+
+/* Sistema de diseño "VentaFácil POS" (Claude Design).
+   Paleta cálida + Onest/IBM Plex Mono. ThemeProvider sobreescribe
+   --color-primary/--color-secondary/--radius con theme_json del negocio. */
+:root {
+  --color-primary: #2f68d8;
+  --color-primary-fg: #ffffff;
+  --color-primary-700: #234f9e;
+  --color-secondary: #f59e0b;
+  --color-secondary-fg: #1f2937;
+  /* Neutros cálidos del diseño (no los toca ThemeProvider). */
+  --color-bg: #f6f5f3;
+  --color-surface: #ffffff;
+  --color-border: #ecebe6;
+  --color-muted: #8c8a83;
+  --color-fg: #17171a;
+  --radius: 12px;
+  /* Tokens semánticos. */
+  --color-success: #2f8f5b;
+  --color-success-bg: #e9f4ee;
+  --color-danger: #b8402f;
+  --color-danger-bg: #fbeeec;
+  --color-warning: #8a6d18;
+  --color-warning-bg: #fbf4e6;
+  /* Tipografía. */
+  --font-sans: 'Onest', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbar sutil (coincide con el prototipo). */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: #dedcd7;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+@media print {
+  /* Elementos marcados no-print (nav, botones) nunca se imprimen. */
+  .no-print {
+    display: none !important;
+  }
+  /* Recibo térmico 80mm: cuando se imprime un recibo, sólo se muestra su área. */
+  body.print-receipt * {
+    visibility: hidden;
+  }
+  body.print-receipt .receipt-area,
+  body.print-receipt .receipt-area * {
+    visibility: visible;
+  }
+  body.print-receipt .receipt-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    padding: 4mm;
+    color: #000;
+    background: #fff;
+  }
+}
+
