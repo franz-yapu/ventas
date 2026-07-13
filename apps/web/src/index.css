@@ -46,6 +46,12 @@
     font-weight: 600;
     color: #5c5c56;
   }
+  /* Item activo del sidebar: tinte suave del color primario (no relleno sólido),
+     derivado del tema con color-mix para respetar el white-label. */
+  .ds-nav-tint {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    color: var(--color-primary);
+  }
 }
 
 /* Entrada de la hoja/modal (sheetStyle del prototipo): sube y aparece. */
