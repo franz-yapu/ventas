@@ -2,6 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Estilos de tabla calcados del prototipo VentaFácil POS (theadStyle/thStyle/trStyle).
+   Se aplican con la clase .ds-table para que TODAS las secciones coincidan. */
+@layer components {
+  .ds-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .ds-table thead tr {
+    background: #faf9f7;
+    text-align: left;
+    color: #96958f;
+    border: 0;
+  }
+  .ds-table th {
+    padding: 11px 14px;
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .ds-table tbody td {
+    padding: 12px 14px;
+  }
+  .ds-table tbody tr {
+    border-top: 1px solid #f1f0ec;
+    border-bottom: 0;
+  }
+  .ds-table tbody tr:hover {
+    background: #fbfbf9;
+  }
+  /* Tarjeta contenedora de tabla: radio 14px, sin sombra, overflow oculto. */
+  .ds-table-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+}
+
 /* Fuentes auto-alojadas (offline-first): Onest variable + IBM Plex Mono.
    Subset latin — cubre acentos y ñ. Precacheadas por el PWA (glob woff2). */
 @font-face {

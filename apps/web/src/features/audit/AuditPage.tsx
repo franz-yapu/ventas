@@ -106,8 +106,8 @@ export function AuditPage() {
 
       <Card>
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border text-left text-muted">
+          <table className="ds-table w-full">
+            <thead className="text-left text-muted">
               <tr>
                 <th className="p-3">Fecha</th>
                 <th className="p-3">Usuario</th>

@@ -95,7 +95,7 @@ export function SalesPage() {
 
       <Card>
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-sm">
+          <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
               <tr>
                 <th className="p-3">Recibo</th>

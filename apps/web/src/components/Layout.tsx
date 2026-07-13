@@ -69,8 +69,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-full flex-col md:flex-row">
-      {/* Nav lateral en desktop, inferior en móvil (mobile-first para el vendedor). */}
-      <aside className="no-print order-2 border-t border-border bg-surface md:order-1 md:w-56 md:border-r md:border-t-0">
+      {/* Nav lateral en desktop; barra inferior FIJA en móvil (mobile-first). */}
+      <aside className="no-print fixed inset-x-0 bottom-0 z-30 order-2 border-t border-border bg-surface md:static md:order-1 md:w-56 md:border-r md:border-t-0">
         <div className="hidden items-center gap-2 p-4 md:flex">
           <div className="flex h-8 w-8 items-center justify-center rounded-theme bg-primary text-primary-fg font-bold">
             {(business?.name ?? 'V')[0]}
@@ -136,7 +136,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="order-1 flex-1 md:order-2">
+      <main className="order-1 flex-1 pb-20 md:order-2 md:pb-0">
         <div className="no-print sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-4">
           <span className="font-medium md:hidden">{business?.name ?? 'VentaFácil'}</span>
           <span className="hidden md:block" />

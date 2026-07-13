@@ -103,7 +103,7 @@ export function ReportsPage() {
           <h2 className="text-lg font-medium">Comparativo por ubicación</h2>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-sm">
+          <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
               <tr>
                 <th className="p-3">Ubicación</th>

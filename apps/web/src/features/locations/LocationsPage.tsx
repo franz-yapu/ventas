@@ -38,7 +38,7 @@ export function LocationsPage() {
 
       <Card>
         <CardContent className="p-0">
-          <table className="w-full text-sm">
+          <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
               <tr>
                 <th className="p-3">Nombre</th>
