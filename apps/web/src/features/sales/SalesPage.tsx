@@ -66,7 +66,7 @@ export function SalesPage() {
 
       <div className="flex flex-wrap gap-2">
         {isCentral && (
-          <Select className="max-w-xs" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+          <Select filter className="max-w-xs" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
             <option value="">Todas las ubicaciones</option>
             {locations?.map((l) => (
               <option key={l.id} value={l.id}>
@@ -75,16 +75,16 @@ export function SalesPage() {
             ))}
           </Select>
         )}
-        <Select className="max-w-xs" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <Select filter className="max-w-xs" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="completed">Completadas</option>
           <option value="cancelled">Canceladas</option>
         </Select>
         <div className="flex items-center gap-1">
           <label className="text-sm text-muted">Desde</label>
-          <Input type="date" className="max-w-[10rem]" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+          <Input type="date" filter className="max-w-[10rem]" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
           <label className="text-sm text-muted">Hasta</label>
-          <Input type="date" className="max-w-[10rem]" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+          <Input type="date" filter className="max-w-[10rem]" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
           {(from || to) && (
             <Button variant="ghost" className="h-9 px-2 text-sm" onClick={() => { setFrom(''); setTo(''); }}>
               Limpiar

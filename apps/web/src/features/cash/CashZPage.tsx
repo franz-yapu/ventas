@@ -30,7 +30,7 @@ export function CashZPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">Cierre de caja (Z)</h1>
         <div className="flex items-center gap-2">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="max-w-[12rem]" />
+          <Input type="date" filter value={date} onChange={(e) => setDate(e.target.value)} className="max-w-[12rem]" />
           <Button variant="outline" onClick={exportCsv}>
             <Download size={16} /> Excel
           </Button>

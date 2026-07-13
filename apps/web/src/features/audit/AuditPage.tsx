@@ -72,7 +72,7 @@ export function AuditPage() {
       <h1 className="text-2xl font-semibold">Registro de actividad</h1>
 
       <div className="flex flex-wrap gap-2">
-        <Select className="max-w-[12rem]" value={action} onChange={(e) => setAction(e.target.value)}>
+        <Select filter className="max-w-[12rem]" value={action} onChange={(e) => setAction(e.target.value)}>
           <option value="">Toda acción</option>
           {Object.entries(ACTION_LABELS).map(([k, v]) => (
             <option key={k} value={k}>
@@ -80,7 +80,7 @@ export function AuditPage() {
             </option>
           ))}
         </Select>
-        <Select className="max-w-[12rem]" value={entity} onChange={(e) => setEntity(e.target.value)}>
+        <Select filter className="max-w-[12rem]" value={entity} onChange={(e) => setEntity(e.target.value)}>
           <option value="">Toda entidad</option>
           {Object.entries(ENTITY_LABELS).map(([k, v]) => (
             <option key={k} value={k}>
@@ -88,7 +88,7 @@ export function AuditPage() {
             </option>
           ))}
         </Select>
-        <Select className="max-w-[12rem]" value={userId} onChange={(e) => setUserId(e.target.value)}>
+        <Select filter className="max-w-[12rem]" value={userId} onChange={(e) => setUserId(e.target.value)}>
           <option value="">Todo usuario</option>
           {users?.map((u) => (
             <option key={u.id} value={u.id}>
@@ -98,9 +98,9 @@ export function AuditPage() {
         </Select>
         <div className="flex items-center gap-1">
           <label className="text-sm text-muted">Desde</label>
-          <Input type="date" className="max-w-[10rem]" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+          <Input type="date" filter className="max-w-[10rem]" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
           <label className="text-sm text-muted">Hasta</label>
-          <Input type="date" className="max-w-[10rem]" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+          <Input type="date" filter className="max-w-[10rem]" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
         </div>
       </div>
 

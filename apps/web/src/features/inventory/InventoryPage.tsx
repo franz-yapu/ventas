@@ -44,7 +44,7 @@ export function InventoryPage() {
       </div>
 
       {isCentral && (
-        <Select className="max-w-xs" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+        <Select filter className="max-w-xs" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
           <option value="">Todas las ubicaciones</option>
           {locations?.map((l) => (
             <option key={l.id} value={l.id}>
