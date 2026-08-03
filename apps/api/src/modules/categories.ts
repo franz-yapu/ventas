@@ -26,9 +26,17 @@ export async function categoryRoutes(app: FastifyInstance) {
 
   app.delete('/categories/:id', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    await db
+    // El filtro por negocio ya impide borrar categorías ajenas, pero hay que MIRAR el
+    // resultado: sin esto la respuesta era 200 {ok:true} aunque no se borrara nada, y
+    // se auditaba un borrado que nunca ocurrió (con el id de otro negocio en el log).
+    const deleted = await db
       .delete(schema.category)
-      .where(and(eq(schema.category.id, id), eq(schema.category.businessId, req.authUser!.businessId)));
+      .where(and(eq(schema.category.id, id), eq(schema.category.businessId, req.authUser!.businessId)))
+      .returning({ id: schema.category.id });
+
+    if (deleted.length === 0) {
+      return reply.code(404).send({ data: null, error: 'Categoría no encontrada' });
+    }
     await app.audit(req, { action: 'delete', entity: 'category', entityId: id });
     return reply.send({ data: { ok: true }, error: null });
   });
