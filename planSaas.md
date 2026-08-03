@@ -14,11 +14,12 @@
 
 ## 👉 Siguiente tarea
 
-**#1 — Backups y staging.** Es lo único que queda del bloque bloqueante, y necesita
-acceso al VPS. Con eso hecho, RLS se activa (el código ya está migrado y probado).
+El **bloque 1 está resuelto en local**: staging en Docker con RLS activo, backups con
+restauración probada, y los 13 módulos migrados. Lo único pendiente ahí necesita el VPS
+(crear el rol de aplicación, programar el backup diario y activar RLS en producción).
 
-Si prefieres seguir en local, lo siguiente sería la **#4: definir el precio**, de la que
-depende todo el bloque 2.
+Para seguir en local, lo siguiente es la **#4 — definir el precio**, de la que depende
+todo el bloque 2.
 
 ---
 
@@ -26,16 +27,27 @@ depende todo el bloque 2.
 
 Nada de la capa SaaS tiene sentido hasta que esto esté. Son, en este orden:
 
-## #1 · Red de seguridad 🔴
+## #1 · Red de seguridad 🟡 HECHO EN LOCAL, falta llevarlo al VPS
 **Por qué primero:** todo lo que sigue toca la base de datos donde hay ventas reales de
 un cliente que paga. No se experimenta sin red.
 
-- [ ] **Backups automáticos de Postgres** (`pg_dump` diario a almacenamiento externo).
-- [ ] **Probar una restauración real** en una BD vacía. Un backup no probado no es un backup.
-- [ ] Ambiente de **staging** con copia anonimizada de producción.
-- [ ] Documentar el procedimiento de migraciones en producción (hoy `pnpm db:migrate` a mano).
+- [x] **Staging local en Docker** que imita al VPS (`docker-compose.staging.yml`, stack
+      `ventafacil-staging` en Portainer): mismo Postgres 16, misma imagen del API, mismo
+      tuning de memoria, `NODE_ENV=production`, puertos 3100/5435 para convivir con
+      `pnpm dev`. Documentado en `STAGING.md`.
+- [x] **Script de backup** (`scripts/backup.sh`): formato custom `-Fc`, descarta volcados
+      sospechosamente pequeños, rota a los 14 días.
+- [x] **Prueba de restauración real** (`scripts/restore-test.sh`): restaura en una base
+      desechable, cuenta filas y verifica que **las políticas de RLS viajan en el backup**
+      — un backup que las perdiera restauraría los datos sin aislamiento. Ejecutado con
+      éxito sobre staging.
+- [x] **Procedimiento de arranque documentado** en el propio entrypoint: migrar y sembrar
+      con el dueño, activar RLS, y recién entonces levantar el API con el rol sin
+      privilegios.
+- [ ] Programar el backup diario **en el VPS** y copiarlo **fuera del servidor**.
+- [ ] Copia anonimizada de producción para staging (hoy staging usa datos de seed).
 
-> Requiere acceso al VPS. Se puede adelantar la #2 en paralelo, que es sólo código.
+> Lo que falta necesita acceso al VPS. El procedimiento ya está ensayado en local.
 
 ## #2 · Endurecer la producción actual ✅ HECHO (3 ago 2026)
 **Por qué:** esto ya estaba expuesto, con o sin SaaS. No era trabajo de SaaS, era deuda
@@ -84,9 +96,12 @@ el bug que se descubre cuando ya es tarde.
       `apps/api/test/rls-integration.test.ts` (31 casos) ejercita los endpoints reales
       **con RLS activo**. Como RLS falla cerrado, cualquier handler sin migrar devolvería
       vacío y el test lo delataría. Empezó en 12 rojos y terminó en 0.
-- [ ] Crear el rol de aplicación en desarrollo y staging, y apuntar `DATABASE_URL` a él.
-- [ ] Correr las suites **con RLS activo** contra staging.
-- [ ] Recién entonces activarlo en producción.
+- [x] **Rol de aplicación creado y RLS activo en staging** ✅ (3 ago 2026). Verificado
+      end-to-end contra el stack de Docker: dos negocios distintos, cada uno ve sólo lo
+      suyo; venta completa con descuento de stock, KPI y auditoría; y el rol de la app
+      confirmado como NO superusuario y sin `bypassrls`.
+- [ ] Repetir en producción: crear el rol, apuntar `DATABASE_URL` y activar con
+      `ENABLE_RLS=1`, **después** de un backup con restauración probada.
 - [ ] Opcional: helper de repositorio que reciba el `AuthUser`, para que escribir una
       query sin tenant sea incómodo además de imposible.
 

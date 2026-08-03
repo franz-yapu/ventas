@@ -1,0 +1,86 @@
+# Staging LOCAL que imita al VPS: mismo Postgres 16, misma imagen del API, mismos
+# límites de memoria. Sirve para ensayar la activación de RLS y las restauraciones de
+# backup sin acercarse a producción.
+#
+#   docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+#
+# Puertos distintos a los de desarrollo a propósito (5435 / 3100), para que este stack
+# y el `pnpm dev` puedan convivir sin pisarse.
+name: ventafacil-staging
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vf-staging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Mismo tuning que producción (VPS de 1 vCPU / 4 GB), para que staging se comporte
+    # como el servidor y no como una máquina de desarrollo holgada.
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=20"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "wal_compression=on"
+    ports:
+      - "5435:5432"
+    volumes:
+      - staging_pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: ventafacil-api:staging
+    container_name: vf-staging-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      # DATABASE_URL apunta al ROL DE APLICACIÓN, no al dueño de las tablas: Postgres
+      # ignora RLS para superusuarios y dueños, así que conectarse con ellos dejaría
+      # las políticas de adorno. Es justo el error que este staging existe para atrapar.
+      DATABASE_URL: postgres://${APP_DB_ROLE}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}
+      # El dueño sólo se usa al arrancar: migrar, sembrar y activar RLS.
+      OWNER_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      APP_DB_ROLE: ${APP_DB_ROLE}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      ENABLE_RLS: ${ENABLE_RLS:-1}
+      API_PORT: 3000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
+      # Obligatoria en producción: el API no arranca sin ella.
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    ports:
+      - "3100:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  staging_pgdata:

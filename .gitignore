@@ -12,3 +12,6 @@ test-results
 pnpm-debug.log*
 .vite
 dev-dist
+
+# Backups locales de staging (no versionar volcados de datos)
+backups/
