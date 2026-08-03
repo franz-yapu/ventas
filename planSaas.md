@@ -139,8 +139,18 @@ esta decisión de negocio, no técnica.
       cliente real: el paso a SaaS tiene que ser invisible para él.
 
 ## #6 · Registro self-service 🟠
+- [x] **Identificación del negocio por subdominio** ✅ (3 ago 2026). Cada cliente entra
+      por `sunegocio.vertexweb.lat` y nunca ve que la plataforma es compartida; se
+      descartó pedir un "código de negocio" en el login por delatarlo y añadir fricción.
+      `CORS_ORIGINS` acepta comodín (`https://*.vertexweb.lat`) porque con un subdominio
+      por cliente los orígenes no se pueden enumerar. Probado en staging con dos negocios.
+      **Exige en producción: DNS comodín y certificado SSL comodín** (Let's Encrypt por
+      DNS-01). Detalles en `STAGING.md`.
 - [ ] Pantalla de registro que haga lo que hoy hace `new-tenant.ts` (negocio + sucursal +
       admin + contador de recibos). La lógica ya está escrita, sólo falta exponerla.
+      Ojo al orden: insertar en `business` (fuera de RLS) y seguir con `withTenant`,
+      porque el registro correrá con el rol de la app y no con el superusuario.
+- [ ] Elegir el subdominio en el alta y validar que esté libre.
 - [ ] **Recuperación de contraseña** — hoy no existe. Con clientes desconocidos es
       obligatorio: no puedes resetear a mano a cien negocios.
 - [ ] Email transaccional (Resend / SES) para verificación y recuperación.

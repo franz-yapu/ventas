@@ -48,6 +48,46 @@ $ psql -U ventafacil_app -c "insert into location (business_id, name) ..."
 ERROR:  new row violates row-level security policy for table "location"
 ```
 
+## Un subdominio por cliente
+
+Cada negocio entra por **su propia dirección** y nunca ve que la plataforma es
+compartida — nada de pedirle un "código de negocio" al iniciar sesión.
+
+| Negocio | En staging | En producción |
+|---|---|---|
+| Llantas El Rapido | `llantas-el-rapido.localhost:5174` | `llantas-el-rapido.vertexweb.lat` |
+| Ferretería | `ferre-dos.localhost:5175` | `ferre-dos.vertexweb.lat` |
+
+`*.localhost` resuelve solo en los navegadores modernos, así que en local se prueba
+igual que en producción, sin tocar `/etc/hosts`.
+
+**Cómo se resuelve el negocio**, en orden: subdominio → `VITE_BUSINESS_SLUG` (frontend
+dedicado a un cliente) → lo que se escriba a mano (último recurso, sólo si el API lo
+pide) → o nada, y el API lo deduce cuando hay un único negocio.
+
+La web necesita `VITE_APP_DOMAIN` (el dominio base) para no confundirlo con un negocio:
+sin ella, `ventafacil.com` daría el slug `ventafacil`. Los subdominios `www`, `app`,
+`api`, `admin` y `staging` están reservados.
+
+### CORS con comodín
+
+Con un subdominio por cliente los orígenes no se pueden enumerar: habría que redesplegar
+el API en cada alta. Por eso `CORS_ORIGINS` acepta comodín:
+
+```
+CORS_ORIGINS=https://*.vertexweb.lat,https://vertexweb.lat
+```
+
+El comodín cubre **un solo nivel**, así que `a.b.vertexweb.lat` y
+`vertexweb.lat.malicioso.io` quedan fuera. Hay 6 tests que lo fijan.
+
+### Lo que exige en producción
+
+- **DNS comodín**: un registro `*.vertexweb.lat` apuntando al VPS.
+- **Certificado SSL comodín** para `*.vertexweb.lat` (Let's Encrypt lo emite por
+  DNS-01, no por HTTP-01).
+- El frontend debe servirse desde cualquier subdominio, con `VITE_APP_DOMAIN` definido.
+
 ## Backups
 
 ```bash

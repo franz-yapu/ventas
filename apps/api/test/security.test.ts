@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { originPermitido } from '../src/env.js';
 import { createTenant, makeApp, resetDb, type Tenant } from './helpers.js';
 
 /**
@@ -134,5 +135,39 @@ describe('CORS', () => {
     });
     expect(res.statusCode).toBeLessThan(400);
     expect(res.headers['access-control-allow-origin']).toBeDefined();
+  });
+});
+
+describe('comodín de CORS por subdominio', () => {
+  // Con un subdominio por cliente los orígenes no se pueden enumerar, así que
+  // CORS_ORIGINS admite comodín. Un error aquí abriría el API a cualquier web.
+  const patrones = ['https://*.ventafacil.com', 'https://ventafacil.com'];
+
+  it('acepta el subdominio de un cliente', () => {
+    expect(originPermitido('https://llantas.ventafacil.com', patrones)).toBe(true);
+    expect(originPermitido('https://ferre-dos.ventafacil.com', patrones)).toBe(true);
+  });
+
+  it('acepta el dominio pelado si está listado', () => {
+    expect(originPermitido('https://ventafacil.com', patrones)).toBe(true);
+  });
+
+  it('RECHAZA un dominio ajeno que termine parecido', () => {
+    // El fallo clásico del comodín mal escrito.
+    expect(originPermitido('https://ventafacil.com.malicioso.io', patrones)).toBe(false);
+    expect(originPermitido('https://maliciosoventafacil.com', patrones)).toBe(false);
+  });
+
+  it('RECHAZA otro esquema o puerto', () => {
+    expect(originPermitido('http://llantas.ventafacil.com', patrones)).toBe(false);
+    expect(originPermitido('https://llantas.ventafacil.com:8443', patrones)).toBe(false);
+  });
+
+  it('el comodín cubre un solo nivel', () => {
+    expect(originPermitido('https://a.b.ventafacil.com', patrones)).toBe(false);
+  });
+
+  it('sin comodín, la coincidencia es exacta', () => {
+    expect(originPermitido('https://otro.com', ['https://ventafacil.com'])).toBe(false);
   });
 });

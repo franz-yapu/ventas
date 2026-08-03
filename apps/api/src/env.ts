@@ -10,6 +10,31 @@ const nodeEnv = process.env.NODE_ENV ?? 'development';
  *
  * Fuera de producción se deja abierto para no estorbar en desarrollo y tests.
  */
+/**
+ * ¿Está permitido este origen?
+ *
+ * Acepta comodín en el subdominio (`https://*.ventafacil.com`), que es imprescindible
+ * cuando cada cliente entra por el suyo: listar los orígenes uno a uno obligaría a
+ * redeplegar el API cada vez que se da de alta un negocio.
+ *
+ * El comodín cubre UN nivel (`[^.]+`), así que `https://*.ventafacil.com` deja pasar a
+ * `llantas.ventafacil.com` pero no a `a.b.ventafacil.com` ni a `ventafacil.com.malo.io`.
+ */
+export function originPermitido(origin: string, patrones: string[]): boolean {
+  return patrones.some((patron) => {
+    if (!patron.includes('*')) return patron === origin;
+    const re = new RegExp(
+      '^' +
+        patron
+          .split('*')
+          .map((parte) => parte.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('[^.]+') +
+        '$',
+    );
+    return re.test(origin);
+  });
+}
+
 function resolveCorsOrigins(): string[] | true {
   const list = (process.env.CORS_ORIGINS ?? '')
     .split(',')

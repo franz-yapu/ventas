@@ -3,7 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { API_PREFIX } from '@ventafacil/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { env } from './env.js';
+import { env, originPermitido } from './env.js';
 import { authPlugin } from './plugins/auth.js';
 import { auditPlugin } from './plugins/audit.js';
 import { analyticsRoutes } from './modules/analytics.js';
@@ -39,7 +39,19 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   // HTML, así que una política de contenido no protege nada y sí puede estorbar.
   await app.register(helmet, { contentSecurityPolicy: false });
 
-  await app.register(cors, { origin: env.corsOrigins, credentials: true });
+  // Con un subdominio por cliente, los orígenes no se pueden enumerar: `CORS_ORIGINS`
+  // admite comodín (`https://*.ventafacil.com`) y aquí se resuelve por petición.
+  await app.register(cors, {
+    origin:
+      env.corsOrigins === true
+        ? true
+        : (origin, cb) => {
+            // Sin cabecera Origin (curl, healthchecks, la propia app en el servidor).
+            if (!origin) return cb(null, true);
+            cb(null, originPermitido(origin, env.corsOrigins as string[]));
+          },
+    credentials: true,
+  });
 
   // Tope global por IP. Los límites finos van por ruta (ver /auth/login).
   await app.register(rateLimit, {

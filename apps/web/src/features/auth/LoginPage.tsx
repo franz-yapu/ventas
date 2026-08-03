@@ -12,19 +12,27 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [business, setBusiness] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // El campo del negocio no se muestra de entrada: en una instalación con un solo
+  // negocio sería ruido. Aparece cuando el API avisa de que hace falta.
+  const [needsBusiness, setNeedsBusiness] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      await login(username, password);
+      await login(username, password, business);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión');
+      const msg = err instanceof ApiError ? err.message : 'No se pudo iniciar sesión';
+      if (err instanceof ApiError && err.status === 400 && /negocio/i.test(msg)) {
+        setNeedsBusiness(true);
+      }
+      setError(msg);
     } finally {
       setBusy(false);
     }
@@ -68,6 +76,21 @@ export function LoginPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+            {needsBusiness && (
+              <div className="flex flex-col gap-1">
+                <Input
+                  placeholder="Código del negocio"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={business}
+                  onChange={(e) => setBusiness(e.target.value)}
+                />
+                <p className="text-xs text-muted">
+                  Esta instalación atiende a varios negocios. Escribe el código del tuyo.
+                </p>
+              </div>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <Button type="submit" size="lg" disabled={busy} className="mt-1">
               {busy ? 'Ingresando…' : 'Ingresar'}
