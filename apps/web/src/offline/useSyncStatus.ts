@@ -5,6 +5,8 @@ import { db } from './db';
 export function useSyncStatus() {
   const [online, setOnline] = useState(navigator.onLine);
   const pending = useLiveQuery(() => db.pendingSales.count(), [], 0);
+  // Ventas que agotaron los reintentos: ya no se suben solas, necesitan atención.
+  const failed = useLiveQuery(() => db.pendingSales.where('status').equals('failed').count(), [], 0);
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -17,5 +19,5 @@ export function useSyncStatus() {
     };
   }, []);
 
-  return { online, pending: pending ?? 0 };
+  return { online, pending: pending ?? 0, failed: failed ?? 0 };
 }
