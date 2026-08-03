@@ -1,4 +1,6 @@
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { API_PREFIX } from '@ventafacil/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from './env.js';
@@ -33,7 +35,24 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
           : true,
   });
 
-  await app.register(cors, { origin: true, credentials: true });
+  // Cabeceras de seguridad. Se desactiva CSP: este servicio sólo responde JSON, nunca
+  // HTML, así que una política de contenido no protege nada y sí puede estorbar.
+  await app.register(helmet, { contentSecurityPolicy: false });
+
+  await app.register(cors, { origin: env.corsOrigins, credentials: true });
+
+  // Tope global por IP. Los límites finos van por ruta (ver /auth/login).
+  await app.register(rateLimit, {
+    max: env.rateLimitMax,
+    timeWindow: env.rateLimitWindow,
+    // Mensaje en el formato { data, error } que usa el resto del API.
+    errorResponseBuilder: (_req, context) => ({
+      statusCode: 429,
+      data: null,
+      error: `Demasiadas peticiones. Reintenta en ${Math.ceil(context.ttl / 1000)} s.`,
+    }),
+  });
+
   await app.register(authPlugin);
   await app.register(auditPlugin);
 

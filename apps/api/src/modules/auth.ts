@@ -8,7 +8,13 @@ import type { AuthUser } from '../types.js';
 
 export async function authRoutes(app: FastifyInstance) {
   // POST /auth/login
-  app.post('/auth/login', async (req, reply) => {
+  // Límite propio, mucho más estricto que el global: es el endpoint que se ataca por
+  // fuerza bruta. Se cuenta por IP; el tope deja margen de sobra a quien teclea mal.
+  const loginRateLimit = {
+    rateLimit: { max: env.loginRateLimitMax, timeWindow: env.loginRateLimitWindow },
+  };
+
+  app.post('/auth/login', { config: loginRateLimit }, async (req, reply) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ data: null, error: 'Datos invalidos' });
