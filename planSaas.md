@@ -1,22 +1,248 @@
 # VentaFácil — Plan para construir el SaaS
 
-> **Versión corregida contra el código real** (revisión del 3 de agosto de 2026).
-> La versión anterior de este documento fue escrita sin leer el repositorio: daba por
-> pendiente trabajo que ya está terminado y proponía renombrar el modelo de datos.
-> Todo lo que sigue está verificado contra archivos concretos del repo.
+> **Ordenado por prioridad.** El orden de este documento *es* el orden de trabajo: se
+> empieza arriba y se baja. Dentro de cada bloque, los ítems también van en orden.
+>
+> Verificado contra el código real (revisión del 3 de agosto de 2026). Cada afirmación
+> de estado cita el archivo donde se comprueba; si algo no coincide, gana el código.
 >
 > Stack: **pnpm + Turborepo · Fastify 5 · Drizzle + PostgreSQL 16 · React 18 PWA (Dexie)**
 >
-> **Prioridad:** 🔴 Crítico (bloquea) · 🟠 Alto (para vender) · 🔵 Medio (escala)
+> **Prioridad:** 🔴 Bloquea · 🟠 Necesario para vender · 🔵 Escala, después
 
 ---
 
-## Punto de partida real
+## 👉 Siguiente tarea
 
-VentaFácil **ya es multi-tenant**. No hay que convertirlo en SaaS: hay que ponerle
-la capa de negocio encima y endurecer el aislamiento.
+**#3 — Migrar los 13 módulos del API a `withTenant()`**, que es lo que desbloquea activar
+RLS. La #1 (backups y staging) sigue pendiente porque necesita acceso al VPS.
 
-### Ya construido y funcionando
+---
+
+# 🔴 BLOQUE 1 — Bloquea todo lo demás
+
+Nada de la capa SaaS tiene sentido hasta que esto esté. Son, en este orden:
+
+## #1 · Red de seguridad 🔴
+**Por qué primero:** todo lo que sigue toca la base de datos donde hay ventas reales de
+un cliente que paga. No se experimenta sin red.
+
+- [ ] **Backups automáticos de Postgres** (`pg_dump` diario a almacenamiento externo).
+- [ ] **Probar una restauración real** en una BD vacía. Un backup no probado no es un backup.
+- [ ] Ambiente de **staging** con copia anonimizada de producción.
+- [ ] Documentar el procedimiento de migraciones en producción (hoy `pnpm db:migrate` a mano).
+
+> Requiere acceso al VPS. Se puede adelantar la #2 en paralelo, que es sólo código.
+
+## #2 · Endurecer la producción actual ✅ HECHO (3 ago 2026)
+**Por qué:** esto ya estaba expuesto, con o sin SaaS. No era trabajo de SaaS, era deuda
+de seguridad del presente.
+
+- [x] **`@fastify/rate-limit`**: tope general de 600/min por IP (generoso, porque en una
+      tienda todas las cajas salen por la misma IP) y límite propio en `POST /auth/login`
+      de 20 intentos cada 5 min. Antes el login aceptaba fuerza bruta ilimitada.
+- [x] **`@fastify/helmet`** con CSP desactivada (el API sólo responde JSON, nunca HTML).
+      Verificado en vivo: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+      y ya no expone `X-Powered-By`.
+- [x] **CORS estricto por entorno**: en producción exige `CORS_ORIGINS` y **el API no
+      arranca sin ella** — un fallo ruidoso al desplegar es mejor que un agujero silencioso
+      en marcha. Fuera de producción sigue abierto para no estorbar.
+- [x] Todo configurable por entorno y documentado en `.env.example`.
+- [x] **7 tests** (`apps/api/test/security.test.ts`), incluido el que comprueba que agotado
+      el límite del login tampoco pasa la contraseña correcta.
+- [ ] Rotar los secretos JWT de producción si alguna vez se usaron los de `.env.example`.
+      *(Pendiente: requiere acceso al VPS.)*
+
+> ⚠️ **Antes del próximo despliegue hay que definir `CORS_ORIGINS` en el `.env` del
+> servidor**, o el API no levantará. Ej: `CORS_ORIGINS=https://vertexweb.lat`
+
+## #3 · Aislamiento a prueba de descuidos (RLS) 🔴
+**Por qué:** es el verdadero requisito para vender. Hoy el aislamiento entre negocios
+depende de que cada consulta recuerde su `where business_id`:
+
+```ts
+// apps/api/src/modules/products.ts:130
+.where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
+```
+
+El patrón está bien aplicado, pero depende de que el programador se acuerde **todas las
+veces, para siempre**. Con un cliente propio es aceptable. Con clientes desconocidos
+compartiendo base de datos, **un `businessId` olvidado es una fuga entre empresas**, y es
+el bug que se descubre cuando ya es tarde.
+
+- [ ] **Migrar los 13 módulos de `apps/api/src/modules/` a `withTenant()`.** Mecánico; los
+      28 tests de aislamiento avisan al instante si algo se rompe.
+- [ ] Crear el rol de aplicación en desarrollo y staging, y apuntar `DATABASE_URL` a él.
+- [ ] Correr las suites **con RLS activo** contra staging.
+- [ ] Recién entonces activarlo en producción.
+- [ ] Opcional: helper de repositorio que reciba el `AuthUser`, para que escribir una
+      query sin tenant sea incómodo además de imposible.
+
+> 🔴 **Dos cosas que bloquean la activación** (verificadas, no obvias):
+>
+> 1. El usuario `ventafacil` de Postgres es **superusuario**, y Postgres **ignora RLS para
+>    superusuarios** — ni `FORCE` les aplica. La API en producción se conecta con él, así
+>    que activar RLS hoy no protegería nada *y lo parecería*. Hace falta un rol sin
+>    privilegios: `pnpm --filter @ventafacil/db setup-rls` lo crea.
+> 2. **RLS falla cerrado.** Mientras los módulos usen el `db` global sin fijar el negocio,
+>    Postgres no devuelve ninguna fila. Por eso el orden de arriba no es negociable.
+
+**✅ Salida del bloque:** puedes romper cosas sin miedo, la producción dejó de estar
+expuesta, y aunque alguien olvide un `where`, Postgres no entrega datos de otro negocio.
+
+---
+
+# 🟠 BLOQUE 2 — Necesario para vender
+
+## #4 · Definir el precio 🟠
+**Va primero de este bloque porque todo lo demás depende de él.** ¿Cobras por negocio,
+por sucursal o por usuario? La tabla de planes, los límites y el feature gating salen de
+esta decisión de negocio, no técnica.
+
+## #5 · Suscripciones 🟠
+- [ ] Tablas `plan` y `subscription` (aditivas, no tocan el esquema existente).
+- [ ] Estados: `trial` · `activa` · `morosa` · `suspendida` · `cancelada`.
+- [ ] Límites por plan: nº de sucursales, usuarios, productos.
+- [ ] Hook de Fastify que rechaza al tenant suspendido (mensaje claro, no un 500).
+- [ ] Feature gating en el frontend según el plan.
+- [ ] **Migrar Llantas El Rápido** a un plan `propietario` ilimitado, sin downtime. Es tu
+      cliente real: el paso a SaaS tiene que ser invisible para él.
+
+## #6 · Registro self-service 🟠
+- [ ] Pantalla de registro que haga lo que hoy hace `new-tenant.ts` (negocio + sucursal +
+      admin + contador de recibos). La lógica ya está escrita, sólo falta exponerla.
+- [ ] **Recuperación de contraseña** — hoy no existe. Con clientes desconocidos es
+      obligatorio: no puedes resetear a mano a cien negocios.
+- [ ] Email transaccional (Resend / SES) para verificación y recuperación.
+- [ ] Validar que el slug esté libre (ya es `unique` en el esquema).
+- [ ] Wizard inicial: sucursal, primeros productos, tema y textos.
+
+## #7 · Panel super-admin 🟠
+- [ ] Operador de plataforma **por encima** de `admin`. Hoy el enum es `['admin','seller']`
+      y nada ve más de un negocio. Recomendado: tabla `platform_admin` aparte, para que
+      ningún token de tenant pueda escalar a verlo todo.
+- [ ] Listado de tenants, estado de suscripción, suspender/reactivar.
+- [ ] Métricas: MRR, tenants activos, churn.
+
+## #8 · Revocación de sesiones 🟠
+- [ ] Refresh tokens con `jti` + lista de revocación. Hoy son stateless: si suspendes a un
+      tenant, sus tokens siguen válidos hasta que expiren.
+
+## #9 · Caja / arqueo 🟠
+La tabla `cash_register` existe en el esquema **pero no tiene ni un endpoint ni una
+pantalla** — está huérfana (`features/cash` es sólo el reporte Z). Es la brecha de
+producto más visible: un POS sin cierre de caja cuesta venderlo a un negocio con empleados.
+
+- [ ] Endpoints de apertura y cierre, con monto esperado vs. contado.
+- [ ] Pantalla de arqueo y reporte de diferencias.
+- [ ] Cierre Z apoyado en el reporte que ya existe.
+
+## #10 · Legales, antes del primer registro público 🟠
+- [ ] Términos de servicio y política de privacidad.
+- [ ] Exportación de datos por tenant (si un cliente se va, tiene derecho a sus ventas).
+
+**✅ Salida del bloque:** un negocio desconocido se registra, usa el POS y te paga.
+
+---
+
+# 🔵 BLOQUE 3 — Escala y profundidad
+
+Nada de aquí bloquea vender. Se atiende cuando el uso lo pida.
+
+## #11 · Cobro automático 🔵
+- [ ] Pasarela local (Libélula / PagosNet / Tigo Money / QR Simple).
+- [ ] Dunning: reintentos de cobro y suspensión automática.
+
+## #12 · Operación 🔵
+- [ ] CI/CD con GitHub Actions (hoy no hay `.github/`): lint → typecheck → test → build.
+- [ ] Sentry + health checks sobre `/health` + alertas de uptime.
+- [ ] **Infra:** el VPS es 1 vCPU / 4 GB con `max_connections=20` y `DB_POOL_MAX=8`.
+      Aguanta unos pocos tenants; define en qué número migras a algo mayor.
+- [ ] Documentación de la API (OpenAPI).
+
+## #13 · Producto 🔵
+- [ ] Mostrar en la UI las ventas `failed` de la cola offline y ofrecer reintento manual.
+- [ ] Impresión térmica ESC/POS.
+- [ ] Exportar reportes a Excel / PDF.
+- [ ] Inventario profundo: proveedores, órdenes de compra, kardex valorizado,
+      transferencias entre sucursales, alertas de stock bajo (`min_stock` ya existe).
+- [ ] Ampliar cobertura de tests a `persistSale` y a los reportes.
+- [ ] RBAC más fino, sólo si un cliente lo pide de verdad.
+- [ ] Multi-moneda / multi-país (el esquema ya tiene `currency` y `tax_rate` por negocio).
+
+## #14 · Soporte 🔵
+- [ ] Plan de soporte y capacitación: en Bolivia un POS se vende con acompañamiento.
+
+---
+
+# ⏸️ APARTE — Facturación Bolivia (SIAT)
+
+**No entra en la numeración porque está bloqueado por información externa, no por
+esfuerzo.** Puede ser tu mayor diferenciador o tu mayor pozo: decide temprano si entras.
+
+> ⚠️ **Los detalles normativos de esta sección no están verificados.** Una versión previa
+> de este documento afirmaba requisitos concretos (CUIS, CUFD cada 24 h, CUF, servicios
+> SOAP) generados por una IA, no consultados con la fuente. Las normas del SIN cambian.
+> **Trata todo lo de abajo como preguntas, no como especificación.**
+
+### Averiguar antes de estimar 🔴
+- [ ] Confirmar con el SIN o un contador la **modalidad** que te aplica.
+- [ ] Pedir acceso al ambiente de homologación y **la especificación oficial vigente**.
+- [ ] Recién con el documento en mano, estimar el esfuerzo real.
+
+### Decisiones que cambian la arquitectura 🔴
+- [ ] ¿Facturas tú en nombre de los tenants, o cada uno con su propio certificado?
+      La respuesta cambia el modelo de datos y tu exposición legal.
+- [ ] `business` necesitará NIT y razón social; `location`, código de sucursal ante el SIN.
+      Son migraciones de esquema.
+- [ ] Retención de facturas por el plazo normativo → afecta backups y almacenamiento.
+
+**A favor:** tu motor offline ya existe, así que el modo contingencia (emitir sin internet
+y sincronizar al reconectar) reutiliza la cola de `offline/sync.ts`.
+
+---
+
+# ✅ HECHO
+
+## Tests (era #0 del bloque 1) — 3 de agosto de 2026
+- [x] Vitest en `apps/api` y `apps/web`; `pnpm test` corre las dos suites.
+- [x] **28 tests de aislamiento** (`apps/api/test/tenant-isolation.test.ts`): crean los
+      negocios A y B y comprueban que ninguna respuesta al token de A contiene un solo
+      byte de B, endpoint por endpoint, en lectura y escritura.
+- [x] **15 tests de la cola offline** (`apps/web/test/sync.test.ts`) con IndexedDB en
+      memoria: sin red, con duplicados, con el API caído y agotando reintentos.
+- [x] **10 tests de RLS** (`apps/api/test/rls.test.ts`).
+- [x] Base desechable `ventafacil_test`, recreada en cada corrida, que aborta si su nombre
+      no contiene "test". Los tests corren con un rol sin privilegios, no con el superusuario.
+
+**Encontrado por estos tests:** `DELETE /categories/:id` respondía `200 {ok:true}` y
+auditaba un borrado aunque no borrara nada. Corregido. No había ninguna fuga real entre
+negocios.
+
+## Mecanismo de RLS — 3 de agosto de 2026
+- [x] Políticas para las 12 tablas con `business_id` (`packages/db/src/rls.ts`), más una
+      para `sale_item` que hereda el tenant de su `sale`.
+- [x] `withTenant()` (`packages/db/src/tenant.ts`): fija `app.business_id` con
+      `set_config(..., true)`, **local a la transacción**, así una conexión reutilizada del
+      pool nunca arrastra el tenant de la petición anterior.
+- [x] `FORCE ROW LEVEL SECURITY` en todas las tablas.
+- [x] Script de activación con simulacro: `pnpm --filter @ventafacil/db setup-rls`.
+
+## Backoff de la cola offline — 3 de agosto de 2026
+- [x] Antes reintentaba cada 30 s fijos ignorando `attempts`. Ahora cada venta guarda
+      `nextAttemptAt` y el worker sólo envía las vencidas, con espera exponencial
+      (15 s → 30 min) **y jitter**: sin él, todos los clientes que fallaron a la vez
+      vuelven juntos y tumban el API al revivir.
+- [x] Tras 10 intentos la venta pasa a `failed`: deja de reintentarse sola y queda visible
+      (`useSyncStatus().failed`), con `retryFailed()` para reencolarla. Antes giraba en la
+      cola para siempre.
+
+---
+
+## Punto de partida — lo que YA estaba construido
+
+VentaFácil **ya era multi-tenant** antes de este plan. No hay que convertirlo en SaaS:
+hay que ponerle la capa de negocio encima y endurecer el aislamiento.
 
 | Capacidad | Dónde |
 |---|---|
@@ -30,272 +256,40 @@ la capa de negocio encima y endurecer el aislamiento.
 | Auditoría por tenant | tabla `audit_log` + `plugins/audit.ts` |
 | Venta con descuento, 5 métodos de pago (incl. fiado) y anulación auditada | `schema.ts` (`sale`) + `modules/sales.ts` |
 | Recibo correlativo por negocio asignado por el servidor | `business_counter.last_receipt_number` |
-| Snapshot de nombre/precio/costo por línea (reportes históricos estables) | `sale_item` |
-| Venta offline: UUID de cliente, cola outbox, reintentos, idempotencia | `apps/web/src/offline/sync.ts` |
-| Reportes y analítica (incl. lectura Z por método de pago y vendedor) | `modules/reports.ts`, `modules/analytics.ts` |
+| Snapshot de nombre/precio/costo por línea | `sale_item` |
+| Venta offline: UUID de cliente, cola outbox, idempotencia | `apps/web/src/offline/sync.ts` |
+| Reportes y analítica (incl. lectura Z) | `modules/reports.ts`, `modules/analytics.ts` |
 | PWA instalable | `vite-plugin-pwa` |
-| Dockerfile del API + despliegue en producción con dominio y SSL | `apps/api/Dockerfile`, `vertexweb.lat` |
+| Dockerfile del API + producción con dominio y SSL | `apps/api/Dockerfile`, `vertexweb.lat` |
 
-**Estimación honesta: el producto POS está ~70% hecho. Lo que falta es la capa SaaS,
-la seguridad para clientes desconocidos, y tres brechas de producto.**
+**El producto POS está ~70% hecho.** Lo que falta es la capa SaaS, la seguridad para
+clientes desconocidos, y las brechas de producto de la #9 y la #13.
 
-### Lo que NO hay que hacer
+---
+
+## Lo que NO hay que hacer
 
 - ❌ **Renombrar `business`→`organizations` y `location`→`branches`.** Es la misma
-  jerarquía que ya tienes. El rename toca 13 tablas, 13 módulos del API, migraciones y
-  el frontend, sobre un sistema en producción con un cliente real, a cambio de nada.
+  jerarquía que ya existe. El rename toca 13 tablas, 13 módulos, migraciones y el
+  frontend, sobre un sistema en producción con un cliente real, a cambio de nada.
 - ❌ **Reconstruir la sync offline.** Ya existe y es correcta (idempotente por UUID).
-  Lo que falta son *pruebas*, no reescribirla.
-- ❌ **Tablas `roles` + `permissions` genéricas.** Sobre-ingeniería para tu escala.
-  El enum `admin|seller` + `scope.ts` alcanza para vender.
+- ❌ **Tablas `roles` + `permissions` genéricas.** Sobre-ingeniería a esta escala; el enum
+  `admin|seller` + `scope.ts` alcanza para vender.
 - ❌ **Un repo o proyecto separado para el SaaS.** El producto es el mismo POS; forkear
-  significa arreglar cada bug dos veces. Rama `feat/saas` sobre este repo, y merge.
-
----
-
-## Fase 0 — Antes de tocar nada
-
-**Meta:** poder experimentar sin arriesgar los datos del cliente que ya te paga.
-
-### 0.1 Red de seguridad 🔴
-- [ ] **Backups automáticos de Postgres** (`pg_dump` diario a almacenamiento externo).
-- [ ] **Probar una restauración real** en una BD vacía. Un backup no probado no es un backup.
-- [ ] Ambiente de **staging** con copia anonimizada de producción.
-- [ ] Documentar el procedimiento de migraciones en producción (hoy `pnpm db:migrate` a mano).
-
-### 0.2 Tapar agujeros de la producción actual 🔴
-Esto ya está expuesto hoy, con o sin SaaS. Es cuestión de días, no de fases.
-
-- [ ] **`@fastify/rate-limit`**, sobre todo en `POST /auth/login` — hoy no hay ningún
-      límite y el login acepta fuerza bruta ilimitada.
-- [ ] **`@fastify/helmet`** (cabeceras de seguridad).
-- [ ] **CORS estricto por entorno** — hoy `origin: true` acepta cualquier origen
-      (`apps/api/src/index.ts:29`).
-- [ ] Rotar los secretos JWT de producción si alguna vez se usaron los de `.env.example`.
-
-### 0.3 Primeros tests ✅ HECHO
-- [x] Vitest configurado en `apps/api` y `apps/web`; `pnpm test` corre las dos suites.
-- [x] **Test de aislamiento entre tenants** (`apps/api/test/tenant-isolation.test.ts`, 28
-      casos): crea los negocios A y B y comprueba que ninguna respuesta al token de A
-      contiene un solo byte de B, endpoint por endpoint, en lectura y en escritura.
-- [x] Test de la sync offline (`apps/web/test/sync.test.ts`, 15 casos) con IndexedDB
-      en memoria: sin red, con duplicados, con el API caído y agotando reintentos.
-- [x] Base de tests desechable (`ventafacil_test`), recreada en cada corrida, con
-      salvaguarda que aborta si el nombre no contiene "test".
-- [ ] Ampliar cobertura a la lógica de ventas (`persistSale`) y a los reportes.
-
-**Encontrado por estos tests:** `DELETE /categories/:id` respondía `200 {ok:true}` y
-auditaba un borrado aunque no borrara nada (id inexistente o de otro negocio). Corregido:
-ahora devuelve 404 y no audita. No hubo ninguna fuga real de datos entre negocios.
-
-**✅ Salida:** puedes romper cosas sin miedo, y la producción actual dejó de estar expuesta.
-
----
-
-## Fase 1 — Aislamiento a prueba de descuidos
-
-**Meta:** que sea *imposible* filtrar datos entre negocios, no solo improbable.
-
-### 1.1 El problema real 🔴
-
-Hoy cada consulta filtra el tenant **a mano**:
-
-```ts
-// apps/api/src/modules/products.ts:130
-.where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
-```
-
-El patrón es consistente y está bien aplicado, pero depende de que el programador se
-acuerde **todas las veces, para siempre**. Con un solo cliente propio es aceptable.
-Con clientes desconocidos compartiendo base de datos, **un `businessId` olvidado es una
-fuga de datos entre empresas** — y es el tipo de bug que se descubre cuando ya es tarde.
-`DECISIONS.md:22` ya lo dejó anotado como mejora futura; aquí deja de ser opcional.
-
-### 1.2 Row-Level Security — mecanismo listo y probado ✅
-- [x] Políticas para las 12 tablas con `business_id` (`packages/db/src/rls.ts`), contra la
-      variable de sesión `app.business_id`.
-- [x] `sale_item` cubierto con una política que hereda el tenant de su `sale` (sin
-      necesidad de agregarle la columna).
-- [x] `withTenant()` (`packages/db/src/tenant.ts`): abre transacción y fija la variable
-      con `set_config(..., true)` — **local a la transacción**, así una conexión
-      reutilizada del pool nunca arrastra el tenant de la petición anterior.
-- [x] `FORCE ROW LEVEL SECURITY` en todas las tablas.
-- [x] Suite que lo demuestra (`apps/api/test/rls.test.ts`, 10 casos): consultas escritas
-      **a propósito sin `where business_id`** devuelven sólo las filas del negocio en
-      contexto; sin contexto no devuelven nada (falla cerrado); un INSERT a nombre de otro
-      negocio es rechazado; UPDATE y DELETE sin `where` no tocan filas ajenas.
-- [x] Script de activación con simulacro: `pnpm --filter @ventafacil/db setup-rls`
-      (agregar `--apply` para ejecutarlo).
-
-> 🔴 **Hallazgo importante.** El usuario `ventafacil` de Postgres es **superusuario**, y
-> Postgres **ignora RLS para superusuarios** — ni siquiera `FORCE` les aplica. La API en
-> producción se conecta con ese usuario, así que activar RLS hoy no protegería nada.
-> Es imprescindible crear un rol de aplicación sin privilegios (el script lo hace) y
-> apuntar `DATABASE_URL` del API a ese rol. Sin este paso, todo lo demás es decorativo.
-
-### 1.3 Lo que falta para poder activarlo 🔴
-RLS **falla cerrado**: mientras los módulos consulten con el `db` global sin fijar el
-negocio, Postgres no devolverá ninguna fila. Por eso el orden no es negociable:
-
-- [ ] Migrar los 13 módulos del API para que consulten dentro de `withTenant()`.
-      Es mecánico y los tests de 0.3 lo hacen seguro: deben seguir en verde tras cada módulo.
-- [ ] Crear el rol de aplicación en desarrollo y en staging, y cambiar `DATABASE_URL`.
-- [ ] Correr las suites **con RLS activo** contra staging.
-- [ ] Recién entonces activarlo en producción.
-- [ ] Opcional: helper de repositorio que reciba el `AuthUser`, para que escribir una
-      query sin tenant sea incómodo además de imposible.
-
-**✅ Salida:** aunque alguien olvide el `where`, Postgres no devuelve datos de otro negocio.
-
----
-
-## Fase 2 — Capa SaaS
-
-**Meta:** que un negocio se registre solo, tenga un plan y te pague.
-
-### 2.1 Suscripciones 🟠
-- [ ] **Definir el precio y la unidad de cobro antes de programar** (¿por negocio? ¿por
-      sucursal? ¿por usuario?). Toda la tabla de planes depende de esta decisión de negocio.
-- [ ] Tablas `plan` y `subscription` (aditivas, no tocan el esquema existente).
-- [ ] Estados: `trial` · `activa` · `morosa` · `suspendida` · `cancelada`.
-- [ ] Límites por plan: nº de sucursales, usuarios, productos.
-- [ ] Hook de Fastify que rechaza al tenant suspendido (con mensaje claro, no un 500).
-- [ ] Feature gating en el frontend según el plan.
-- [ ] **Migrar Llantas El Rápido** a un plan `propietario` ilimitado, sin downtime.
-      Es tu cliente real: el paso a SaaS tiene que ser invisible para él.
-
-### 2.2 Registro self-service 🟠
-- [ ] Pantalla de registro que hace lo que hoy hace `new-tenant.ts` (negocio + sucursal +
-      admin + contador de recibos). La lógica ya está escrita, solo falta exponerla.
-- [ ] Validar que el slug esté libre (ya es `unique` en el esquema).
-- [ ] Email transaccional (Resend / SES) para verificación y recuperación de contraseña.
-- [ ] Wizard inicial: sucursal, primeros productos, tema y textos.
-- [ ] Recuperación de contraseña — **hoy no existe**; con clientes desconocidos es
-      obligatorio (no puedes resetear a mano a cien negocios).
-
-### 2.3 Panel super-admin 🟠
-- [ ] Concepto de operador de plataforma **por encima** de `admin`. Hoy el enum de roles
-      es `['admin','seller']` y no hay nada que vea más de un negocio.
-      Decidir: ¿tercer rol, o tabla `platform_admin` aparte? (Recomendado: tabla aparte,
-      para que ningún token de tenant pueda escalar a ver todo.)
-- [ ] Listado de tenants, estado de suscripción, suspender/reactivar.
-- [ ] Métricas: MRR, tenants activos, churn.
-
-### 2.4 Revocación de sesiones 🟠
-- [ ] Refresh tokens con `jti` + lista de revocación. Hoy son stateless: si suspendes o
-      echas a un tenant, sus tokens siguen siendo válidos hasta que expiren.
-
-**✅ Salida:** un negocio desconocido se registra, usa el POS y paga; tú lo administras.
-
----
-
-## Fase 3 — Brechas de producto
-
-**Meta:** cerrar lo que falta para que el POS aguante clientes más exigentes.
-
-### 3.1 Caja / arqueo 🟠
-La tabla `cash_register` existe en el esquema **pero no tiene ni un endpoint ni una
-pantalla** — está huérfana (`features/cash` es solo el reporte Z). Es la brecha más
-visible del producto: un POS sin cierre de caja es difícil de vender a un negocio con
-empleados.
-
-- [ ] Endpoints de apertura y cierre con monto esperado vs. contado.
-- [ ] Pantalla de arqueo y reporte de diferencias.
-- [ ] Cierre Z apoyado en el reporte que ya existe.
-
-### 3.2 Sync offline ✅ HECHO
-- [x] **Backoff real.** Antes reintentaba cada 30 s fijos ignorando `attempts`. Ahora cada
-      venta guarda `nextAttemptAt` y el worker sólo envía las vencidas, con espera
-      exponencial (15 s → 30 min) **y jitter**: sin el jitter, todos los clientes que
-      fallaron a la vez vuelven juntos y tumban el API otra vez al revivir.
-- [x] Salida para las ventas irrecuperables: tras 10 intentos pasan a `failed`, dejan de
-      reintentarse solas y quedan visibles (`useSyncStatus().failed`) con `retryFailed()`
-      para reencolarlas a mano. Antes giraban en la cola para siempre.
-- [ ] Mostrar las ventas `failed` en la UI y ofrecer el reintento manual.
-- [ ] Extender el offline más allá de las ventas si el uso lo pide (hoy sólo se cachea el
-      catálogo y se encolan ventas, que es la decisión correcta para empezar).
-
-### 3.3 Impresión y exportación 🔵
-- [ ] Impresión térmica ESC/POS.
-- [ ] Exportar reportes a Excel / PDF.
-
-### 3.4 Inventario profundo 🔵
-- [ ] Proveedores y órdenes de compra.
-- [ ] Kardex valorizado.
-- [ ] Transferencias entre sucursales.
-- [ ] Alertas de stock bajo (`min_stock` ya existe en el esquema).
-
----
-
-## Fase 4 — Facturación Bolivia (SIAT)
-
-> ⚠️ **Los detalles normativos de esta fase no están verificados.** La versión anterior
-> del documento afirmaba requisitos concretos (CUIS, CUFD cada 24 h, CUF, servicios SOAP)
-> que son plausibles pero fueron generados por una IA, no consultados con la fuente. Las
-> normas del SIN cambian. **Trata todo lo de abajo como preguntas, no como especificación.**
-
-### 4.1 Averiguar antes de estimar 🔴
-- [ ] Confirmar con el SIN o un contador la **modalidad** que te aplica.
-- [ ] Pedir acceso al ambiente de homologación y **la especificación oficial vigente**.
-- [ ] Recién con el documento en mano, estimar el esfuerzo real de esta fase.
-
-### 4.2 Decisiones que cambian la arquitectura 🔴
-- [ ] ¿Facturas tú en nombre de los tenants, o cada tenant con su propio certificado?
-      La respuesta cambia el modelo de datos y tu exposición legal.
-- [ ] `business` necesitará NIT y razón social; `location` probablemente código de
-      sucursal ante el SIN. Son migraciones de esquema, planifícalas.
-- [ ] Retención de facturas por el plazo normativo → afecta backups y costo de almacenamiento.
-
-### 4.3 A favor 🟠
-Tu motor offline ya existente es ventaja real aquí: el modo contingencia (emitir sin
-internet y sincronizar al reconectar) reutiliza la cola de `offline/sync.ts`.
-
----
-
-## Fase 5 — Escala
-
-- [ ] 🔵 **Infra.** El VPS actual es 1 vCPU / 4 GB con `max_connections=20` y
-      `DB_POOL_MAX=8`. Aguanta unos pocos tenants; define en qué número migras a algo mayor.
-- [ ] 🔵 CI/CD con GitHub Actions (hoy no hay `.github/`): lint → typecheck → test → build.
-- [ ] 🔵 Sentry + health checks sobre `/health` (ya existe en la raíz del API) + alertas.
-- [ ] 🔵 Cobro automático con pasarela local (Libélula / PagosNet / Tigo Money / QR Simple).
-- [ ] 🔵 Dunning: reintentos de cobro y suspensión automática.
-- [ ] 🔵 RBAC más fino, si algún cliente realmente lo pide.
-- [ ] 🔵 Multi-moneda / multi-país (el esquema ya tiene `currency` y `tax_rate` por negocio).
-
----
-
-## Transversales
-
-- [ ] Documentación de la API (OpenAPI).
-- [ ] Términos de servicio y política de privacidad — obligatorios antes del primer registro público.
-- [ ] Plan de soporte y capacitación: en Bolivia un POS se vende con acompañamiento, no solo con software.
-- [ ] Exportación de datos por tenant (si un cliente se va, tiene derecho a sus ventas).
-
----
-
-## Orden recomendado
-
-1. **Backups probados + staging** (0.1) — antes de tocar nada.
-2. **Rate-limit, helmet, CORS** (0.2) — días, no semanas; ya estás expuesto.
-3. **Tests de aislamiento** (0.3) — necesitas la red antes de mover el trapecio.
-4. **RLS** (Fase 1) — lo más caro de agregar después; es el verdadero requisito para vender.
-5. **Definir el precio**, y recién entonces planes y suscripciones (2.1).
-6. **Registro self-service + super-admin** (2.2, 2.3).
-7. **Caja/arqueo** (3.1) — la brecha de producto más visible.
-8. **SIAT** (Fase 4) — solo después de confirmar la norma con la fuente oficial.
-9. **Escala** (Fase 5) — cuando el número de tenantes lo exija, no antes.
+  obliga a arreglar cada bug dos veces.
 
 ---
 
 ## Estrategia de repositorio
 
-Un solo repo, rama `feat/saas`, merge a `main` cuando esté probado. Los cambios de la
-Fase 2 son **aditivos**: tablas nuevas y módulos nuevos, sin tocar el flujo de venta. La
-instalación de Llantas El Rápido sigue corriendo su imagen actual y solo se actualiza
-cuando el merge esté verificado en staging.
+- **`main`** — la versión vendible hoy, para el cliente que quiera su propia BD dedicada.
+  Sólo correcciones y mejoras compartidas.
+- **`feat/saas`** — sale de `main` y hereda todo lo suyo. Aquí va este plan.
+
+Los cambios del Bloque 2 son **aditivos**: tablas y módulos nuevos, sin tocar el flujo de
+venta. Llantas El Rápido sigue con su imagen actual y sólo se actualiza cuando el merge
+esté verificado en staging.
 
 ---
 
-*Corregido contra el código el 3 de agosto de 2026. Cada afirmación de estado se puede
-verificar en el archivo citado; si algo no coincide, gana el código.*
+*Corregido contra el código el 3 de agosto de 2026 y reordenado por prioridad.*
