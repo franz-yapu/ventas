@@ -1,4 +1,4 @@
-import { db } from '@ventafacil/db';
+import { withTenant } from '@ventafacil/db';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
@@ -16,7 +16,8 @@ export async function reportRoutes(app: FastifyInstance) {
         to: z.string().datetime({ offset: true }).optional(),
       })
       .safeParse(req.query);
-    if (!parsedQ.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
+    if (!parsedQ.success)
+      return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
     const { from, to } = parsedQ.data;
     const businessId = req.authUser!.businessId;
     // Alcance: la central ve todas las ubicaciones; la sucursal, sólo la suya.
@@ -30,16 +31,17 @@ export async function reportRoutes(app: FastifyInstance) {
       : sql`false`;
 
     // Fronteras de tiempo (hoy/semana/mes) calculadas en la zona horaria del negocio.
-    const rows = await db.execute<{
-      location_id: string;
-      location_name: string;
-      today: string;
-      week: string;
-      month: string;
-      today_count: number;
-      range_total: string;
-      range_count: number;
-    }>(sql`
+    const rows = await withTenant(businessId, (tx) =>
+      tx.execute<{
+        location_id: string;
+        location_name: string;
+        today: string;
+        week: string;
+        month: string;
+        today_count: number;
+        range_total: string;
+        range_count: number;
+      }>(sql`
       WITH bounds AS (
         SELECT
           date_trunc('day',   timezone(${TZ}, now())) AS d0,
@@ -64,17 +66,19 @@ export async function reportRoutes(app: FastifyInstance) {
       WHERE l.business_id = ${businessId} ${locL}
       GROUP BY l.id, l.name, b.d0, b.w0, b.m0
       ORDER BY l.name
-    `);
+    `),
+    );
 
     // Ganancia por ubicacion: (precio venta - costo unitario) del snapshot, ventas completadas.
     // Se calcula aparte porque une sale_item (varias filas por venta) y no debe inflar los totales.
-    const profitRows = await db.execute<{
-      location_id: string;
-      today: string;
-      week: string;
-      month: string;
-      range: string;
-    }>(sql`
+    const profitRows = await withTenant(businessId, (tx) =>
+      tx.execute<{
+        location_id: string;
+        today: string;
+        week: string;
+        month: string;
+        range: string;
+      }>(sql`
       WITH bounds AS (
         SELECT
           date_trunc('day',   timezone(${TZ}, now())) AS d0,
@@ -98,7 +102,8 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN sale_item si ON si.sale_id = s.id
       WHERE s.business_id = ${businessId} AND s.status = 'completed' ${locSale}
       GROUP BY s.location_id
-    `);
+    `),
+    );
     const cogsBy = new Map(profitRows.map((p) => [p.location_id, p]));
 
     const items = rows.map((r) => {
@@ -130,8 +135,18 @@ export async function reportRoutes(app: FastifyInstance) {
       data: {
         byLocation: items,
         hasRange,
-        totals: { today: sum('today'), week: sum('week'), month: sum('month'), range: sum('rangeTotal') },
-        profit: { today: sum('profitToday'), week: sum('profitWeek'), month: sum('profitMonth'), range: sum('rangeProfit') },
+        totals: {
+          today: sum('today'),
+          week: sum('week'),
+          month: sum('month'),
+          range: sum('rangeTotal'),
+        },
+        profit: {
+          today: sum('profitToday'),
+          week: sum('profitWeek'),
+          month: sum('profitMonth'),
+          range: sum('rangeProfit'),
+        },
         rangeCount: sumInt('rangeCount'),
       },
       error: null,

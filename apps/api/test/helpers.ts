@@ -43,7 +43,10 @@ export async function createTenant(app: FastifyInstance, slug: string): Promise<
     .returning();
   const businessId = biz!.id;
 
-  await db.insert(schema.businessCounter).values({ businessId, lastReceiptNumber: 0 });
+  // Arranca en 1 porque más abajo se siembra una venta con el recibo #1. Si se dejara
+  // en 0, la primera venta que cree el API reusaría ese número y chocaría con la
+  // restricción única (sale_business_receipt_uq).
+  await db.insert(schema.businessCounter).values({ businessId, lastReceiptNumber: 1 });
 
   const [loc] = await db
     .insert(schema.location)
@@ -84,7 +87,7 @@ export async function createTenant(app: FastifyInstance, slug: string): Promise<
 
   await db
     .insert(schema.inventory)
-    .values({ businessId, productId: prod!.id, locationId, stock: 10, minStock: 1 });
+    .values({ businessId, productId: prod!.id, locationId, quantity: 10, minStock: 1 });
 
   const [cust] = await db
     .insert(schema.customer)

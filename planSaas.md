@@ -14,8 +14,11 @@
 
 ## 👉 Siguiente tarea
 
-**#3 — Migrar los 13 módulos del API a `withTenant()`**, que es lo que desbloquea activar
-RLS. La #1 (backups y staging) sigue pendiente porque necesita acceso al VPS.
+**#1 — Backups y staging.** Es lo único que queda del bloque bloqueante, y necesita
+acceso al VPS. Con eso hecho, RLS se activa (el código ya está migrado y probado).
+
+Si prefieres seguir en local, lo siguiente sería la **#4: definir el precio**, de la que
+depende todo el bloque 2.
 
 ---
 
@@ -56,7 +59,7 @@ de seguridad del presente.
 > ⚠️ **Antes del próximo despliegue hay que definir `CORS_ORIGINS` en el `.env` del
 > servidor**, o el API no levantará. Ej: `CORS_ORIGINS=https://vertexweb.lat`
 
-## #3 · Aislamiento a prueba de descuidos (RLS) 🔴
+## #3 · Aislamiento a prueba de descuidos (RLS) 🟡 CÓDIGO LISTO, falta infra
 **Por qué:** es el verdadero requisito para vender. Hoy el aislamiento entre negocios
 depende de que cada consulta recuerde su `where business_id`:
 
@@ -70,13 +73,25 @@ veces, para siempre**. Con un cliente propio es aceptable. Con clientes desconoc
 compartiendo base de datos, **un `businessId` olvidado es una fuga entre empresas**, y es
 el bug que se descubre cuando ya es tarde.
 
-- [ ] **Migrar los 13 módulos de `apps/api/src/modules/` a `withTenant()`.** Mecánico; los
-      28 tests de aislamiento avisan al instante si algo se rompe.
+- [x] **Migrar los 13 módulos de `apps/api/src/modules/` a `withTenant()`** ✅ (3 ago 2026).
+      Se conservaron los `where business_id` como defensa en profundidad: RLS es el
+      respaldo, no la única línea. De paso, varios handlers que hacían 2-3 consultas
+      sueltas ahora las agrupan en una transacción (foto coherente y menos ida y vuelta).
+      `business.ts` sigue con el `db` global a propósito: la tabla `business` está fuera
+      de RLS porque hay que resolver el negocio *antes* de tener tenant, y lo mismo la
+      parte del login que busca el negocio por slug.
+- [x] **Suite que demuestra que la migración está completa** ✅:
+      `apps/api/test/rls-integration.test.ts` (31 casos) ejercita los endpoints reales
+      **con RLS activo**. Como RLS falla cerrado, cualquier handler sin migrar devolvería
+      vacío y el test lo delataría. Empezó en 12 rojos y terminó en 0.
 - [ ] Crear el rol de aplicación en desarrollo y staging, y apuntar `DATABASE_URL` a él.
 - [ ] Correr las suites **con RLS activo** contra staging.
 - [ ] Recién entonces activarlo en producción.
 - [ ] Opcional: helper de repositorio que reciba el `AuthUser`, para que escribir una
       query sin tenant sea incómodo además de imposible.
+
+> El código ya está listo para RLS. Lo que falta es de infraestructura (rol sin
+> privilegios y staging), no de programación.
 
 > 🔴 **Dos cosas que bloquean la activación** (verificadas, no obvias):
 >

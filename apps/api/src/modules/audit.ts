@@ -1,4 +1,4 @@
-import { db, schema } from '@ventafacil/db';
+import { schema, withTenant } from '@ventafacil/db';
 import { and, desc, eq, gte, ilike, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
@@ -37,8 +37,11 @@ export async function auditRoutes(app: FastifyInstance) {
     if (q.search) filters.push(ilike(schema.auditLog.entityId, `%${q.search}%`));
     const where = and(...filters);
 
-    const [rows, [count]] = await Promise.all([
-      db
+    // Ambas consultas comparten transaccion (y por tanto el contexto de tenant). Van
+    // en serie a proposito: una transaccion usa UNA conexion, asi que lanzarlas en
+    // paralelo no ahorraria nada.
+    const { rows, count } = await withTenant(businessId, async (tx) => {
+      const rows = await tx
         .select({
           id: schema.auditLog.id,
           action: schema.auditLog.action,
@@ -56,9 +59,13 @@ export async function auditRoutes(app: FastifyInstance) {
         .where(where)
         .orderBy(desc(schema.auditLog.createdAt))
         .limit(q.limit)
-        .offset((q.page - 1) * q.limit),
-      db.select({ n: sql<number>`count(*)::int` }).from(schema.auditLog).where(where),
-    ]);
+        .offset((q.page - 1) * q.limit);
+      const [count] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(schema.auditLog)
+        .where(where);
+      return { rows, count };
+    });
 
     return reply.send({
       data: { items: rows, total: count?.n ?? 0, page: q.page, limit: q.limit },

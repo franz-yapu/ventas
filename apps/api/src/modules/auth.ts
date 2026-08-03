@@ -1,4 +1,4 @@
-import { db, schema } from '@ventafacil/db';
+import { db, schema, withTenant } from '@ventafacil/db';
 import { loginSchema, updateProfileSchema } from '@ventafacil/shared';
 import argon2 from 'argon2';
 import { and, eq } from 'drizzle-orm';
@@ -30,7 +30,8 @@ export async function authRoutes(app: FastifyInstance) {
         .from(schema.business)
         .where(eq(schema.business.slug, business))
         .limit(1);
-      if (!biz) return reply.code(401).send({ data: null, error: 'Usuario o contraseña incorrectos' });
+      if (!biz)
+        return reply.code(401).send({ data: null, error: 'Usuario o contraseña incorrectos' });
       businessId = biz.id;
     } else {
       // Sin slug: sólo válido cuando hay UN único negocio (instalación de un cliente).
@@ -44,17 +45,22 @@ export async function authRoutes(app: FastifyInstance) {
       businessId = businesses[0]!.id;
     }
 
-    const [user] = await db
-      .select()
-      .from(schema.appUser)
-      .where(
-        and(
-          eq(schema.appUser.businessId, businessId),
-          eq(schema.appUser.username, username),
-          eq(schema.appUser.isActive, true),
-        ),
-      )
-      .limit(1);
+    // A partir de aqui ya se conoce el negocio, asi que las tablas bajo RLS se
+    // consultan con el contexto fijado. `business` queda fuera de RLS justamente
+    // porque hay que resolverla antes de tener tenant.
+    const [user] = await withTenant(businessId, (tx) =>
+      tx
+        .select()
+        .from(schema.appUser)
+        .where(
+          and(
+            eq(schema.appUser.businessId, businessId),
+            eq(schema.appUser.username, username),
+            eq(schema.appUser.isActive, true),
+          ),
+        )
+        .limit(1),
+    );
 
     if (!user || !(await argon2.verify(user.passwordHash, password))) {
       return reply.code(401).send({ data: null, error: 'Usuario o contraseña incorrectos' });
@@ -63,11 +69,13 @@ export async function authRoutes(app: FastifyInstance) {
     // ¿Su ubicación es la central? -> puede ver todas las ubicaciones.
     let isCentral = false;
     if (user.locationId) {
-      const [loc] = await db
-        .select({ isCentral: schema.location.isCentral })
-        .from(schema.location)
-        .where(eq(schema.location.id, user.locationId))
-        .limit(1);
+      const [loc] = await withTenant(businessId, (tx) =>
+        tx
+          .select({ isCentral: schema.location.isCentral })
+          .from(schema.location)
+          .where(eq(schema.location.id, user.locationId!))
+          .limit(1),
+      );
       isCentral = loc?.isCentral ?? false;
     }
 
@@ -80,7 +88,10 @@ export async function authRoutes(app: FastifyInstance) {
       name: user.name,
     };
     const accessToken = app.jwt.sign({ ...claims, typ: 'access' });
-    const refreshToken = app.jwt.sign({ ...claims, typ: 'refresh' }, { expiresIn: env.jwtRefreshTtl });
+    const refreshToken = app.jwt.sign(
+      { ...claims, typ: 'refresh' },
+      { expiresIn: env.jwtRefreshTtl },
+    );
 
     await app.audit({ authUser: claims } as never, {
       action: 'login',
@@ -128,36 +139,39 @@ export async function authRoutes(app: FastifyInstance) {
   app.patch('/auth/me', { preHandler: app.requireAuth }, async (req, reply) => {
     const parsed = updateProfileSchema.safeParse(req.body);
     if (!parsed.success) {
-      return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' });
+      return reply
+        .code(400)
+        .send({ data: null, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' });
     }
     const userId = req.authUser!.sub;
 
-    const [current] = await db
-      .select({ passwordHash: schema.appUser.passwordHash })
-      .from(schema.appUser)
-      .where(eq(schema.appUser.id, userId))
-      .limit(1);
+    const [current] = await withTenant(req.authUser!.businessId, (tx) =>
+      tx
+        .select({ passwordHash: schema.appUser.passwordHash })
+        .from(schema.appUser)
+        .where(eq(schema.appUser.id, userId))
+        .limit(1),
+    );
     if (!current) return reply.code(404).send({ data: null, error: 'Usuario no encontrado' });
 
     const patch: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) patch.name = parsed.data.name;
     if (parsed.data.newPassword) {
       const ok = await argon2.verify(current.passwordHash, parsed.data.currentPassword!);
-      if (!ok) return reply.code(400).send({ data: null, error: 'La contraseña actual es incorrecta' });
+      if (!ok)
+        return reply.code(400).send({ data: null, error: 'La contraseña actual es incorrecta' });
       patch.passwordHash = await argon2.hash(parsed.data.newPassword);
     }
 
-    const [row] = await db
-      .update(schema.appUser)
-      .set(patch)
-      .where(eq(schema.appUser.id, userId))
-      .returning({
+    const [row] = await withTenant(req.authUser!.businessId, (tx) =>
+      tx.update(schema.appUser).set(patch).where(eq(schema.appUser.id, userId)).returning({
         id: schema.appUser.id,
         name: schema.appUser.name,
         username: schema.appUser.username,
         role: schema.appUser.role,
         locationId: schema.appUser.locationId,
-      });
+      }),
+    );
     await app.audit(req, {
       action: 'update',
       entity: 'app_user',

@@ -44,42 +44,50 @@ export async function businessRoutes(app: FastifyInstance) {
   });
 
   // PATCH /business (admin) -> configuración white-label. Auditado (incluye cambio de tema).
-  app.patch('/business', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
-    const parsed = updateBusinessSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
-    }
-    const businessId = req.authUser!.businessId;
+  app.patch(
+    '/business',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const parsed = updateBusinessSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
+      }
+      const businessId = req.authUser!.businessId;
 
-    const [before] = await db.select(businessSelect).from(schema.business).where(eq(schema.business.id, businessId)).limit(1);
+      const [before] = await db
+        .select(businessSelect)
+        .from(schema.business)
+        .where(eq(schema.business.id, businessId))
+        .limit(1);
 
-    const patch: Record<string, unknown> = {};
-    const d = parsed.data;
-    if (d.name !== undefined) patch.name = d.name;
-    if (d.logoUrl !== undefined) patch.logoUrl = d.logoUrl;
-    if (d.theme !== undefined) patch.themeJson = d.theme;
-    if (d.texts !== undefined) patch.textsJson = d.texts;
-    if (d.productSchema !== undefined) patch.productSchemaJson = d.productSchema;
-    if (d.currency !== undefined) patch.currency = d.currency;
-    if (d.taxRate !== undefined) patch.taxRate = d.taxRate;
+      const patch: Record<string, unknown> = {};
+      const d = parsed.data;
+      if (d.name !== undefined) patch.name = d.name;
+      if (d.logoUrl !== undefined) patch.logoUrl = d.logoUrl;
+      if (d.theme !== undefined) patch.themeJson = d.theme;
+      if (d.texts !== undefined) patch.textsJson = d.texts;
+      if (d.productSchema !== undefined) patch.productSchemaJson = d.productSchema;
+      if (d.currency !== undefined) patch.currency = d.currency;
+      if (d.taxRate !== undefined) patch.taxRate = d.taxRate;
 
-    const [after] = await db
-      .update(schema.business)
-      .set(patch)
-      .where(eq(schema.business.id, businessId))
-      .returning(businessSelect);
+      const [after] = await db
+        .update(schema.business)
+        .set(patch)
+        .where(eq(schema.business.id, businessId))
+        .returning(businessSelect);
 
-    // No metemos el logo (base64 enorme) en el diff de auditoría.
-    const auditBefore = { ...before, logoUrl: before?.logoUrl ? '[logo]' : null };
-    const auditAfter = { ...after, logoUrl: after?.logoUrl ? '[logo]' : null };
-    await app.audit(req, {
-      action: 'update',
-      entity: 'business',
-      entityId: businessId,
-      before: auditBefore,
-      after: auditAfter,
-    });
+      // No metemos el logo (base64 enorme) en el diff de auditoría.
+      const auditBefore = { ...before, logoUrl: before?.logoUrl ? '[logo]' : null };
+      const auditAfter = { ...after, logoUrl: after?.logoUrl ? '[logo]' : null };
+      await app.audit(req, {
+        action: 'update',
+        entity: 'business',
+        entityId: businessId,
+        before: auditBefore,
+        after: auditAfter,
+      });
 
-    return reply.send({ data: after, error: null });
-  });
+      return reply.send({ data: after, error: null });
+    },
+  );
 }

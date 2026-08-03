@@ -1,4 +1,4 @@
-import { db, schema } from '@ventafacil/db';
+import { schema, withTenant, type TenantTx } from '@ventafacil/db';
 import { upsertProductSchema } from '@ventafacil/shared';
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -37,7 +37,7 @@ const productSelect = {
  * Genera un SKU correlativo por negocio (P000001, P000002…) de forma atómica.
  * Salta números ya usados por SKUs escritos a mano para no colisionar. Corre dentro de una tx.
  */
-async function nextProductSku(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], businessId: string): Promise<string> {
+async function nextProductSku(tx: TenantTx, businessId: string): Promise<string> {
   for (let i = 0; i < 50; i++) {
     const [row] = await tx
       .update(schema.businessCounter)
@@ -57,8 +57,8 @@ async function nextProductSku(tx: Parameters<Parameters<typeof db.transaction>[0
 }
 
 /** Devuelve la ubicación si pertenece al negocio y está activa; si no, null. */
-async function locationOfBusiness(locationId: string, businessId: string) {
-  const [loc] = await db
+async function locationOfBusiness(tx: TenantTx, locationId: string, businessId: string) {
+  const [loc] = await tx
     .select({ id: schema.location.id })
     .from(schema.location)
     .where(
@@ -76,7 +76,8 @@ export async function productRoutes(app: FastifyInstance) {
   // GET /products — filtrado por ubicación visible (sucursal: la suya; central: todas).
   app.get('/products', { preHandler: app.requireAuth }, async (req, reply) => {
     const parsedQ = listQuery.safeParse(req.query);
-    if (!parsedQ.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
+    if (!parsedQ.success)
+      return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
     const q = parsedQ.data;
     const user = req.authUser!;
 
@@ -88,13 +89,17 @@ export async function productRoutes(app: FastifyInstance) {
     if (q.search) {
       const like = `%${q.search}%`;
       filters.push(
-        or(ilike(schema.product.name, like), ilike(schema.product.sku, like), ilike(schema.product.barcode, like))!,
+        or(
+          ilike(schema.product.name, like),
+          ilike(schema.product.sku, like),
+          ilike(schema.product.barcode, like),
+        )!,
       );
     }
     const where = and(...filters);
 
-    const [rows, [count]] = await Promise.all([
-      db
+    const { rows, count } = await withTenant(user.businessId, async (tx) => {
+      const rows = await tx
         .select(productSelect)
         .from(schema.product)
         .leftJoin(schema.location, eq(schema.location.id, schema.product.locationId))
@@ -109,13 +114,20 @@ export async function productRoutes(app: FastifyInstance) {
         .where(where)
         .orderBy(asc(schema.product.name))
         .limit(q.limit)
-        .offset((q.page - 1) * q.limit),
-      db.select({ n: sql<number>`count(*)::int` }).from(schema.product).where(where),
-    ]);
+        .offset((q.page - 1) * q.limit);
+      const [count] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(schema.product)
+        .where(where);
+      return { rows, count };
+    });
 
     // Marca qué productos puede gestionar este usuario (su propia ubicación).
     const items = rows.map((r) => ({ ...r, canManage: canActOnLocation(user, r.locationId) }));
-    return reply.send({ data: { items, total: count?.n ?? 0, page: q.page, limit: q.limit }, error: null });
+    return reply.send({
+      data: { items, total: count?.n ?? 0, page: q.page, limit: q.limit },
+      error: null,
+    });
   });
 
   // GET /products/:id/history — historial de acciones del producto (auditoría).
@@ -124,54 +136,71 @@ export async function productRoutes(app: FastifyInstance) {
     const user = req.authUser!;
     // Alcance: la sucursal sólo puede ver el historial de productos de su ubicación.
     const scope = viewScope(user);
-    const [prod] = await db
-      .select({ locationId: schema.product.locationId })
-      .from(schema.product)
-      .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
-      .limit(1);
+    const prod = await withTenant(user.businessId, async (tx) => {
+      const [p] = await tx
+        .select({ locationId: schema.product.locationId })
+        .from(schema.product)
+        .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
+        .limit(1);
+      return p ?? null;
+    });
     if (!prod) return reply.code(404).send({ data: null, error: 'Producto no encontrado' });
     if (scope !== undefined && prod.locationId !== scope) {
-      return reply.code(403).send({ data: null, error: 'No puedes ver el historial de productos de otra ubicación' });
+      return reply
+        .code(403)
+        .send({ data: null, error: 'No puedes ver el historial de productos de otra ubicación' });
     }
     // 1) Acciones administrativas (alta, edición, ajuste de stock, transferencia, importación).
-    const auditRows = await db
-      .select({
-        id: schema.auditLog.id,
-        action: schema.auditLog.action,
-        entity: schema.auditLog.entity,
-        before: schema.auditLog.beforeJson,
-        after: schema.auditLog.afterJson,
-        createdAt: schema.auditLog.createdAt,
-        userName: schema.appUser.name,
-      })
-      .from(schema.auditLog)
-      .leftJoin(schema.appUser, eq(schema.appUser.id, schema.auditLog.userId))
-      .where(and(eq(schema.auditLog.businessId, req.authUser!.businessId), eq(schema.auditLog.entityId, id)))
-      .orderBy(desc(schema.auditLog.createdAt))
-      .limit(50);
+    const auditRows = await withTenant(user.businessId, (tx) =>
+      tx
+        .select({
+          id: schema.auditLog.id,
+          action: schema.auditLog.action,
+          entity: schema.auditLog.entity,
+          before: schema.auditLog.beforeJson,
+          after: schema.auditLog.afterJson,
+          createdAt: schema.auditLog.createdAt,
+          userName: schema.appUser.name,
+        })
+        .from(schema.auditLog)
+        .leftJoin(schema.appUser, eq(schema.appUser.id, schema.auditLog.userId))
+        .where(
+          and(
+            eq(schema.auditLog.businessId, req.authUser!.businessId),
+            eq(schema.auditLog.entityId, id),
+          ),
+        )
+        .orderBy(desc(schema.auditLog.createdAt))
+        .limit(50),
+    );
 
     // 2) Ventas del producto: no quedan en audit_log con entityId=producto, así que
     //    las tomamos de sale_item + sale para que el vendedor vea su movimiento diario.
     //    Alcance: la sucursal sólo ve las ventas de su ubicación; la central, todas.
-    const saleFilters = [eq(schema.saleItem.productId, id), eq(schema.sale.businessId, user.businessId)];
+    const saleFilters = [
+      eq(schema.saleItem.productId, id),
+      eq(schema.sale.businessId, user.businessId),
+    ];
     if (scope !== undefined) saleFilters.push(eq(schema.sale.locationId, scope));
-    const saleRows = await db
-      .select({
-        id: schema.saleItem.id,
-        receiptNumber: schema.sale.receiptNumber,
-        quantity: schema.saleItem.quantity,
-        lineTotal: schema.saleItem.lineTotal,
-        status: schema.sale.status,
-        paymentMethod: schema.sale.paymentMethod,
-        createdAt: schema.sale.clientCreatedAt,
-        userName: schema.appUser.name,
-      })
-      .from(schema.saleItem)
-      .innerJoin(schema.sale, eq(schema.sale.id, schema.saleItem.saleId))
-      .leftJoin(schema.appUser, eq(schema.appUser.id, schema.sale.userId))
-      .where(and(...saleFilters))
-      .orderBy(desc(schema.sale.clientCreatedAt))
-      .limit(50);
+    const saleRows = await withTenant(user.businessId, (tx) =>
+      tx
+        .select({
+          id: schema.saleItem.id,
+          receiptNumber: schema.sale.receiptNumber,
+          quantity: schema.saleItem.quantity,
+          lineTotal: schema.saleItem.lineTotal,
+          status: schema.sale.status,
+          paymentMethod: schema.sale.paymentMethod,
+          createdAt: schema.sale.clientCreatedAt,
+          userName: schema.appUser.name,
+        })
+        .from(schema.saleItem)
+        .innerJoin(schema.sale, eq(schema.sale.id, schema.saleItem.saleId))
+        .leftJoin(schema.appUser, eq(schema.appUser.id, schema.sale.userId))
+        .where(and(...saleFilters))
+        .orderBy(desc(schema.sale.clientCreatedAt))
+        .limit(50),
+    );
 
     const saleEntries = saleRows.map((s) => ({
       id: s.id,
@@ -200,18 +229,21 @@ export async function productRoutes(app: FastifyInstance) {
   // (una sucursal o la central) y se siembra su inventario inicial ahí mismo.
   app.post('/products', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
     const parsed = upsertProductSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
+    if (!parsed.success)
+      return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
     const user = req.authUser!;
-    if (!user.isCentral) return reply.code(403).send({ data: null, error: 'Sólo la central puede crear productos' });
+    if (!user.isCentral)
+      return reply.code(403).send({ data: null, error: 'Sólo la central puede crear productos' });
 
     const { locationId: bodyLocationId, initialStock, minStock, ...productData } = parsed.data;
     const locationId = bodyLocationId ?? user.locationId;
     if (!locationId) return reply.code(400).send({ data: null, error: 'Selecciona una ubicación' });
-    const loc = await locationOfBusiness(locationId, user.businessId);
-    if (!loc) return reply.code(400).send({ data: null, error: 'Ubicación no válida' });
-
     try {
-      const row = await db.transaction(async (tx) => {
+      const row = await withTenant(user.businessId, async (tx) => {
+        // La ubicacion se valida DENTRO de la transaccion: comparte el contexto de
+        // tenant y evita que cambie entre la comprobacion y el alta.
+        const loc = await locationOfBusiness(tx, locationId, user.businessId);
+        if (!loc) return null;
         const sku = productData.sku ?? (await nextProductSku(tx, user.businessId));
         const [p] = await tx
           .insert(schema.product)
@@ -227,6 +259,7 @@ export async function productRoutes(app: FastifyInstance) {
         });
         return p!;
       });
+      if (!row) return reply.code(400).send({ data: null, error: 'Ubicación no válida' });
       await app.audit(req, { action: 'create', entity: 'product', entityId: row.id, after: row });
       return reply.code(201).send({ data: row, error: null });
     } catch (e) {
@@ -238,77 +271,105 @@ export async function productRoutes(app: FastifyInstance) {
   });
 
   // PATCH /products/:id (admin) — sólo productos de la propia ubicación.
-  app.patch('/products/:id', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const user = req.authUser!;
-    const parsed = upsertProductSchema.partial().safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
+  app.patch(
+    '/products/:id',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const user = req.authUser!;
+      const parsed = upsertProductSchema.partial().safeParse(req.body);
+      if (!parsed.success)
+        return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
 
-    const [before] = await db
-      .select()
-      .from(schema.product)
-      .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
-      .limit(1);
-    if (!before) return reply.code(404).send({ data: null, error: 'Producto no encontrado' });
-    if (!canActOnLocation(user, before.locationId)) {
-      return reply.code(403).send({ data: null, error: 'Sólo puedes editar productos de tu ubicación' });
-    }
+      const before = await withTenant(user.businessId, async (tx) => {
+        const [p] = await tx
+          .select()
+          .from(schema.product)
+          .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
+          .limit(1);
+        return p ?? null;
+      });
+      if (!before) return reply.code(404).send({ data: null, error: 'Producto no encontrado' });
+      if (!canActOnLocation(user, before.locationId)) {
+        return reply
+          .code(403)
+          .send({ data: null, error: 'Sólo puedes editar productos de tu ubicación' });
+      }
 
-    // No permitir mover el producto ni tocar el stock por este endpoint
-    // (locationId/initialStock/minStock son sólo para el alta; el stock se ajusta en Inventario).
-    const { locationId: _omitLoc, initialStock: _omitStock, minStock: _omitMin, ...patch } =
-      parsed.data as Record<string, unknown>;
-    const [after] = await db
-      .update(schema.product)
-      .set({ ...patch, updatedAt: new Date() })
-      .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
-      .returning();
+      // No permitir mover el producto ni tocar el stock por este endpoint
+      // (locationId/initialStock/minStock son sólo para el alta; el stock se ajusta en Inventario).
+      const {
+        locationId: _omitLoc,
+        initialStock: _omitStock,
+        minStock: _omitMin,
+        ...patch
+      } = parsed.data as Record<string, unknown>;
+      const [after] = await withTenant(user.businessId, (tx) =>
+        tx
+          .update(schema.product)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
+          .returning(),
+      );
 
-    const action = before.price !== after!.price ? 'price_change' : 'update';
-    await app.audit(req, { action, entity: 'product', entityId: id, before, after });
-    return reply.send({ data: after, error: null });
-  });
+      const action = before.price !== after!.price ? 'price_change' : 'update';
+      await app.audit(req, { action, entity: 'product', entityId: id, before, after });
+      return reply.send({ data: after, error: null });
+    },
+  );
 
   // POST /products/import (sólo central) — la central importa asignando a una ubicación.
-  app.post('/products/import', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
-    const body = z
-      .object({ rows: z.array(upsertProductSchema).max(1000), locationId: z.string().uuid().optional() })
-      .safeParse(req.body);
-    if (!body.success) return reply.code(400).send({ data: null, error: 'Filas invalidas' });
-    const user = req.authUser!;
-    if (!user.isCentral) return reply.code(403).send({ data: null, error: 'Sólo la central puede importar productos' });
+  app.post(
+    '/products/import',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const body = z
+        .object({
+          rows: z.array(upsertProductSchema).max(1000),
+          locationId: z.string().uuid().optional(),
+        })
+        .safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ data: null, error: 'Filas invalidas' });
+      const user = req.authUser!;
+      if (!user.isCentral)
+        return reply
+          .code(403)
+          .send({ data: null, error: 'Sólo la central puede importar productos' });
 
-    const locationId = body.data.locationId ?? user.locationId;
-    if (!locationId) return reply.code(400).send({ data: null, error: 'Selecciona una ubicación' });
-    if (!(await locationOfBusiness(locationId, user.businessId))) {
-      return reply.code(400).send({ data: null, error: 'Ubicación no válida' });
-    }
+      const locationId = body.data.locationId ?? user.locationId;
+      if (!locationId)
+        return reply.code(400).send({ data: null, error: 'Selecciona una ubicación' });
+      const locOk = await withTenant(user.businessId, (tx) =>
+        locationOfBusiness(tx, locationId, user.businessId),
+      );
+      if (!locOk) return reply.code(400).send({ data: null, error: 'Ubicación no válida' });
 
-    let created = 0;
-    let skipped = 0;
-    for (const row of body.data.rows) {
-      const { locationId: _l, initialStock, minStock, ...productData } = row;
-      try {
-        await db.transaction(async (tx) => {
-          const sku = productData.sku ?? (await nextProductSku(tx, user.businessId));
-          const [p] = await tx
-            .insert(schema.product)
-            .values({ ...productData, sku, businessId: user.businessId, locationId })
-            .returning();
-          await tx.insert(schema.inventory).values({
-            businessId: user.businessId,
-            productId: p!.id,
-            locationId,
-            quantity: initialStock ?? 0,
-            minStock: minStock ?? null,
+      let created = 0;
+      let skipped = 0;
+      for (const row of body.data.rows) {
+        const { locationId: _l, initialStock, minStock, ...productData } = row;
+        try {
+          await withTenant(user.businessId, async (tx) => {
+            const sku = productData.sku ?? (await nextProductSku(tx, user.businessId));
+            const [p] = await tx
+              .insert(schema.product)
+              .values({ ...productData, sku, businessId: user.businessId, locationId })
+              .returning();
+            await tx.insert(schema.inventory).values({
+              businessId: user.businessId,
+              productId: p!.id,
+              locationId,
+              quantity: initialStock ?? 0,
+              minStock: minStock ?? null,
+            });
           });
-        });
-        created++;
-      } catch {
-        skipped++;
+          created++;
+        } catch {
+          skipped++;
+        }
       }
-    }
-    await app.audit(req, { action: 'import', entity: 'product', after: { created, skipped } });
-    return reply.send({ data: { created, skipped }, error: null });
-  });
+      await app.audit(req, { action: 'import', entity: 'product', after: { created, skipped } });
+      return reply.send({ data: { created, skipped }, error: null });
+    },
+  );
 }

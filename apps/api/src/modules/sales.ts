@@ -1,4 +1,4 @@
-import { db, schema } from '@ventafacil/db';
+import { schema, withTenant } from '@ventafacil/db';
 import { cancelSaleSchema, createSaleSchema, syncSalesSchema } from '@ventafacil/shared';
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -27,12 +27,14 @@ export async function saleRoutes(app: FastifyInstance) {
 
     let result;
     try {
-      result = await db.transaction((tx) =>
+      result = await withTenant(businessId, (tx) =>
         persistSale(tx, { businessId, userId, locationId, isCentral }, parsed.data),
       );
     } catch (e) {
       if (String(e).includes('LOCATION_SCOPE')) {
-        return reply.code(403).send({ data: null, error: 'Sólo puedes vender en tu propia ubicación' });
+        return reply
+          .code(403)
+          .send({ data: null, error: 'Sólo puedes vender en tu propia ubicación' });
       }
       throw e;
     }
@@ -60,7 +62,7 @@ export async function saleRoutes(app: FastifyInstance) {
     const results = [];
     for (const sale of parsed.data.sales) {
       try {
-        const r = await db.transaction((tx) =>
+        const r = await withTenant(businessId, (tx) =>
           persistSale(tx, { businessId, userId, locationId, isCentral }, sale),
         );
         if (!r.duplicated) {
@@ -105,8 +107,8 @@ export async function saleRoutes(app: FastifyInstance) {
     if (q.status) filters.push(eq(schema.sale.status, q.status));
     const where = and(...filters);
 
-    const [rows, [count]] = await Promise.all([
-      db
+    const { rows, count } = await withTenant(businessId, async (tx) => {
+      const rows = await tx
         .select({
           id: schema.sale.id,
           receiptNumber: schema.sale.receiptNumber,
@@ -125,19 +127,26 @@ export async function saleRoutes(app: FastifyInstance) {
         .where(where)
         .orderBy(desc(schema.sale.clientCreatedAt))
         .limit(q.limit)
-        .offset((q.page - 1) * q.limit),
-      db
+        .offset((q.page - 1) * q.limit);
+      const [count] = await tx
         .select({
           n: sql<number>`count(*)::int`,
           sum: sql<string>`COALESCE(SUM(${schema.sale.total}), 0)::text`,
         })
         .from(schema.sale)
-        .where(where),
-    ]);
+        .where(where);
+      return { rows, count };
+    });
 
     return reply.send({
       // sumTotal = suma de "total" de TODAS las ventas que cumplen el filtro (no sólo la página).
-      data: { items: rows, total: count?.n ?? 0, sumTotal: count?.sum ?? '0', page: q.page, limit: q.limit },
+      data: {
+        items: rows,
+        total: count?.n ?? 0,
+        sumTotal: count?.sum ?? '0',
+        page: q.page,
+        limit: q.limit,
+      },
       error: null,
     });
   });
@@ -149,40 +158,40 @@ export async function saleRoutes(app: FastifyInstance) {
     // Alcance: la sucursal sólo puede leer el detalle de ventas de su ubicación.
     const scope = viewScope(req.authUser!);
 
-    const [sale] = await db
-      .select({
-        id: schema.sale.id,
-        receiptNumber: schema.sale.receiptNumber,
-        status: schema.sale.status,
-        subtotal: schema.sale.subtotal,
-        discount: schema.sale.discount,
-        total: schema.sale.total,
-        paymentMethod: schema.sale.paymentMethod,
-        clientCreatedAt: schema.sale.clientCreatedAt,
-        locationName: schema.location.name,
-        sellerName: schema.appUser.name,
-        customerName: schema.customer.name,
-      })
-      .from(schema.sale)
-      .leftJoin(schema.location, eq(schema.location.id, schema.sale.locationId))
-      .leftJoin(schema.appUser, eq(schema.appUser.id, schema.sale.userId))
-      .leftJoin(schema.customer, eq(schema.customer.id, schema.sale.customerId))
-      .where(
-        and(
-          eq(schema.sale.id, id),
-          eq(schema.sale.businessId, businessId),
-          scope !== undefined ? eq(schema.sale.locationId, scope) : undefined,
-        ),
-      )
-      .limit(1);
-    if (!sale) return reply.code(404).send({ data: null, error: 'Venta no encontrada' });
+    const detalle = await withTenant(businessId, async (tx) => {
+      const [sale] = await tx
+        .select({
+          id: schema.sale.id,
+          receiptNumber: schema.sale.receiptNumber,
+          status: schema.sale.status,
+          subtotal: schema.sale.subtotal,
+          discount: schema.sale.discount,
+          total: schema.sale.total,
+          paymentMethod: schema.sale.paymentMethod,
+          clientCreatedAt: schema.sale.clientCreatedAt,
+          locationName: schema.location.name,
+          sellerName: schema.appUser.name,
+          customerName: schema.customer.name,
+        })
+        .from(schema.sale)
+        .leftJoin(schema.location, eq(schema.location.id, schema.sale.locationId))
+        .leftJoin(schema.appUser, eq(schema.appUser.id, schema.sale.userId))
+        .leftJoin(schema.customer, eq(schema.customer.id, schema.sale.customerId))
+        .where(
+          and(
+            eq(schema.sale.id, id),
+            eq(schema.sale.businessId, businessId),
+            scope !== undefined ? eq(schema.sale.locationId, scope) : undefined,
+          ),
+        )
+        .limit(1);
+      if (!sale) return null;
+      const items = await tx.select().from(schema.saleItem).where(eq(schema.saleItem.saleId, id));
+      return { ...sale, items };
+    });
 
-    const items = await db
-      .select()
-      .from(schema.saleItem)
-      .where(eq(schema.saleItem.saleId, id));
-
-    return reply.send({ data: { ...sale, items }, error: null });
+    if (!detalle) return reply.code(404).send({ data: null, error: 'Venta no encontrada' });
+    return reply.send({ data: detalle, error: null });
   });
 
   // POST /sales/:id/cancel — admin (su alcance) o vendedor sobre su propia ubicación.
@@ -190,27 +199,37 @@ export async function saleRoutes(app: FastifyInstance) {
   app.post('/sales/:id/cancel', { preHandler: [app.requireAuth] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = cancelSaleSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ data: null, error: 'Motivo requerido (min 3)' });
+    if (!parsed.success)
+      return reply.code(400).send({ data: null, error: 'Motivo requerido (min 3)' });
     const businessId = req.authUser!.businessId;
 
-    const [before] = await db
-      .select()
-      .from(schema.sale)
-      .where(and(eq(schema.sale.id, id), eq(schema.sale.businessId, businessId)))
-      .limit(1);
+    const before = await withTenant(businessId, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(schema.sale)
+        .where(and(eq(schema.sale.id, id), eq(schema.sale.businessId, businessId)))
+        .limit(1);
+      return row ?? null;
+    });
     if (!before) return reply.code(404).send({ data: null, error: 'Venta no encontrada' });
     if (!canCancelSale(req.authUser!, before.locationId)) {
-      return reply.code(403).send({ data: null, error: 'Sólo puedes cancelar ventas de tu ubicación' });
+      return reply
+        .code(403)
+        .send({ data: null, error: 'Sólo puedes cancelar ventas de tu ubicación' });
     }
     if (before.status === 'cancelled') {
       return reply.code(409).send({ data: null, error: 'La venta ya está cancelada' });
     }
 
     // Cancelar = status='cancelled' (nunca se borra) + devolver stock a la ubicación.
-    const after = await db.transaction(async (tx) => {
+    const after = await withTenant(businessId, async (tx) => {
       const [row] = await tx
         .update(schema.sale)
-        .set({ status: 'cancelled', cancelledReason: parsed.data.reason, cancelledBy: req.authUser!.sub })
+        .set({
+          status: 'cancelled',
+          cancelledReason: parsed.data.reason,
+          cancelledBy: req.authUser!.sub,
+        })
         .where(and(eq(schema.sale.id, id), eq(schema.sale.businessId, businessId)))
         .returning();
 
