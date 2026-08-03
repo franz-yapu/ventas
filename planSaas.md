@@ -12,6 +12,34 @@
 
 ---
 
+## Estado a 3 de agosto de 2026
+
+| | Tarea | Estado |
+|---|---|---|
+| 🔴 | #1 Red de seguridad | 🟡 Hecho en local · falta el VPS |
+| 🔴 | #2 Endurecer producción | ✅ Hecho |
+| 🔴 | #3 Aislamiento (RLS) | 🟡 Código listo y probado · falta activarlo en el VPS |
+| 🟠 | #4 Definir el precio | ⬜ Pendiente — decisión de negocio |
+| 🟠 | #5–#10 Capa SaaS | ⬜ Pendiente (parte de #6 ya hecha) |
+| 🔵 | #11–#14 Escala | ⬜ Pendiente |
+
+**El bloque bloqueante está resuelto en todo lo que es programación.** 96 tests en verde
+(82 del API, 23 de la web) y `pnpm typecheck` limpio.
+
+### Lo que necesita el VPS y no se puede adelantar en local
+
+1. Programar el backup diario y copiarlo **fuera del servidor**.
+2. Crear el rol de aplicación y apuntar `DATABASE_URL` a él.
+3. Activar RLS (`ENABLE_RLS=1`), después de un backup con restauración probada.
+4. Definir `CORS_ORIGINS` — **el API no arranca sin ella** en producción.
+5. DNS comodín `*.vertexweb.lat` y certificado SSL comodín (Let's Encrypt por DNS-01).
+6. Rotar los secretos JWT si alguna vez se usaron los de `.env.example`.
+
+Todo esto ya está ensayado en el staging local, así que en el servidor es ejecución, no
+descubrimiento.
+
+---
+
 ## 👉 Siguiente tarea
 
 El **bloque 1 está resuelto en local**: staging en Docker con RLS activo, backups con
@@ -154,7 +182,6 @@ esta decisión de negocio, no técnica.
 - [ ] **Recuperación de contraseña** — hoy no existe. Con clientes desconocidos es
       obligatorio: no puedes resetear a mano a cien negocios.
 - [ ] Email transaccional (Resend / SES) para verificación y recuperación.
-- [ ] Validar que el slug esté libre (ya es `unique` en el esquema).
 - [ ] Wizard inicial: sucursal, primeros productos, tema y textos.
 
 ## #7 · Panel super-admin 🟠
