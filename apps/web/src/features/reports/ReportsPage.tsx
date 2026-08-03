@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -52,11 +51,6 @@ export function ReportsPage() {
         <Input type="date" filter className="max-w-[10rem]" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
         <label className="text-sm text-muted">Hasta</label>
         <Input type="date" filter className="max-w-[10rem]" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
-        {(from || to) && (
-          <Button variant="ghost" className="h-9 px-2 text-sm" onClick={() => { setFrom(''); setTo(''); }}>
-            Limpiar
-          </Button>
-        )}
       </div>
 
       {/* KPIs */}
