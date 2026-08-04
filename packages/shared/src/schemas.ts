@@ -1,8 +1,20 @@
 import { z } from 'zod';
 import { PAYMENT_METHODS, ROLES, SALE_STATUS } from './constants.js';
 
-/** Dinero: string decimal para no perder precision (nunca float). */
+/**
+ * Dinero: string decimal para no perder precision (nunca float).
+ *
+ * NO admite negativos. Antes sí, y eso dejaba abrir una caja con -200, cerrarla
+ * contando -999 y registrar ventas con total negativo. Ninguno de esos valores tiene
+ * sentido en un punto de venta, y aceptarlos convierte cualquier bug del cliente en un
+ * descuadre contable silencioso.
+ */
 export const money = z
+  .string()
+  .regex(/^\d+(\.\d{1,2})?$/, 'Monto invalido (usa hasta 2 decimales, sin negativos)');
+
+/** Para los pocos sitios donde un negativo SÍ tiene sentido (ajustes, diferencias). */
+export const moneyConSigno = z
   .string()
   .regex(/^-?\d+(\.\d{1,2})?$/, 'Monto invalido (usa hasta 2 decimales)');
 
@@ -141,20 +153,58 @@ export const saleItemSchema = z.object({
   lineTotal: money,
 });
 
-export const createSaleSchema = z.object({
-  /** UUID generado en el dispositivo -> idempotencia al sincronizar. */
-  id: z.string().uuid(),
-  locationId: z.string().uuid(),
-  customerId: z.string().uuid().nullable().optional(),
-  status: z.enum(SALE_STATUS).default('completed'),
-  subtotal: money,
-  discount: money.default('0'),
-  total: money,
-  paymentMethod: z.enum(PAYMENT_METHODS),
-  // Acepta offset de zona (los dispositivos offline pueden enviar hora local con offset).
-  clientCreatedAt: z.string().datetime({ offset: true }),
-  items: z.array(saleItemSchema).min(1),
-});
+/** Dos importes en string decimal son iguales dentro de un centavo. */
+const igual = (a: string, b: string) => Math.abs(Number(a) - Number(b)) < 0.005;
+
+export const createSaleSchema = z
+  .object({
+    /** UUID generado en el dispositivo -> idempotencia al sincronizar. */
+    id: z.string().uuid(),
+    locationId: z.string().uuid(),
+    customerId: z.string().uuid().nullable().optional(),
+    status: z.enum(SALE_STATUS).default('completed'),
+    subtotal: money,
+    discount: money.default('0'),
+    total: money,
+    paymentMethod: z.enum(PAYMENT_METHODS),
+    // Acepta offset de zona (los dispositivos offline pueden enviar hora local con offset).
+    clientCreatedAt: z.string().datetime({ offset: true }),
+    items: z.array(saleItemSchema).min(1),
+  })
+  /**
+   * La aritmética tiene que cuadrar consigo misma.
+   *
+   * Los precios llegan del cliente a propósito —son un SNAPSHOT del momento de la
+   * venta, y el POS vende sin conexión, así que el servidor no puede recalcularlos con
+   * los precios de hoy sin falsear el histórico. Pero sí puede exigir que lo que llega
+   * sea coherente: antes se aceptaba `total: "1.00"` con `subtotal: "30.00"`, o una
+   * línea de Bs. 9999 para un producto de Bs. 10.
+   */
+  .refine((d) => d.items.every((it) => igual(it.lineTotal, String(Number(it.unitPriceSnapshot) * it.quantity))), {
+    message: 'El total de una línea no coincide con precio × cantidad',
+    path: ['items'],
+  })
+  .refine((d) => igual(d.subtotal, String(d.items.reduce((a, it) => a + Number(it.lineTotal), 0))), {
+    message: 'El subtotal no coincide con la suma de las líneas',
+    path: ['subtotal'],
+  })
+  .refine((d) => Number(d.discount) <= Number(d.subtotal), {
+    message: 'El descuento no puede superar al subtotal',
+    path: ['discount'],
+  })
+  .refine((d) => igual(d.total, String(Number(d.subtotal) - Number(d.discount))), {
+    message: 'El total no coincide con subtotal menos descuento',
+    path: ['total'],
+  })
+  /**
+   * Una venta con fecha futura desaparecería de todo arqueo (el turno filtra por
+   * `client_created_at`), así que el dinero estaría en el cajón sin figurar en ninguna
+   * parte. Se admite un margen de holgura por relojes mal puestos.
+   */
+  .refine((d) => new Date(d.clientCreatedAt).getTime() < Date.now() + 24 * 3_600_000, {
+    message: 'La fecha de la venta no puede estar en el futuro',
+    path: ['clientCreatedAt'],
+  });
 
 /** Sincronizacion en lote: acepta varias ventas, responde por item. */
 export const syncSalesSchema = z.object({
@@ -209,10 +259,14 @@ export const closeCashSchema = z.object({
 });
 
 export const cashMovementSchema = z.object({
-  type: z.enum(CASH_MOVEMENT_TYPES),
-  amount: money.refine((v) => Number(v) > 0, 'El monto debe ser mayor a cero'),
+  type: z.enum(CASH_MOVEMENT_TYPES, { required_error: 'Indica si entra o sale dinero' }),
+  amount: money
+    .refine((v) => Number(v) > 0, 'El monto debe ser mayor a cero'),
   // Un movimiento sin motivo es indistinguible de un faltante.
-  reason: z.string().min(3, 'Explica el motivo').max(200),
+  reason: z
+    .string({ required_error: 'Explica el motivo' })
+    .min(3, 'Explica el motivo')
+    .max(200),
 });
 
 // ── Clientes / fiado ───────────────────────────────────────────

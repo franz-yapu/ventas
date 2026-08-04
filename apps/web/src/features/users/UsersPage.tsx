@@ -164,6 +164,8 @@ function UserForm({
   const passwordInvalid = form.password.length > 0 && form.password.length < 6;
   const canSave =
     form.name.length >= 1 &&
+    // Un vendedor sin sucursal queda con la app vacía y muda; el API también lo rechaza.
+    (form.role !== 'seller' || !!form.locationId) &&
     (isNew ? form.username.length >= 3 && form.password.length >= 6 : !passwordInvalid) &&
     !save.isPending;
 
@@ -204,15 +206,27 @@ function UserForm({
           <option value="admin">Administrador</option>
         </Select>
 
-        <label className="text-sm text-muted">Ubicación (opcional)</label>
-        <Select value={form.locationId ?? ''} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
-          <option value="">Sin asignar</option>
+        {/* Para un vendedor la ubicación NO es opcional: sin ella no puede vender ni
+            ver nada, y la app se le queda vacía sin decirle por qué. */}
+        <label className="text-sm text-muted">
+          Ubicación{form.role === 'seller' ? '' : ' (opcional)'}
+        </label>
+        <Select
+          value={form.locationId ?? ''}
+          onChange={(e) => setForm({ ...form, locationId: e.target.value })}
+        >
+          <option value="">{form.role === 'seller' ? 'Elige una sucursal' : 'Sin asignar'}</option>
           {locations.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
             </option>
           ))}
         </Select>
+        {form.role === 'seller' && !form.locationId && (
+          <p className="-mt-1 text-xs text-warning">
+            Un vendedor necesita una sucursal: sin ella no podría vender ni ver nada.
+          </p>
+        )}
 
         {!isNew && (
           <label className="mt-1 flex items-center gap-2 text-sm">

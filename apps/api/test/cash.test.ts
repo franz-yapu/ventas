@@ -302,8 +302,20 @@ describe('el cierre y su diferencia', () => {
 
   it('SOBRA plata: diferencia positiva', async () => {
     await abrir(t.adminToken, '100.00');
-    const res = await cerrar(t.adminToken, '130.00');
+    const res = await cerrar(t.adminToken, '130.00', 'Sobraron 30, se revisa');
     expect(res.json().data.difference).toBe('30.00');
+  });
+
+  it('no deja cerrar un descuadre sin explicarlo', async () => {
+    await abrir(t.adminToken, '100.00');
+    const res = await cerrar(t.adminToken, '130.00');
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('falta_motivo');
+  });
+
+  it('cuadrando exacto no hace falta motivo', async () => {
+    await abrir(t.adminToken, '100.00');
+    expect((await cerrar(t.adminToken, '100.00')).statusCode).toBe(200);
   });
 
   it('el esperado queda CONGELADO: una venta que llega tarde no reescribe el arqueo', async () => {

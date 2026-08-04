@@ -265,7 +265,7 @@ describe('cambio de plan', () => {
     await darPlan(a.businessId, 'basico', 'active');
     const cerrado = await app.inject({
       method: 'GET',
-      url: '/api/v1/audit',
+      url: '/api/v1/reports/dashboard',
       headers: auth(a.adminToken),
     });
     expect(cerrado.statusCode).toBe(402);
@@ -279,7 +279,7 @@ describe('cambio de plan', () => {
 
     const abierto = await app.inject({
       method: 'GET',
-      url: '/api/v1/audit',
+      url: '/api/v1/reports/dashboard',
       headers: auth(a.adminToken),
     });
     expect(abierto.statusCode).toBe(200);

@@ -102,7 +102,16 @@ export function PosPage() {
   }, [cart]);
   // Descuentos sólo con conexión (evita conflictos offline, según el plan).
   const online = navigator.onLine;
-  const discountNum = online ? Math.min(Math.max(0, Number(discount) || 0), subtotal) : 0;
+  /**
+   * Tope de descuento del vendedor. El administrador no tiene: se supone que es su
+   * mercadería. Sin esto, cualquier cajero ponía un descuento igual al total y cobraba
+   * Bs. 0 — y el servidor lo aceptaba.
+   */
+  const topePct = user?.role === 'seller' ? (business?.maxSellerDiscountPct ?? 0) : 100;
+  const topeDescuento = (subtotal * topePct) / 100;
+  const pedido = online ? Math.max(0, Number(discount) || 0) : 0;
+  const discountNum = Math.min(pedido, subtotal, topeDescuento);
+  const descuentoRecortado = pedido > topeDescuento + 0.005;
   const total = subtotal - discountNum;
 
   function addToCart(p: Product) {
@@ -187,7 +196,15 @@ export function PosPage() {
     if (navigator.onLine) {
       try {
         const r = await syncPending();
-        if (r.synced > 0) detail = await api.get<SaleDetail>(`/sales/${id}`);
+        if (r.synced > 0) {
+          detail = await api.get<SaleDetail>(`/sales/${id}`);
+          // El catálogo local guarda el stock, y el POS lo pinta como "Disp. N". Sin
+          // refrescarlo, el cajero seguía viendo el stock de ANTES de su propia venta:
+          // un número falso justo donde mira para saber si le queda mercadería.
+          // `products` es una useLiveQuery de Dexie: al actualizar el catálogo local,
+          // la cuadrícula se repinta sola.
+          await syncCatalog().catch(() => undefined);
+        }
       } catch {
         /* queda pendiente en la cola */
       }
@@ -415,6 +432,12 @@ export function PosPage() {
             </div>
           )}
 
+          {descuentoRecortado && (
+            <p className="text-[12px] text-warning">
+              Como vendedor puedes descontar hasta el {topePct}% ({money(topeDescuento)}). Para
+              más, pide a un administrador.
+            </p>
+          )}
           {discountNum > 0 && (
             <div className="flex items-center justify-between text-sm text-muted">
               <span>Subtotal</span>

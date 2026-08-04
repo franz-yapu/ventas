@@ -77,6 +77,33 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(auditPlugin);
   await app.register(subscriptionPlugin);
 
+  /**
+   * Manejador de errores único.
+   *
+   * Sin esto, un fallo no controlado sale con el formato de Fastify y **con el mensaje
+   * crudo dentro**: un error de Postgres llegaba al navegador diciendo qué columna y
+   * qué tipo falló. Eso le regala a cualquiera un mapa del esquema, y encima rompe el
+   * formato `{ data, error }` que espera el cliente.
+   *
+   * Los errores por debajo de 500 (validación, límite de peticiones, 404) sí llevan un
+   * mensaje útil para quien llama, así que se conservan; sólo se tapa el 500.
+   */
+  app.setErrorHandler((err: Error & { statusCode?: number; error?: unknown }, req, reply) => {
+    const status = err.statusCode ?? 500;
+    if (status >= 500) {
+      req.log.error({ err }, 'error no controlado');
+      return reply.code(500).send({ data: null, error: 'Error interno del servidor' });
+    }
+    // Debajo de 500 el mensaje SÍ le sirve a quien llama. Algunas piezas (el limitador
+    // de peticiones) ya lanzan un cuerpo con el formato de la casa; se respeta el suyo.
+    const mensaje = typeof err.error === 'string' ? err.error : err.message;
+    return reply.code(status).send({ data: null, error: mensaje });
+  });
+
+  app.setNotFoundHandler((_req, reply) =>
+    reply.code(404).send({ data: null, error: 'Ruta no encontrada' }),
+  );
+
   app.get('/health', async () => ({ data: { status: 'ok' }, error: null }));
 
   await app.register(

@@ -80,6 +80,12 @@ services:
       # enviarse: `docker logs vf-staging-api` es el buzón de staging.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       APP_URL_TEMPLATE: ${APP_URL_TEMPLATE}
+      # Topes de peticiones. En staging se suben para poder ejercitar los flujos de
+      # punta a punta sin que el limitador corte la prueba; los valores REALES son los
+      # de .env.example, y el limitador en sí está cubierto por los tests.
+      LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:-20}
+      REGISTER_RATE_LIMIT_MAX: ${REGISTER_RATE_LIMIT_MAX:-5}
+      EXPORT_RATE_LIMIT_MAX: ${EXPORT_RATE_LIMIT_MAX:-5}
       # Obligatoria en producción: el API no arranca sin ella.
       CORS_ORIGINS: ${CORS_ORIGINS}
     ports:

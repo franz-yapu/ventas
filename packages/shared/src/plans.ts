@@ -99,7 +99,11 @@ export const PLAN_CATALOG: PlanDefinition[] = [
     maxLocations: 1,
     maxUsers: 3,
     maxProducts: 500,
-    features: [],
+    // La bitácora entra en TODOS los planes. Es el único control que tiene un dueño
+    // para detectar un descuento raro de un empleado, y el plan Básico es justo el del
+    // negocio con empleados. Cobrar por eso sería vender la cerradura aparte de la
+    // puerta. Pro se diferencia por el panel de análisis, que sí es un extra.
+    features: ['auditoria'],
     isPublic: true,
     sortOrder: 1,
   },

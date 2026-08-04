@@ -70,6 +70,26 @@ function EstadoBadge({ status }: { status: EffectiveStatus | null }) {
   return <Badge tone={e.tone}>{e.label}</Badge>;
 }
 
+/**
+ * Resumen de estados para el subtítulo. Antes sólo decía activos y en prueba, así que
+ * de 24 negocios el subtítulo describía 3: los suspendidos y las bajas desaparecían
+ * justo del sitio donde se miran.
+ */
+function resumenEstados(porEstado: Record<string, number>): string {
+  const etiquetas: Array<[string, string]> = [
+    ['active', 'activos'],
+    ['trial', 'en prueba'],
+    ['past_due', 'morosos'],
+    ['trial_expired', 'prueba vencida'],
+    ['suspended', 'suspendidos'],
+    ['cancelled', 'de baja'],
+  ];
+  const partes = etiquetas
+    .filter(([k]) => (porEstado[k] ?? 0) > 0)
+    .map(([k, txt]) => `${porEstado[k]} ${txt}`);
+  return partes.length ? partes.join(' · ') : 'sin suscripciones';
+}
+
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <Card>
@@ -137,7 +157,7 @@ export function PlatformPage() {
             <Tile
               label="Negocios"
               value={String(metrics.totalNegocios)}
-              hint={`${metrics.porEstado.active ?? 0} activos · ${metrics.porEstado.trial ?? 0} en prueba`}
+              hint={resumenEstados(metrics.porEstado)}
             />
             <Tile
               label="Este mes"

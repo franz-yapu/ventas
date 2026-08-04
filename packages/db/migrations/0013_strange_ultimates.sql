@@ -1,0 +1,1 @@
+ALTER TABLE "business" ADD COLUMN "max_seller_discount_pct" integer DEFAULT 10 NOT NULL;

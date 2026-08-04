@@ -1,12 +1,26 @@
 import type { AuthUser } from '../types.js';
 
 /**
+ * UUID nulo. Es un uuid VÁLIDO que ninguna fila puede tener, así que sirve para decir
+ * "no coincide con nada" en una comparación con una columna `uuid`.
+ *
+ * Antes aquí había el centinela `'__none__'`, que no es un uuid: Postgres lo rechazaba
+ * con 22P02 y la app entera respondía 500. Y como el frontend enseña una lista vacía
+ * cuando la petición falla, el usuario veía un negocio sin datos en vez de un error —
+ * roto y silencioso a la vez, que es el peor de los dos mundos.
+ */
+const NINGUNA_UBICACION = '00000000-0000-0000-0000-000000000000';
+
+/**
  * Ubicación por la que se filtra la VISTA. `undefined` = ve todas (usuario de la central).
  * Un usuario de sucursal ve sólo su ubicación.
+ *
+ * Un usuario sin ubicación no debería existir (ver `users.ts`), pero si aparece uno
+ * —creado antes de esa validación, o por CLI— ve una lista vacía y no un error.
  */
 export function viewScope(user: AuthUser): string | undefined {
   if (user.isCentral) return undefined; // ve todo
-  return user.locationId ?? '__none__'; // sin ubicación -> no ve nada
+  return user.locationId ?? NINGUNA_UBICACION;
 }
 
 /**

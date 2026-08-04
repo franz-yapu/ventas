@@ -66,6 +66,7 @@ export function SettingsPage() {
     receiptFooter: '',
     currency: 'BOB',
     taxRate: '0',
+    maxSellerDiscountPct: 10,
     logoUrl: null as string | null,
   });
 
@@ -80,6 +81,7 @@ export function SettingsPage() {
       receiptFooter: data.texts?.receipt_footer ?? '',
       currency: data.currency,
       taxRate: String(Number(data.taxRate)), // "0.0000" -> "0"
+      maxSellerDiscountPct: data.maxSellerDiscountPct ?? 10,
       logoUrl: data.logoUrl,
     });
   }, [data]);
@@ -113,6 +115,7 @@ export function SettingsPage() {
         texts: { ...(data?.texts ?? {}), app_name: form.appName, receipt_footer: form.receiptFooter },
         currency: form.currency,
         taxRate: form.taxRate,
+        maxSellerDiscountPct: Number(form.maxSellerDiscountPct) || 0,
       }),
     onSuccess: () => {
       // Refresca el negocio en toda la app -> ThemeProvider re-aplica colores/textos/logo.
@@ -258,6 +261,22 @@ export function SettingsPage() {
             <div>
               <label className="text-sm text-muted">Tasa de impuesto (%)</label>
               <Input inputMode="decimal" value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-sm text-muted">Descuento máximo del vendedor (%)</label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={form.maxSellerDiscountPct}
+                onChange={(e) =>
+                  setForm({ ...form, maxSellerDiscountPct: Number(e.target.value) })
+                }
+              />
+              <p className="mt-1 text-xs text-muted">
+                Cuánto puede rebajar un vendedor sin permiso. En 0, sólo el administrador
+                descuenta. Tú no tienes tope.
+              </p>
             </div>
           </div>
         </CardContent>

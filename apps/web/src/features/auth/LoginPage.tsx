@@ -4,8 +4,24 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { slugDesdeHostname, useAuth } from '@/features/auth/AuthProvider';
 import { ApiError } from '@/lib/api';
+
+/**
+ * A dónde mandar a alguien que inició sesión desde el dominio base. Devuelve `null`
+ * cuando ya se está en el subdominio correcto (el caso normal) y no hay que ir a
+ * ninguna parte.
+ */
+function urlDelNegocio(slugEscrito: string): string | null {
+  const dominio = import.meta.env.VITE_APP_DOMAIN;
+  if (!dominio) return null;
+  // Ya estamos en el subdominio de un negocio: nada que hacer.
+  if (slugDesdeHostname(window.location.hostname, dominio)) return null;
+  const slug = slugEscrito.trim().toLowerCase();
+  if (!slug) return null;
+  const { protocol, port } = window.location;
+  return `${protocol}//${slug}.${dominio}${port ? `:${port}` : ''}/`;
+}
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -26,6 +42,15 @@ export function LoginPage() {
     setBusy(true);
     try {
       await login(username, password, business);
+      // Si se entró por el dominio base (sin subdominio de negocio), la sesión acaba de
+      // quedar guardada en el origen EQUIVOCADO: la app del negocio vive en su
+      // subdominio y el navegador no comparte almacenamiento entre orígenes. Antes esto
+      // dejaba a la persona dando vueltas entre el registro y el login sin explicación.
+      const destino = urlDelNegocio(business);
+      if (destino) {
+        window.location.href = destino;
+        return;
+      }
       navigate('/', { replace: true });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'No se pudo iniciar sesión';

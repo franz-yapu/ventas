@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 interface ModalProps {
@@ -13,6 +13,17 @@ interface ModalProps {
 // Hoja/modal calcado del prototipo VentaFácil POS: fondo translúcido con desenfoque,
 // hoja #fbfbf9 pegada abajo en móvil (radio superior) y centrada en escritorio.
 export function Modal({ open, onClose, title, children, className }: ModalProps) {
+  // Escape cierra. Es lo que espera cualquiera que use un teclado, y sin ello la única
+  // salida era acertarle a la X o al fondo.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div
@@ -20,6 +31,9 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         className={cn(
           'ds-modal max-h-[92vh] w-full max-w-md overflow-auto bg-[#fbfbf9] shadow-[0_20px_50px_-20px_rgba(0,0,0,0.35)]',
           'rounded-t-[20px] animate-[vf-sheet_.22s_ease] sm:rounded-[18px]',

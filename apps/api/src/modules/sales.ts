@@ -23,18 +23,31 @@ export async function saleRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
     }
-    const { businessId, sub: userId, locationId, isCentral } = req.authUser!;
+    const { businessId, sub: userId, locationId, isCentral, role } = req.authUser!;
 
     let result;
     try {
       result = await withTenant(businessId, (tx) =>
-        persistSale(tx, { businessId, userId, locationId, isCentral }, parsed.data),
+        persistSale(tx, { businessId, userId, locationId, isCentral, role }, parsed.data),
       );
     } catch (e) {
       if (String(e).includes('LOCATION_SCOPE')) {
         return reply
           .code(403)
           .send({ data: null, error: 'Sólo puedes vender en tu propia ubicación' });
+      }
+      const tope = /DISCOUNT_LIMIT:(\d+)/.exec(String(e));
+      if (tope) {
+        return reply.code(403).send({
+          data: null,
+          error: `Como vendedor puedes descontar hasta el ${tope[1]}%. Pide a un administrador que lo autorice.`,
+          code: 'discount_limit',
+        });
+      }
+      if (String(e).includes('PRODUCT_SCOPE')) {
+        return reply
+          .code(400)
+          .send({ data: null, error: 'Algún producto de la venta no es de este negocio' });
       }
       throw e;
     }
@@ -57,13 +70,13 @@ export async function saleRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.code(400).send({ data: null, error: 'Lote invalido' });
     }
-    const { businessId, sub: userId, locationId, isCentral } = req.authUser!;
+    const { businessId, sub: userId, locationId, isCentral, role } = req.authUser!;
 
     const results = [];
     for (const sale of parsed.data.sales) {
       try {
         const r = await withTenant(businessId, (tx) =>
-          persistSale(tx, { businessId, userId, locationId, isCentral }, sale),
+          persistSale(tx, { businessId, userId, locationId, isCentral, role }, sale),
         );
         if (!r.duplicated) {
           await app.audit(req, {
@@ -131,7 +144,10 @@ export async function saleRoutes(app: FastifyInstance) {
       const [count] = await tx
         .select({
           n: sql<number>`count(*)::int`,
-          sum: sql<string>`COALESCE(SUM(${schema.sale.total}), 0)::text`,
+          // Sólo las COMPLETADAS suman. Con el filtro por defecto ("todos los estados")
+          // la suma incluía las anuladas, así que lo primero que veía el dueño
+          // sobreestimaba lo vendido — dinero que se devolvió, contado como ingreso.
+          sum: sql<string>`COALESCE(SUM(${schema.sale.total}) FILTER (WHERE ${schema.sale.status} = 'completed'), 0)::text`,
         })
         .from(schema.sale)
         .where(where);

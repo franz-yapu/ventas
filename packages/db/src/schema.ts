@@ -44,6 +44,15 @@ export const business = pgTable('business', {
   // Prefijo del SKU automático de productos (ej. 'P' -> P000001; 'LLA-' -> LLA-000001).
   skuPrefix: text('sku_prefix').notNull().default('P'),
   /**
+   * Hasta qué % del subtotal puede descontar un VENDEDOR sin pedir permiso. El
+   * administrador no tiene tope.
+   *
+   * Sin esto, cualquier cajero podía poner un descuento igual al total y cobrar Bs. 0.
+   * El número lo pone el dueño porque depende del negocio: una ferretería que regatea
+   * no es una farmacia.
+   */
+  maxSellerDiscountPct: integer('max_seller_discount_pct').notNull().default(10),
+  /**
    * Constancia de que alguien aceptó los términos, y cuáles. Se guarda la VERSIÓN
    * porque los términos cambian: sin ella, dentro de un año no habría forma de saber
    * qué aceptó realmente este negocio.

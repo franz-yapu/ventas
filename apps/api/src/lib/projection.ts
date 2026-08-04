@@ -9,7 +9,16 @@ export interface Projection {
   high: string;
   avgDaily: string;
   method: string;
+  /**
+   * `false` cuando hay tan pocos días que el número no significa nada. Con un solo día
+   * de ventas la proyección salía como "Bs. 3300 · rango 3300–3300": una cifra exacta,
+   * sin margen, extrapolada de una tarde. Se lee como una promesa.
+   */
+  confiable: boolean;
 }
+
+/** Días mínimos para que una tendencia signifique algo. */
+const DIAS_MINIMOS = 7;
 
 /**
  * Proyección simple del próximo mes: regresión lineal sobre las ventas diarias
@@ -27,6 +36,7 @@ export function computeProjection(trend: TrendPoint[]): Projection {
       high: monthly.toFixed(2),
       avgDaily: avg.toFixed(2),
       method: 'promedio (datos insuficientes)',
+      confiable: false,
     };
   }
 
@@ -57,5 +67,6 @@ export function computeProjection(trend: TrendPoint[]): Projection {
     high: (projected + band).toFixed(2),
     avgDaily: avgDaily.toFixed(2),
     method: 'regresión lineal (30 días)',
+    confiable: n >= DIAS_MINIMOS,
   };
 }

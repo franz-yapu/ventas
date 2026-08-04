@@ -317,6 +317,14 @@ export async function cashRoutes(app: FastifyInstance) {
       const cerradoEn = new Date();
       const desglose = await calcularDesglose(tx, user.businessId, caja, cerradoEn);
 
+      // Si no cuadra, hay que decir por qué. Un descuadre sin explicación se convierte
+      // en un número que nadie recuerda a la semana siguiente, y el arqueo existe
+      // justamente para poder mirar atrás y entender qué pasó.
+      const diferencia = Number(parsed.data.countedAmount) - Number(desglose.expected);
+      if (Math.abs(diferencia) >= 0.005 && !parsed.data.notes?.trim()) {
+        return 'FALTA_MOTIVO' as const;
+      }
+
       const [row] = await tx
         .update(schema.cashRegister)
         .set({
@@ -332,6 +340,13 @@ export async function cashRoutes(app: FastifyInstance) {
       return { register: row!, breakdown: desglose };
     });
 
+    if (resultado === 'FALTA_MOTIVO') {
+      return reply.code(400).send({
+        data: null,
+        error: 'La caja no cuadra: explica por qué antes de cerrarla.',
+        code: 'falta_motivo',
+      });
+    }
     if (!resultado) {
       return reply.code(409).send({ data: null, error: 'No hay una caja abierta para cerrar.' });
     }

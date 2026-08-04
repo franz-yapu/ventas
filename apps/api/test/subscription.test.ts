@@ -227,7 +227,13 @@ describe('límites del plan', () => {
       method: 'POST',
       url: '/api/v1/users',
       headers: auth(a.adminToken),
-      payload: { name: 'Vendedor', username: 'vendedor1', password: 'secreto123', role: 'seller' },
+      payload: {
+        name: 'Vendedor',
+        username: 'vendedor1',
+        password: 'secreto123',
+        role: 'seller',
+        locationId: a.locationId,
+      },
     });
     expect(res.statusCode).toBe(402);
     expect(res.json().code).toBe('plan_limit');
@@ -239,7 +245,13 @@ describe('límites del plan', () => {
       method: 'POST',
       url: '/api/v1/users',
       headers: auth(a.adminToken),
-      payload: { name: 'Vendedor', username: 'vendedor2', password: 'secreto123', role: 'seller' },
+      payload: {
+        name: 'Vendedor',
+        username: 'vendedor2',
+        password: 'secreto123',
+        role: 'seller',
+        locationId: a.locationId,
+      },
     });
     expect(res.statusCode).toBe(201);
   });
@@ -293,13 +305,27 @@ describe('límites del plan', () => {
 });
 
 describe('funciones por plan', () => {
-  it('básico no abre el panel de análisis ni la bitácora', async () => {
+  it('básico no abre el panel de análisis', async () => {
     await darPlan(a.businessId, 'basico', 'active');
-    for (const url of ['/api/v1/reports/dashboard', '/api/v1/audit']) {
-      const res = await app.inject({ method: 'GET', url, headers: auth(a.adminToken) });
-      expect(res.statusCode, url).toBe(402);
-      expect(res.json().code, url).toBe('plan_feature');
-    }
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/dashboard',
+      headers: auth(a.adminToken),
+    });
+    expect(res.statusCode).toBe(402);
+    expect(res.json().code).toBe('plan_feature');
+  });
+
+  it('básico SÍ abre la bitácora: es el control contra el fraude interno', async () => {
+    // Va en todos los planes a propósito. El negocio con empleados es justo el de
+    // plan Básico; cobrarle por poder auditarlos sería vender la cerradura aparte.
+    await darPlan(a.businessId, 'basico', 'active');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/audit',
+      headers: auth(a.adminToken),
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it('pro sí los abre', async () => {

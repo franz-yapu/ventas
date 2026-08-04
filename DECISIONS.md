@@ -207,3 +207,35 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 - La **exportación es JSON y no CSV**: el CSV para Excel ya existe en los reportes; esto
   es la copia completa con las relaciones intactas, que sirve para migrar de sistema.
   Nunca incluye hashes de contraseña. Se arma en UNA transacción para que sea coherente.
+
+## D17 — Lo que destapó la revisión con dos agentes (4 ago 2026)
+- **Un fallo silencioso es peor que uno ruidoso.** `viewScope()` devolvía el centinela
+  `'__none__'` para un usuario sin ubicación; comparado contra una columna `uuid`
+  reventaba con 22P02, y como el frontend pinta lista vacía cuando la petición falla, el
+  vendedor veía "un negocio recién creado" en vez de un error. Arreglado en tres capas:
+  UUID nulo (válido, no coincide con nada), el API exige ubicación para un vendedor, y
+  el formulario deja de llamarla opcional.
+- **El amplificador era general**: 16 de 17 pantallas ignoraban el error de su consulta.
+  Se enganchó `queryCache.onError` —único punto por el que pasan todas— en vez de tocar
+  las 17. El 401 y el 402 quedan fuera del aviso a propósito: uno lo maneja el refresco
+  de sesión y el otro releé la suscripción, con lo que la app pasa sola a la pantalla de
+  bloqueo. Eso arregló que **suspender a un negocio no hiciera nada en la pestaña ya
+  abierta**: el servidor cortaba pero el cajero seguía cobrando contra la cola offline.
+- **Un 500 no cuenta lo que salió mal.** El error crudo de Postgres llegaba al navegador
+  con nombre de columna y tipo. Ahora un manejador único los tapa y los registra enteros
+  en el log; por debajo de 500 el mensaje se conserva, que sí le sirve a quien llama.
+- **El servidor no se cree cualquier cosa.** Los precios siguen llegando del cliente
+  (son un snapshot y el POS vende sin conexión), pero se exige que la aritmética cuadre
+  consigo misma, que no haya negativos, que el descuento no supere al subtotal, que la
+  fecha no esté en el futuro —desaparecería de todo arqueo— y que la ubicación y los
+  productos sean del negocio.
+- **Descuento del vendedor con tope configurable** (`business.max_seller_discount_pct`,
+  10% por defecto). Cualquier cajero podía descontar el total y cobrar Bs. 0. El número
+  lo pone el dueño porque depende del rubro; el administrador no tiene tope.
+- **La bitácora pasa a TODOS los planes.** Estaba sólo en Pro, y el plan Básico es justo
+  el del negocio con empleados: cobrar por el único control contra el fraude interno era
+  vender la cerradura aparte de la puerta. Pro se diferencia por el panel de análisis.
+- **Un hipo del servidor no cierra la sesión.** `/auth/me` borraba los tokens ante
+  cualquier fallo; ahora sólo ante un 401.
+- **No prometer con dos días de datos**: la proyección marca `confiable: false` con menos
+  de 7 días, en vez de dar una cifra exacta y sin margen extrapolada de una tarde.

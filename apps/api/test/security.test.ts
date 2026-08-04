@@ -171,3 +171,31 @@ describe('comodín de CORS por subdominio', () => {
     expect(originPermitido('https://otro.com', ['https://ventafacil.com'])).toBe(false);
   });
 });
+
+describe('los errores no cuentan de más', () => {
+  it('un fallo no controlado NO filtra el mensaje interno', async () => {
+    const solo = await buildApp({ logger: false });
+    // Ruta que revienta como reventaría un error de Postgres: con detalles del esquema.
+    solo.get('/boom', async () => {
+      throw new Error('invalid input syntax for type uuid: "__none__" en app_user.location_id');
+    });
+    await solo.ready();
+    try {
+      const res = await solo.inject({ method: 'GET', url: '/boom' });
+      expect(res.statusCode).toBe(500);
+      // Antes esto llegaba entero al navegador: un mapa gratis del esquema.
+      expect(res.body).not.toContain('uuid');
+      expect(res.body).not.toContain('app_user');
+      expect(res.json()).toEqual({ data: null, error: 'Error interno del servidor' });
+    } finally {
+      await solo.close();
+    }
+  });
+
+  it('una ruta que no existe responde en el formato de la casa', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/no-existe-esta-ruta' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().data).toBeNull();
+    expect(typeof res.json().error).toBe('string');
+  });
+});

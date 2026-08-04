@@ -1,6 +1,6 @@
 import { schema } from '@ventafacil/db';
 import type { CreateSaleInput } from '@ventafacil/shared';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 
 type Tx = PgTransaction<any, any, any>;
@@ -32,13 +32,71 @@ export interface PersistSaleResult {
  */
 export async function persistSale(
   tx: Tx,
-  ctx: { businessId: string; userId: string; locationId: string | null; isCentral: boolean },
+  ctx: {
+    businessId: string;
+    userId: string;
+    locationId: string | null;
+    isCentral: boolean;
+    role: 'admin' | 'seller';
+  },
   input: CreateSaleInput,
 ): Promise<PersistSaleResult> {
   // Alcance de escritura: un usuario de sucursal sólo puede vender en SU ubicación.
   // La central puede registrar ventas en cualquier ubicación del negocio.
   if (!ctx.isCentral && input.locationId !== ctx.locationId) {
     throw new Error('LOCATION_SCOPE');
+  }
+
+  // …de SU negocio. "La central puede vender en cualquier ubicación" se comprobaba
+  // sólo contra el rol, no contra la tenencia: un admin (que siempre es central) podía
+  // grabar una venta con el `location_id` o el `product_id` de OTRO negocio. RLS impedía
+  // que tocara su stock, así que no era una fuga de datos, pero ensuciaba `sale_item` y
+  // la venta desaparecía de todo arqueo.
+  /**
+   * Tope de descuento del VENDEDOR.
+   *
+   * Sin esto, cualquier cajero podía descontar el total entero y cobrar Bs. 0: un
+   * agujero de caja abierto, y encima difícil de detectar. El administrador no tiene
+   * tope — se supone que es su mercadería.
+   */
+  if (ctx.role === 'seller' && Number(input.discount) > 0) {
+    const [biz] = await tx
+      .select({ pct: schema.business.maxSellerDiscountPct })
+      .from(schema.business)
+      .where(eq(schema.business.id, ctx.businessId))
+      .limit(1);
+    const pct = biz?.pct ?? 0;
+    const maximo = (Number(input.subtotal) * pct) / 100;
+    // Medio centavo de holgura por el redondeo del porcentaje.
+    if (Number(input.discount) > maximo + 0.005) {
+      throw new Error(`DISCOUNT_LIMIT:${pct}`);
+    }
+  }
+
+  const [loc] = await tx
+    .select({ id: schema.location.id })
+    .from(schema.location)
+    .where(
+      and(
+        eq(schema.location.id, input.locationId),
+        eq(schema.location.businessId, ctx.businessId),
+      ),
+    )
+    .limit(1);
+  if (!loc) throw new Error('LOCATION_SCOPE');
+
+  const productIds = [...new Set(input.items.map((it) => it.productId).filter(Boolean))] as string[];
+  if (productIds.length > 0) {
+    const propios = await tx
+      .select({ id: schema.product.id })
+      .from(schema.product)
+      .where(
+        and(
+          inArray(schema.product.id, productIds),
+          eq(schema.product.businessId, ctx.businessId),
+        ),
+      );
+    if (propios.length !== productIds.length) throw new Error('PRODUCT_SCOPE');
   }
 
   const existing = await tx

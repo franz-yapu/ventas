@@ -32,6 +32,16 @@ export async function userRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
     }
+    // Un vendedor sin ubicación no puede vender NI ver nada: su alcance queda vacío.
+    // El formulario la marca "(opcional)" y arranca en "Sin asignar", así que sin esta
+    // comprobación el camino por defecto crea empleados con la app muerta.
+    if (parsed.data.role === 'seller' && !parsed.data.locationId) {
+      return reply.code(400).send({
+        data: null,
+        error: 'Un vendedor necesita una ubicación: sin ella no podría vender ni ver nada.',
+      });
+    }
+
     const businessId = req.authUser!.businessId;
     if (!(await permiteCrear(businessId, 'users', reply))) return reply;
     const passwordHash = await argon2.hash(parsed.data.password);
@@ -81,6 +91,29 @@ export async function userRoutes(app: FastifyInstance) {
         })
         .safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ data: null, error: 'Datos invalidos' });
+
+      // Mismo motivo que al crear: dejar a un vendedor sin ubicación lo deja sin app.
+      if (parsed.data.locationId === null) {
+        const [actual] = await withTenant(req.authUser!.businessId, (tx) =>
+          tx
+            .select({ role: schema.appUser.role })
+            .from(schema.appUser)
+            .where(
+              and(
+                eq(schema.appUser.id, id),
+                eq(schema.appUser.businessId, req.authUser!.businessId),
+              ),
+            )
+            .limit(1),
+        );
+        const rolFinal = parsed.data.role ?? actual?.role;
+        if (rolFinal === 'seller') {
+          return reply.code(400).send({
+            data: null,
+            error: 'Un vendedor necesita una ubicación: sin ella no podría vender ni ver nada.',
+          });
+        }
+      }
 
       const patch: Record<string, unknown> = { ...parsed.data };
       if (parsed.data.password) {

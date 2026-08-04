@@ -1,0 +1,125 @@
+import { db, schema } from '@ventafacil/db';
+import argon2 from 'argon2';
+import { eq } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { clearUserCache } from '../src/lib/sessions.js';
+import { clearAccessCache } from '../src/lib/subscription.js';
+import { auth, createTenant, makeApp, resetDb, type Tenant } from './helpers.js';
+
+/**
+ * Un usuario SIN ubicación asignada.
+ *
+ * Es el camino por defecto: en la pantalla de usuarios, "Ubicación" dice "(opcional)"
+ * y el desplegable arranca en "Sin asignar". Un dueño que da de alta a su primer
+ * empleado cae aquí sin darse cuenta.
+ *
+ * Antes, `viewScope()` devolvía el centinela `'__none__'`, que se comparaba contra una
+ * columna `uuid` y reventaba con 22P02: la app del vendedor respondía 500 en todas las
+ * pantallas, pero SIN mensaje — se veía como un negocio recién creado y vacío. El peor
+ * fallo posible: roto y silencioso.
+ */
+
+let app: FastifyInstance;
+let t: Tenant;
+let sinUbicacion: string;
+
+beforeAll(async () => {
+  app = await makeApp();
+  await resetDb();
+  t = await createTenant(app, 'sin-ubicacion');
+
+  await db.insert(schema.appUser).values({
+    businessId: t.businessId,
+    locationId: null, // <- lo que deja el formulario por defecto
+    name: 'Vendedor sin sucursal',
+    username: 'huerfano',
+    passwordHash: await argon2.hash('secreto123'),
+    role: 'seller',
+  });
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { username: 'huerfano', password: 'secreto123', business: 'sin-ubicacion' },
+  });
+  sinUbicacion = login.json().data.accessToken;
+  clearAccessCache();
+  clearUserCache();
+});
+
+afterAll(async () => {
+  await app.close();
+});
+
+describe('un usuario sin ubicación no rompe la aplicación', () => {
+  const pantallas = [
+    '/api/v1/products',
+    '/api/v1/sales',
+    '/api/v1/inventory',
+    '/api/v1/cash/registers',
+    '/api/v1/reports/summary',
+    '/api/v1/reports/cash-z',
+  ];
+
+  for (const url of pantallas) {
+    it(`${url} responde sin reventar`, async () => {
+      const res = await app.inject({ method: 'GET', url, headers: auth(sinUbicacion) });
+      expect(res.statusCode, `${url} devolvió ${res.body.slice(0, 120)}`).toBeLessThan(500);
+    });
+  }
+
+  it('no ve datos de su negocio: sin ubicación, no tiene alcance', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(sinUbicacion),
+    });
+    expect(res.statusCode).toBe(200);
+    // El negocio TIENE un producto; este usuario no debe verlo, pero con una lista
+    // vacía, no con un error.
+    expect(res.json().data.items ?? res.json().data).toHaveLength(0);
+  });
+});
+
+describe('crear un vendedor exige ubicación', () => {
+  it('sin ubicación se rechaza con un motivo entendible', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(t.adminToken),
+      payload: { name: 'Nuevo', username: 'nuevo1', password: 'secreto123', role: 'seller' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/ubicaci[oó]n/i);
+  });
+
+  it('con ubicación se crea', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(t.adminToken),
+      payload: {
+        name: 'Nuevo',
+        username: 'nuevo2',
+        password: 'secreto123',
+        role: 'seller',
+        locationId: t.locationId,
+      },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('quitarle la ubicación a un vendedor existente también se rechaza', async () => {
+    const [u] = await db
+      .select({ id: schema.appUser.id })
+      .from(schema.appUser)
+      .where(eq(schema.appUser.username, 'nuevo2'));
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${u!.id}`,
+      headers: auth(t.adminToken),
+      payload: { locationId: null },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

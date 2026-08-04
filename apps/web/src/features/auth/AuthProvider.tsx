@@ -1,6 +1,6 @@
 import { SUBDOMINIOS_RESERVADOS, type Role } from '@ventafacil/shared';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, tokens } from '@/lib/api';
+import { ApiError, api, tokens } from '@/lib/api';
 
 export interface AuthUser {
   sub: string;
@@ -101,7 +101,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api
       .get<AuthUser>('/auth/me')
       .then(setUser)
-      .catch(() => tokens.clear())
+      .catch((e) => {
+        // Sólo un 401 significa "tu sesión ya no vale". Si el servidor está caído o no
+        // hay red, borrar los tokens echaría al usuario al login por un hipo del
+        // servidor, y encima perdería su sesión offline.
+        if (e instanceof ApiError && e.status === 401) tokens.clear();
+      })
       .finally(() => setLoading(false));
   }, []);
 

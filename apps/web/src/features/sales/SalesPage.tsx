@@ -140,7 +140,7 @@ export function SalesPage() {
               <tfoot className="border-t-2 border-border font-semibold">
                 <tr>
                   <td className="p-3" colSpan={6}>
-                    Suma ({total} venta{total === 1 ? '' : 's'})
+                    Suma de completadas ({total} venta{total === 1 ? '' : 's'} en la lista)
                   </td>
                   <td className="p-3 text-right text-lg">{money(sumTotal ?? '0')}</td>
                   <td className="p-3" colSpan={2}></td>
@@ -191,7 +191,7 @@ export function SalesPage() {
         {items.length === 0 && <p className="py-8 text-center text-muted">Sin ventas</p>}
         {items.length > 0 && (
           <div className="p-2.5 text-center text-[15px] font-extrabold">
-            Total: {money(sumTotal ?? '0')} · {total} venta{total === 1 ? '' : 's'}
+            Completadas: {money(sumTotal ?? '0')} · {total} venta{total === 1 ? '' : 's'} en la lista
           </div>
         )}
       </div>

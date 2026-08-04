@@ -12,6 +12,8 @@ export interface BusinessConfig {
   productSchema: Array<{ key: string; label: string; type: string; required?: boolean }>;
   currency: string;
   taxRate: string;
+  /** Tope de descuento del vendedor, en % del subtotal. */
+  maxSellerDiscountPct: number;
 }
 
 const BusinessContext = createContext<BusinessConfig | null>(null);

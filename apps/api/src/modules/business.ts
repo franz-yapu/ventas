@@ -13,6 +13,7 @@ const businessSelect = {
   productSchema: schema.business.productSchemaJson,
   currency: schema.business.currency,
   taxRate: schema.business.taxRate,
+  maxSellerDiscountPct: schema.business.maxSellerDiscountPct,
 };
 
 // El logo se guarda como data URI (base64). Límite razonable para no inflar la BD/respuestas.
@@ -28,6 +29,8 @@ const updateBusinessSchema = z.object({
     .string()
     .regex(/^-?\d+(\.\d{1,4})?$/, 'Tasa inválida')
     .optional(),
+  /** Tope de descuento del vendedor, en % del subtotal. El admin no tiene tope. */
+  maxSellerDiscountPct: z.number().int().min(0).max(100).optional(),
 });
 
 export async function businessRoutes(app: FastifyInstance) {
@@ -69,6 +72,9 @@ export async function businessRoutes(app: FastifyInstance) {
       if (d.productSchema !== undefined) patch.productSchemaJson = d.productSchema;
       if (d.currency !== undefined) patch.currency = d.currency;
       if (d.taxRate !== undefined) patch.taxRate = d.taxRate;
+      if (d.maxSellerDiscountPct !== undefined) {
+        patch.maxSellerDiscountPct = d.maxSellerDiscountPct;
+      }
 
       const [after] = await db
         .update(schema.business)

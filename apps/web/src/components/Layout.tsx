@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { AvisoDeError } from '@/components/AvisoDeError';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { EmailVerifyBanner } from '@/features/auth/EmailVerifyBanner';
@@ -195,6 +196,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
           </div>
         </div>
+        <AvisoDeError />
         <SubscriptionBanner />
         <EmailVerifyBanner />
         {children}
