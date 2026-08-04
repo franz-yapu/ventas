@@ -38,6 +38,7 @@ const TENANT_TABLES = [
   'user_dashboard_config',
   'cash_register',
   'cash_movement',
+  'refresh_session',
 ] as const;
 
 /**

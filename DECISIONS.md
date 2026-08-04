@@ -172,3 +172,23 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   así que `/caja` no es sólo para admin. La lectura Z por día sí sigue siéndolo.
 - La pantalla enseña el **desglose entero**, no sólo el esperado, y la diferencia aparece
   **mientras se teclea lo contado**: es el momento en que todavía se puede volver a contar.
+
+## D15 — Revocación de sesiones (4 ago 2026)
+- El agujero real no era el tenant suspendido (a ése ya lo corta la puerta de suscripción
+  en cada petición), sino el **empleado dado de baja**: seguía trabajando hasta que
+  caducara su access token y **renovando sesión durante los 30 días** del refresh.
+- **Dos frenos, uno por tipo de token**: el refresh apunta a una fila de
+  `refresh_session` (revocable en el acto); el access lleva dentro
+  `app_user.token_version` y deja de valer en cuanto ese contador sube.
+- **Contador, no fecha de corte.** Con una fecha habría que compararla contra el `iat`
+  del token, que va en segundos enteros: un token emitido en el mismo segundo que la
+  revocación sobreviviría, y apretar la comparación dejaría fuera a quien vuelve a
+  entrar en ese mismo segundo. Un entero no tiene ese hueco.
+- **No se rota el refresh en cada uso.** La rotación con detección de reúso es más
+  estricta, pero en un POS con conexión mala un reintento tras un corte llega con el
+  token anterior y dejaría a la caja fuera en mitad de una venta.
+- Cambiar tu **propia** contraseña desde el perfil no cierra tus otras sesiones (ya estás
+  autenticado y tienes el botón al lado). El restablecimiento **por correo** sí las
+  cierra: ahí puede que no seas tú quien está en control.
+- Los tokens sin `tv` (los anteriores a este cambio) se tratan como versión 0, que es la
+  que tiene todo usuario sin revocaciones: desplegarlo no echa a nadie de golpe.

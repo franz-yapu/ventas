@@ -179,6 +179,17 @@ export const appUser = pgTable(
     passwordHash: text('password_hash').notNull(),
     role: roleEnum('role').notNull().default('seller'),
     isActive: boolean('is_active').notNull().default(true),
+    /**
+     * Versión de los tokens del usuario. Cada token firmado la lleva dentro; si no
+     * coincide con ésta, no vale. Subirla en uno echa a la persona de todas partes.
+     *
+     * Es un CONTADOR y no una fecha de corte a propósito. Con una fecha habría que
+     * compararla contra el `iat` del token, que va en segundos enteros: un token
+     * emitido en el mismo segundo que la revocación sobreviviría, y apretar la
+     * comparación dejaría fuera a quien vuelve a entrar en ese mismo segundo. Un
+     * entero no tiene ese hueco.
+     */
+    tokenVersion: integer('token_version').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -203,6 +214,40 @@ export const appUser = pgTable(
  * token antes de saber de qué negocio es. El control de acceso aquí es el token en sí
  * — 256 bits aleatorios no se adivinan.
  */
+/**
+ * Sesiones abiertas: una fila por refresh token vivo.
+ *
+ * El refresh token deja de ser autosuficiente y pasa a ser un puntero a esta tabla —
+ * si la fila no está, o está revocada, el token no vale aunque la firma sea correcta.
+ * Sin esto, dar de baja a un empleado no lo echaba: seguía renovando su sesión durante
+ * los 30 días de vida del refresh.
+ *
+ * NO se rota el refresh en cada uso, a propósito. La rotación con detección de reúso
+ * es más estricta, pero en un POS con conexión mala un reintento tras un corte llega
+ * con el token anterior y dejaría a la caja fuera en mitad de la venta. Aquí el token
+ * se mantiene y lo que se valida es la fila, que ya permite revocar en el acto.
+ */
+export const refreshSession = pgTable(
+  'refresh_session',
+  {
+    // Es el `jti` que viaja dentro del refresh token.
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => business.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => appUser.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /** Para que la persona reconozca sus sesiones al listarlas. */
+    userAgent: text('user_agent'),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('refresh_session_user_idx').on(t.userId, t.revokedAt)],
+);
+
 export const authTokenPurposeEnum = pgEnum('auth_token_purpose', [
   'password_reset',
   'email_verify',

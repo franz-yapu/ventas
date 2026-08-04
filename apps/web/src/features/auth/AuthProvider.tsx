@@ -36,7 +36,9 @@ interface AuthContextValue {
   loading: boolean;
   /** `business` = slug del negocio. Sólo hace falta si varios comparten la instalación. */
   login: (username: string, password: string, business?: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  /** Cierra la sesión en todos los dispositivos. Echa también de éste. */
+  logoutEverywhere: () => Promise<void>;
   updateProfile: (input: ProfileUpdate) => Promise<void>;
   /** Relee /auth/me. Se usa tras confirmar el correo para quitar el aviso. */
   refresh: () => Promise<void>;
@@ -130,7 +132,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Se avisa al servidor para que cierre la sesión de VERDAD. Antes esto sólo
+    // borraba los tokens del navegador: quien tuviera una copia del refresh seguía
+    // entrando durante 30 días. No se espera al resultado para vaciar la sesión local:
+    // si el servidor no responde, la persona igual quiere salir de esta pantalla.
+    const refresh = tokens.refresh;
+    tokens.clear();
+    setUser(null);
+    if (refresh) {
+      await api.post('/auth/logout', { refreshToken: refresh }).catch(() => undefined);
+    }
+  }, []);
+
+  /** Cierra la sesión en todos los dispositivos, incluido éste. */
+  const logoutEverywhere = useCallback(async () => {
+    await api.post('/auth/sessions/revoke-all');
     tokens.clear();
     setUser(null);
   }, []);
@@ -152,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateProfile, refresh }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, logoutEverywhere, updateProfile, refresh }}>
       {children}
     </AuthContext.Provider>
   );

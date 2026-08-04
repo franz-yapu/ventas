@@ -46,7 +46,12 @@ declare module 'fastify' {
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: AuthUser & { typ?: 'access' | 'refresh' };
-    user: AuthUser & { typ?: 'access' | 'refresh' };
+    /**
+     * `jti` = id de la fila de `refresh_session` (sólo en el refresh).
+     * `tv`  = versión de tokens del usuario; si no coincide con la de la base, el
+     *         token fue revocado (baja, cambio de contraseña, cerrar en todas partes).
+     */
+    payload: AuthUser & { typ?: 'access' | 'refresh'; jti?: string; tv?: number };
+    user: AuthUser & { typ?: 'access' | 'refresh'; jti?: string; tv?: number };
   }
 }

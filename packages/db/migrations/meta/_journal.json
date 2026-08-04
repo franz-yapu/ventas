@@ -78,6 +78,13 @@
       "when": 1785869357739,
       "tag": "0010_elite_lyja",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785872280701,
+      "tag": "0011_chief_the_call",
+      "breakpoints": true
     }
   ]
 }

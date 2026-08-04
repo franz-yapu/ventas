@@ -9,9 +9,21 @@ import {
 import argon2 from 'argon2';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { env } from '../env.js';
+import { env, ttlRefreshMs } from '../env.js';
 import { buscarToken, emitirToken, marcarUsado } from '../lib/auth-tokens.js';
 import { enviarCorreo, urlDelNegocio } from '../lib/mailer.js';
+import {
+  crearSesion,
+  limpiarSesionesViejas,
+  marcarUso,
+  revocarSesion,
+  revocarTodo,
+  sesionesDe,
+  sesionViva,
+  tokenSigueValiendo,
+  versionDeTokens,
+  vigenciaDelUsuario,
+} from '../lib/sessions.js';
 import type { AuthUser } from '../types.js';
 
 /**
@@ -104,10 +116,22 @@ export async function authRoutes(app: FastifyInstance) {
       role: user.role,
       name: user.name,
     };
-    const accessToken = app.jwt.sign({ ...claims, typ: 'access' });
+    // El refresh deja de ser autosuficiente: lleva el id de una fila de
+    // `refresh_session`, que es lo que permite cortarlo en el acto.
+    const jti = await crearSesion(
+      businessId,
+      user.id,
+      ttlRefreshMs(),
+      req.headers['user-agent'],
+    );
+    const tv = await versionDeTokens(businessId, user.id);
+    const accessToken = app.jwt.sign({ ...claims, typ: 'access', tv });
     const refreshToken = app.jwt.sign(
-      { ...claims, typ: 'refresh' },
+      { ...claims, typ: 'refresh', jti, tv },
       { expiresIn: env.jwtRefreshTtl },
+    );
+    limpiarSesionesViejas(businessId).catch((e) =>
+      app.log.warn({ err: e }, 'limpieza de sesiones'),
     );
 
     await app.audit({ authUser: claims } as never, {
@@ -129,8 +153,22 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(400).send({ data: null, error: 'Falta refreshToken' });
     }
     try {
-      const payload = app.jwt.verify<AuthUser & { typ?: string }>(body.refreshToken);
+      const payload = app.jwt.verify<
+        AuthUser & { typ?: string; jti?: string; tv?: number }
+      >(body.refreshToken);
       if (payload.typ !== 'refresh') throw new Error('token no es refresh');
+
+      // La firma ya no basta. Tienen que cumplirse las tres cosas:
+      //   1. La sesión existe y no está revocada ni caducada.
+      //   2. El usuario sigue activo (dar de baja a un empleado lo echa de verdad).
+      //   3. El token lleva la versión vigente (no lo revocó un cambio de contraseña).
+      if (!payload.jti) throw new Error('refresh sin sesión');
+      const sesion = await sesionViva(payload.businessId, payload.jti);
+      if (!sesion || sesion.userId !== payload.sub) throw new Error('sesión cerrada');
+
+      const vigencia = await vigenciaDelUsuario(payload.businessId, payload.sub);
+      if (!tokenSigueValiendo(vigencia, payload.tv)) throw new Error('usuario no vigente');
+
       const claims: AuthUser = {
         sub: payload.sub,
         businessId: payload.businessId,
@@ -139,11 +177,55 @@ export async function authRoutes(app: FastifyInstance) {
         role: payload.role,
         name: payload.name,
       };
-      const accessToken = app.jwt.sign({ ...claims, typ: 'access' });
+      const accessToken = app.jwt.sign({ ...claims, typ: 'access', tv: vigencia.tokenVersion });
+      marcarUso(payload.businessId, payload.jti).catch(() => undefined);
       return reply.send({ data: { accessToken }, error: null });
     } catch {
       return reply.code(401).send({ data: null, error: 'Refresh token invalido' });
     }
+  });
+
+  /**
+   * POST /auth/logout — cierra ESTA sesión de verdad, en el servidor.
+   *
+   * Antes, "cerrar sesión" sólo borraba los tokens del navegador: quien tuviera una
+   * copia del refresh seguía entrando. No requiere estar autenticado: si el access ya
+   * caducó, la persona igual quiere cerrar.
+   */
+  app.post('/auth/logout', async (req, reply) => {
+    const body = req.body as { refreshToken?: string } | undefined;
+    if (body?.refreshToken) {
+      try {
+        const payload = app.jwt.verify<AuthUser & { jti?: string }>(body.refreshToken);
+        if (payload.jti) await revocarSesion(payload.businessId, payload.jti);
+      } catch {
+        // Un token ilegible ya no sirve para nada: no hay nada que revocar.
+      }
+    }
+    return reply.send({ data: { ok: true }, error: null });
+  });
+
+  /** GET /auth/sessions — dispositivos con sesión abierta. */
+  app.get('/auth/sessions', { preHandler: app.requireAuth }, async (req, reply) => {
+    const filas = await sesionesDe(req.authUser!.businessId, req.authUser!.sub);
+    return reply.send({ data: filas, error: null });
+  });
+
+  /**
+   * POST /auth/sessions/revoke-all — cerrar sesión en todos los dispositivos.
+   *
+   * Es lo que se hace cuando sospechas que alguien más entró con tu cuenta, así que
+   * echa también a quien esté usando un access token en este momento.
+   */
+  app.post('/auth/sessions/revoke-all', { preHandler: app.requireAuth }, async (req, reply) => {
+    await revocarTodo(req.authUser!.businessId, req.authUser!.sub);
+    await app.audit(req, {
+      action: 'revoke_sessions',
+      entity: 'app_user',
+      entityId: req.authUser!.sub,
+      after: { self: true },
+    });
+    return reply.send({ data: { ok: true }, error: null });
   });
 
   // GET /auth/me
@@ -333,9 +415,9 @@ export async function authRoutes(app: FastifyInstance) {
     );
     await marcarUsado(fila.id);
 
-    // Ojo: las sesiones que ya estaban abiertas siguen valiendo hasta que caduque su
-    // token. Cerrarlas exige la lista de revocación de la #8; hasta entonces, cambiar
-    // la contraseña impide entrar de nuevo, pero no echa a quien ya está dentro.
+    // Cambiar la contraseña echa de TODAS partes. Si alguien entró con la contraseña
+    // vieja, dejar sus sesiones vivas haría inútil el restablecimiento.
+    await revocarTodo(fila.businessId, fila.userId);
     app.log.info({ userId: fila.userId }, 'contraseña restablecida por correo');
 
     return reply.send({

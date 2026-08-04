@@ -134,3 +134,16 @@ export const env = {
   resetTokenTtlMin: Number(process.env.RESET_TOKEN_TTL_MIN ?? 60),
   verifyTokenTtlHours: Number(process.env.VERIFY_TOKEN_TTL_HOURS ?? 72),
 };
+
+/**
+ * Convierte la duración del refresh ('30d', '12h', '90m') a milisegundos, para que la
+ * fila de la sesión caduque a la vez que el token que apunta a ella. Si divergieran, o
+ * bien el token seguiría valiendo sin fila, o bien la fila quedaría viva de adorno.
+ */
+export function ttlRefreshMs(): number {
+  const m = /^(\d+)\s*([smhd])$/.exec(env.jwtRefreshTtl.trim());
+  if (!m) return 30 * 86_400_000; // el valor por defecto: 30 días
+  const n = Number(m[1]);
+  const unidad = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'];
+  return n * unidad;
+}

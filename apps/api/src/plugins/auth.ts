@@ -2,6 +2,7 @@ import fastifyJwt from '@fastify/jwt';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { env } from '../env.js';
+import { tokenSigueValiendo, vigenciaDelUsuario } from '../lib/sessions.js';
 import { gateSubscription } from '../lib/subscription.js';
 import type { AuthUser } from '../types.js';
 
@@ -14,8 +15,20 @@ export const authPlugin = fp(async (app) => {
 
   app.decorate('requireAuth', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const payload = await req.jwtVerify<AuthUser & { typ?: 'access' | 'refresh' }>();
+      const payload = await req.jwtVerify<
+        AuthUser & { typ?: 'access' | 'refresh'; tv?: number }
+      >();
       if (payload.typ === 'refresh') throw new Error('refresh token no valido para acceso');
+
+      // El token puede estar bien firmado y aun así no valer: al usuario lo dieron de
+      // baja, o cambió su contraseña y se cortaron las sesiones. Se comprueba contra
+      // una caché de 60 s, así que echar a alguien surte efecto en menos de un minuto
+      // sin pagar una consulta por petición.
+      const vigencia = await vigenciaDelUsuario(payload.businessId, payload.sub);
+      if (!tokenSigueValiendo(vigencia, payload.tv)) {
+        throw new Error('sesión revocada o usuario inactivo');
+      }
+
       req.authUser = {
         sub: payload.sub,
         businessId: payload.businessId,

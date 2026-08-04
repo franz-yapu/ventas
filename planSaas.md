@@ -310,9 +310,40 @@ a mano en el resto del código.
 > Se muestran las bajas del mes, que es un número cierto, en vez de una tasa inventada.
 > Si el churn hace falta de verdad, primero hay que registrar los cambios de estado.
 
-## #8 · Revocación de sesiones 🟠
-- [ ] Refresh tokens con `jti` + lista de revocación. Hoy son stateless: si suspendes a un
-      tenant, sus tokens siguen válidos hasta que expiren.
+## #8 · Revocación de sesiones ✅ HECHO (4 ago 2026)
+El agujero real no era el tenant suspendido —a ése ya lo cortaba la puerta de la #5 en
+cada petición— sino el **empleado dado de baja**: seguía trabajando hasta que caducara
+su token y **renovando su sesión durante 30 días**. Y "cerrar sesión" sólo borraba los
+tokens del navegador de quien lo pulsaba.
+
+- [x] **Refresh con `jti`** apuntando a una fila de `refresh_session`. Si la fila no
+      está o está revocada, el token no vale aunque la firma sea correcta. Corte
+      inmediato.
+- [x] **Versión de tokens** (`app_user.token_version`) dentro de cada token firmado.
+      Subirla en uno invalida todos los que estaban en circulación, **sin guardar ni
+      uno solo de ellos**. Es un contador y no una fecha de corte a propósito: `iat` va
+      en segundos enteros, así que con una fecha un token emitido en el mismo segundo
+      que la revocación sobreviviría, y apretar la comparación dejaría fuera a quien
+      vuelve a entrar en ese mismo segundo.
+- [x] **Se revoca todo** al restablecer la contraseña por correo, al desactivar a un
+      usuario y al cambiarle la contraseña desde `/users`. Eso es lo que hace útil el
+      restablecimiento: si alguien entró con la contraseña vieja, se queda fuera.
+- [x] **`POST /auth/logout`** cierra la sesión en el servidor, y **"cerrar en todos los
+      dispositivos"** desde el perfil. `GET /auth/sessions` lista las abiertas.
+- [x] **16 tests** (`apps/api/test/sessions.test.ts`).
+
+> **Coste**: una consulta por usuario cada 60 s (caché en proceso, igual que la
+> suscripción). Echar a alguien surte efecto en menos de un minuto sobre un access
+> token que ya tenía en la mano, y es **inmediato** en cuanto intente renovar.
+
+> **No se rota el refresh en cada uso**, a propósito. La rotación con detección de
+> reúso es más estricta, pero en un POS con conexión mala un reintento tras un corte
+> llega con el token anterior y dejaría a la caja fuera en mitad de una venta. Lo que
+> se valida es la fila, que ya permite revocar en el acto.
+
+> Cambiar tu **propia** contraseña desde el perfil NO cierra tus otras sesiones: ya
+> estás autenticado y en control, y tienes el botón de cerrarlas todas al lado. El
+> restablecimiento **por correo** sí las cierra, porque ahí puede que no lo estés.
 
 ## #9 · Caja / arqueo ✅ HECHO (4 ago 2026)
 La tabla `cash_register` llevaba desde la Fase 5 sin un solo endpoint ni pantalla. Ya

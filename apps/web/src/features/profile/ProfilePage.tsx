@@ -1,4 +1,4 @@
-import { Eye, EyeOff, LogOut } from 'lucide-react';
+import { Eye, EyeOff, LogOut, ShieldOff } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ function PasswordField({
 }
 
 export function ProfilePage() {
-  const { user, updateProfile, logout } = useAuth();
+  const { user, updateProfile, logout, logoutEverywhere } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
@@ -50,6 +50,7 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmarTodos, setConfirmarTodos] = useState(false);
 
   const roleLabel = user?.role === 'admin' ? 'Administrador' : 'Vendedor';
   const wantsPasswordChange = newPassword.length > 0 || confirmPassword.length > 0 || currentPassword.length > 0;
@@ -87,9 +88,21 @@ export function ProfilePage() {
     }
   }
 
-  function onLogout() {
-    logout();
+  async function onLogout() {
+    await logout();
     navigate('/login', { replace: true });
+  }
+
+  // Cierra la sesión en todos los dispositivos. Es lo que se hace cuando sospechas que
+  // alguien más entró con tu cuenta, así que echa también de éste.
+  async function onLogoutEverywhere() {
+    if (!confirmarTodos) return setConfirmarTodos(true);
+    try {
+      await logoutEverywhere();
+      navigate('/login', { replace: true });
+    } catch {
+      setError('No se pudieron cerrar las sesiones');
+    }
   }
 
   return (
@@ -153,6 +166,20 @@ export function ProfilePage() {
       <Button variant="danger" onClick={onLogout}>
         <LogOut size={18} /> Cerrar sesión
       </Button>
+
+      <Card>
+        <CardContent className="flex flex-col gap-2 p-4">
+          <p className="text-sm font-semibold">Sesiones en otros dispositivos</p>
+          <p className="text-xs text-muted">
+            Si crees que alguien más entró con tu cuenta, ciérralas todas. Tendrás que
+            volver a entrar aquí también.
+          </p>
+          <Button variant="outline" onClick={onLogoutEverywhere}>
+            <ShieldOff size={16} />
+            {confirmarTodos ? 'Confirmar: cerrar en todos' : 'Cerrar sesión en todos los dispositivos'}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

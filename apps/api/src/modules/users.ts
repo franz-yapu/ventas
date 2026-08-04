@@ -4,6 +4,7 @@ import argon2 from 'argon2';
 import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { revocarTodo } from '../lib/sessions.js';
 import { permiteCrear } from '../lib/subscription.js';
 
 export async function userRoutes(app: FastifyInstance) {
@@ -103,6 +104,14 @@ export async function userRoutes(app: FastifyInstance) {
           }),
       );
       if (!row) return reply.code(404).send({ data: null, error: 'Usuario no encontrado' });
+
+      // Dar de baja a alguien, o cambiarle la contraseña desde aquí, tiene que echarlo
+      // de donde esté. Antes seguía trabajando hasta que caducara su token, y renovando
+      // sesión durante 30 días.
+      if (parsed.data.isActive === false || parsed.data.password) {
+        await revocarTodo(req.authUser!.businessId, id);
+      }
+
       await app.audit(req, { action: 'update', entity: 'app_user', entityId: id, after: row });
       return reply.send({ data: row, error: null });
     },
