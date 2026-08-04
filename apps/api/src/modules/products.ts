@@ -4,6 +4,7 @@ import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { canActOnLocation, viewScope } from '../lib/scope.js';
+import { permiteCrear } from '../lib/subscription.js';
 
 const listQuery = z.object({
   search: z.string().optional(),
@@ -238,6 +239,7 @@ export async function productRoutes(app: FastifyInstance) {
     const { locationId: bodyLocationId, initialStock, minStock, ...productData } = parsed.data;
     const locationId = bodyLocationId ?? user.locationId;
     if (!locationId) return reply.code(400).send({ data: null, error: 'Selecciona una ubicación' });
+    if (!(await permiteCrear(user.businessId, 'products', reply))) return reply;
     try {
       const row = await withTenant(user.businessId, async (tx) => {
         // La ubicacion se valida DENTRO de la transaccion: comparte el contexto de

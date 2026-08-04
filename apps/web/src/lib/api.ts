@@ -25,12 +25,16 @@ export const tokens = {
 interface ApiResponse<T> {
   data: T | null;
   error: string | null;
+  /** Motivo legible por código en los 402: `subscription_blocked`, `plan_limit`… */
+  code?: string;
 }
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Presente en los errores de plan, para distinguirlos del resto. */
+    public code?: string,
   ) {
     super(message);
   }
@@ -54,7 +58,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     | undefined;
 
   if (!res.ok) {
-    throw new ApiError(res.status, body?.error ?? 'Error de red');
+    throw new ApiError(res.status, body?.error ?? 'Error de red', body?.code);
   }
   return body!.data as T;
 }

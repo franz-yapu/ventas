@@ -19,6 +19,10 @@ declare module 'fastify' {
   interface FastifyInstance {
     requireAuth: import('fastify').preHandlerHookHandler;
     requireAdmin: import('fastify').preHandlerHookHandler;
+    /** Cierra la ruta si el plan del negocio no incluye la función. */
+    requireFeature: (
+      feature: import('@ventafacil/shared').PlanFeature,
+    ) => import('fastify').preHandlerHookHandler;
   }
 }
 

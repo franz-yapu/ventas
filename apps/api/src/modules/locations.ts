@@ -3,6 +3,7 @@ import { createLocationSchema } from '@ventafacil/shared';
 import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { permiteCrear } from '../lib/subscription.js';
 
 export async function locationRoutes(app: FastifyInstance) {
   app.get('/locations', { preHandler: app.requireAuth }, async (req, reply) => {
@@ -22,6 +23,7 @@ export async function locationRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const parsed = createLocationSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ data: null, error: 'Datos invalidos' });
+      if (!(await permiteCrear(req.authUser!.businessId, 'locations', reply))) return reply;
       const [row] = await withTenant(req.authUser!.businessId, (tx) =>
         tx
           .insert(schema.location)

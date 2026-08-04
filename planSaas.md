@@ -12,19 +12,21 @@
 
 ---
 
-## Estado a 3 de agosto de 2026
+## Estado a 4 de agosto de 2026
 
 | | Tarea | Estado |
 |---|---|---|
 | 🔴 | #1 Red de seguridad | 🟡 Hecho en local · falta el VPS |
 | 🔴 | #2 Endurecer producción | ✅ Hecho |
 | 🔴 | #3 Aislamiento (RLS) | 🟡 Código listo y probado · falta activarlo en el VPS |
-| 🟠 | #4 Definir el precio | ⬜ Pendiente — decisión de negocio |
-| 🟠 | #5–#10 Capa SaaS | ⬜ Pendiente (parte de #6 ya hecha) |
+| 🟠 | #4 Definir el precio | ✅ Por negocio, 3 planes + prueba de 14 días |
+| 🟠 | #5 Suscripciones | ✅ Hecho |
+| 🟠 | #6 Registro self-service | 🟡 Subdominio hecho · falta la pantalla de alta |
+| 🟠 | #7–#10 Capa SaaS | ⬜ Pendiente |
 | 🔵 | #11–#14 Escala | ⬜ Pendiente |
 
-**El bloque bloqueante está resuelto en todo lo que es programación.** 96 tests en verde
-(82 del API, 23 de la web) y `pnpm typecheck` limpio.
+**El bloque bloqueante está resuelto en todo lo que es programación.** 133 tests en verde
+(110 del API, 23 de la web) y `pnpm typecheck` limpio.
 
 ### Lo que necesita el VPS y no se puede adelantar en local
 
@@ -42,12 +44,17 @@ descubrimiento.
 
 ## 👉 Siguiente tarea
 
-El **bloque 1 está resuelto en local**: staging en Docker con RLS activo, backups con
-restauración probada, y los 13 módulos migrados. Lo único pendiente ahí necesita el VPS
-(crear el rol de aplicación, programar el backup diario y activar RLS en producción).
+El **bloque 1 está resuelto en local** y la **capa de cobro ya existe**: precio decidido
+(#4) y suscripciones funcionando con límites y feature gating (#5), probadas contra el
+staging en Docker con RLS activo.
 
-Para seguir en local, lo siguiente es la **#4 — definir el precio**, de la que depende
-todo el bloque 2.
+Lo siguiente en local es la **#7 — panel super-admin**, o terminar la **#6** (pantalla de
+registro y recuperación de contraseña). La #7 es la más urgente de las dos: hoy no hay
+forma de suspender ni reactivar a un tenant salvo tocando la base a mano, y eso es lo
+que hace falta en cuanto haya un cliente que no pague.
+
+**Recuerda**: cambiar precios o cupos es editar `packages/shared/src/plans.ts` y correr
+`pnpm --filter @ventafacil/db seed-plans`.
 
 ---
 
@@ -152,19 +159,61 @@ expuesta, y aunque alguien olvide un `where`, Postgres no entrega datos de otro 
 
 # 🟠 BLOQUE 2 — Necesario para vender
 
-## #4 · Definir el precio 🟠
-**Va primero de este bloque porque todo lo demás depende de él.** ¿Cobras por negocio,
-por sucursal o por usuario? La tabla de planes, los límites y el feature gating salen de
-esta decisión de negocio, no técnica.
+## #4 · Definir el precio ✅ DECIDIDO (4 ago 2026)
+**Se cobra POR NEGOCIO, con límites incluidos.** Ni por sucursal ni por usuario: un
+precio fijo al mes y un cupo de sucursales, usuarios y productos. Es lo más simple de
+explicar al cliente y lo más simple de cobrar, y no castiga que el negocio dé de alta a
+sus cajeros.
 
-## #5 · Suscripciones 🟠
-- [ ] Tablas `plan` y `subscription` (aditivas, no tocan el esquema existente).
-- [ ] Estados: `trial` · `activa` · `morosa` · `suspendida` · `cancelada`.
-- [ ] Límites por plan: nº de sucursales, usuarios, productos.
-- [ ] Hook de Fastify que rechaza al tenant suspendido (mensaje claro, no un 500).
-- [ ] Feature gating en el frontend según el plan.
-- [ ] **Migrar Llantas El Rápido** a un plan `propietario` ilimitado, sin downtime. Es tu
-      cliente real: el paso a SaaS tiene que ser invisible para él.
+Tres planes públicos más 14 días de prueba, y un plan interno que no se vende:
+
+| Plan | Precio/mes | Sucursales | Usuarios | Productos | Panel y bitácora |
+|---|---|---|---|---|---|
+| Básico | Bs. 149 | 1 | 3 | 500 | — |
+| Pro | Bs. 299 | 3 | 10 | 5.000 | ✓ |
+| Ilimitado | Bs. 599 | ∞ | ∞ | ∞ | ✓ |
+| *Propietario* (interno) | — | ∞ | ∞ | ∞ | ✓ |
+
+Los **precios y los cupos son una decisión de negocio y viven en un solo archivo**:
+`packages/shared/src/plans.ts` (`PLAN_CATALOG`). Cambiarlos es editar ese archivo y
+volver a correr `pnpm --filter @ventafacil/db seed-plans`; no hay ni un número escrito
+a mano en el resto del código.
+
+## #5 · Suscripciones ✅ HECHO (4 ago 2026)
+- [x] **Tablas `plan` y `subscription`** (migración `0007`, aditiva). Van **fuera de
+      RLS**, junto a `business`: son datos de la plataforma, y el panel super-admin
+      (#7) tiene que poder listar todos los tenants — con una política de tenant no
+      vería ninguno, porque RLS falla cerrado.
+- [x] **Estados**: `trial` · `active` · `past_due` (morosa) · `suspended` · `cancelled`.
+      La **prueba vencida no se guarda**: se deduce de `trial_ends_at`. Guardarla
+      obligaría a un cron, y un cron que no corre un día regala el servicio.
+- [x] **Límites por plan** en sucursales, usuarios y productos, comprobados en
+      `POST /locations`, `POST /users` y `POST /products`. Sólo cuenta lo **activo**:
+      desactivar libera cupo.
+- [x] **Puerta en `requireAuth`**, no ruta por ruta: así una ruta nueva queda cubierta
+      por el solo hecho de pedir autenticación. Responde **402**, no 401 — el frontend
+      refresca el token ante un 401 y cierra sesión si falla, y echar al usuario al
+      login no es la forma de decirle "renueva tu plan".
+- [x] **Feature gating en los dos lados**: `requireFeature()` en el API y menús
+      ocultos en la app. El frontend es comodía; quien decide es el servidor.
+- [x] **Migrado Llantas El Rápido** al plan `propietario` (ilimitado, sin fecha de
+      corte, precio 0). `seed-plans` da de alta a todo negocio que aún no tenga
+      suscripción, así que la migración es un paso del arranque del contenedor y no
+      un script que haya que acordarse de correr. Verificado en staging.
+- [x] **28 tests** (`apps/api/test/subscription.test.ts`) y prueba end-to-end contra el
+      staging en Docker con RLS activo.
+
+> **Dos decisiones que protegen al cliente que ya paga**, y que conviene no revertir
+> sin pensarlo:
+>
+> 1. **La morosidad NO corta el servicio.** Un pago atrasado le costaría al negocio su
+>    día de caja. Se avisa con un banner y se persigue el cobro (#11).
+> 2. **Un negocio sin fila de suscripción opera sin restricciones.** Es la decisión
+>    menos mala: un fallo en la capa de cobro no puede dejar una tienda sin vender.
+>    `seed-plans` hace que en la práctica no ocurra.
+>
+> La **lectura Z tampoco se limita nunca**: es el cierre de caja, parte del POS, no un
+> extra de plan superior.
 
 ## #6 · Registro self-service 🟠
 - [x] **Identificación del negocio por subdominio** ✅ (3 ago 2026). Cada cliente entra

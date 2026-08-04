@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env, originPermitido } from './env.js';
 import { authPlugin } from './plugins/auth.js';
 import { auditPlugin } from './plugins/audit.js';
+import { subscriptionPlugin } from './plugins/subscription.js';
 import { analyticsRoutes } from './modules/analytics.js';
 import { auditRoutes } from './modules/audit.js';
 import { authRoutes } from './modules/auth.js';
@@ -18,6 +19,7 @@ import { locationRoutes } from './modules/locations.js';
 import { productRoutes } from './modules/products.js';
 import { reportRoutes } from './modules/reports.js';
 import { saleRoutes } from './modules/sales.js';
+import { subscriptionRoutes } from './modules/subscription.js';
 import { userRoutes } from './modules/users.js';
 import './types.js';
 
@@ -67,12 +69,14 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
 
   await app.register(authPlugin);
   await app.register(auditPlugin);
+  await app.register(subscriptionPlugin);
 
   app.get('/health', async () => ({ data: { status: 'ok' }, error: null }));
 
   await app.register(
     async (api) => {
       await api.register(authRoutes);
+      await api.register(subscriptionRoutes);
       await api.register(businessRoutes);
       await api.register(categoryRoutes);
       await api.register(productRoutes);

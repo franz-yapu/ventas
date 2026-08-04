@@ -4,6 +4,7 @@ import argon2 from 'argon2';
 import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { permiteCrear } from '../lib/subscription.js';
 
 export async function userRoutes(app: FastifyInstance) {
   // Lista usuarios (sin exponer el hash de contraseña).
@@ -31,6 +32,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.code(400).send({ data: null, error: parsed.error.issues[0]?.message });
     }
     const businessId = req.authUser!.businessId;
+    if (!(await permiteCrear(businessId, 'users', reply))) return reply;
     const passwordHash = await argon2.hash(parsed.data.password);
     try {
       const [row] = await withTenant(businessId, (tx) =>

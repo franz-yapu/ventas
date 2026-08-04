@@ -81,3 +81,24 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 ## D7 — Dinero y zona horaria
 - Dinero: `numeric` (DECIMAL) en BD, nunca float. Formato `Bs.` con 2 decimales.
 - Guardar UTC, mostrar `America/La_Paz`.
+
+## D11 — Modelo de cobro del SaaS (4 ago 2026)
+- Se cobra **por negocio, con límites incluidos**, no por sucursal ni por usuario.
+  Cobrar por usuario castiga justo el uso que se quiere fomentar (dar de alta a cada
+  cajero); cobrar por sucursal obliga a recontar en cada ciclo y complica las altas y
+  bajas a mitad de mes.
+- Catálogo en UN solo sitio: `packages/shared/src/plans.ts`. La tabla `plan` se siembra
+  desde ahí (`seed-plans`), así que no hay precios ni cupos escritos a mano en el código.
+- `plan` y `subscription` quedan **fuera de RLS**, junto a `business`: son datos de
+  plataforma y el panel super-admin tiene que poder verlos todos. RLS falla cerrado, así
+  que con una política de tenant no vería ninguno.
+- La **prueba vencida no se persiste**: se deduce de `trial_ends_at` al consultarla.
+  Guardarla exigiría un cron, y un cron que no corre un día regala el servicio.
+- **Dos reglas que protegen al cliente que ya paga**, deliberadas:
+  1. La morosidad (`past_due`) NO corta el servicio; sólo avisa. Un POS que deja de
+     vender por un pago atrasado le cuesta al negocio su día de caja.
+  2. Un negocio SIN fila de suscripción opera sin restricciones. Un fallo en la capa de
+     cobro no puede dejar una tienda sin vender. `seed-plans` hace que no ocurra.
+- El bloqueo responde **402**, no 401: el cliente web refresca el token ante un 401 y
+  cierra sesión si falla, y echar al usuario al login no es forma de decirle que renueve.
+- La **lectura Z nunca depende del plan**: es el cierre de caja, parte del POS.

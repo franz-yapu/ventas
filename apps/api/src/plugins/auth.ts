@@ -2,6 +2,7 @@ import fastifyJwt from '@fastify/jwt';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { env } from '../env.js';
+import { gateSubscription } from '../lib/subscription.js';
 import type { AuthUser } from '../types.js';
 
 /** Registra JWT y expone requireAuth / requireAdmin. */
@@ -26,6 +27,10 @@ export const authPlugin = fp(async (app) => {
     } catch {
       return reply.code(401).send({ data: null, error: 'No autorizado' });
     }
+
+    // La suscripción se comprueba aquí y no en cada ruta: así una ruta nueva queda
+    // cubierta por el solo hecho de pedir autenticación, sin acordarse de nada.
+    return gateSubscription(req, reply);
   });
 
   app.decorate('requireAdmin', async (req: FastifyRequest, reply: FastifyReply) => {

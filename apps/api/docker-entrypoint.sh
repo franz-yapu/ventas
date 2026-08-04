@@ -25,6 +25,11 @@ DATABASE_URL="$OWNER_URL" pnpm --filter @ventafacil/db exec tsx src/migrate.ts
 echo "[deploy] Sembrando datos iniciales si la base está vacía…"
 DATABASE_URL="$OWNER_URL" pnpm --filter @ventafacil/db exec tsx src/seed-if-empty.ts
 
+# Catálogo de planes + suscripción de los negocios anteriores al SaaS. Idempotente:
+# actualiza precios y límites en cada despliegue y no toca las suscripciones que ya están.
+echo "[deploy] Actualizando el catálogo de planes…"
+DATABASE_URL="$OWNER_URL" pnpm --filter @ventafacil/db exec tsx src/seed-plans.ts
+
 if [ "${ENABLE_RLS}" = "1" ]; then
   echo "[deploy] Creando el rol de aplicación y activando RLS…"
   DATABASE_URL="$OWNER_URL" pnpm --filter @ventafacil/db exec tsx src/setup-rls.ts --apply

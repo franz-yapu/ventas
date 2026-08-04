@@ -1,3 +1,4 @@
+import type { PlanFeature } from '@ventafacil/shared';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
@@ -22,16 +23,33 @@ const ReportsPage = lazy(() =>
 );
 import { SalesPage } from '@/features/sales/SalesPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
+import { SubscriptionBlocked } from '@/features/subscription/SubscriptionBlocked';
+import { SubscriptionPage } from '@/features/subscription/SubscriptionPage';
+import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { UsersPage } from '@/features/users/UsersPage';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 
-function Protected({ children, adminOnly }: { children: ReactNode; adminOnly?: boolean }) {
+function Protected({
+  children,
+  adminOnly,
+  feature,
+}: {
+  children: ReactNode;
+  adminOnly?: boolean;
+  /** Pantalla incluida sólo en ciertos planes. El API la cierra igual (requireFeature). */
+  feature?: PlanFeature;
+}) {
   const { user, loading } = useAuth();
+  const { sub, has } = useSubscription();
   if (loading) {
     return <div className="flex min-h-full items-center justify-center text-muted">Cargando…</div>;
   }
   if (!user) return <Navigate to="/login" replace />;
+  // El bloqueo por suscripción sustituye a la app entera: con el POS a medias, quien
+  // está en caja no entendería por qué dejó de poder cobrar.
+  if (sub?.blocked && sub.status) return <SubscriptionBlocked status={sub.status} />;
   if (adminOnly && user.role !== 'admin') return <Navigate to="/" replace />;
+  if (feature && !has(feature)) return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -48,7 +66,7 @@ export function App() {
         <Route
           path="/panel"
           element={
-            <Protected adminOnly>
+            <Protected adminOnly feature="reportes_avanzados">
               <Suspense fallback={<div className="p-6 text-muted">Cargando panel…</div>}>
                 <DashboardPage />
               </Suspense>
@@ -69,8 +87,16 @@ export function App() {
         <Route path="/administracion" element={<Protected adminOnly><AdminPage /></Protected>} />
         <Route path="/ubicaciones" element={<Protected adminOnly><LocationsPage /></Protected>} />
         <Route path="/usuarios" element={<Protected adminOnly><UsersPage /></Protected>} />
-        <Route path="/actividad" element={<Protected adminOnly><AuditPage /></Protected>} />
+        <Route
+          path="/actividad"
+          element={
+            <Protected adminOnly feature="auditoria">
+              <AuditPage />
+            </Protected>
+          }
+        />
         <Route path="/configuracion" element={<Protected adminOnly><SettingsPage /></Protected>} />
+        <Route path="/suscripcion" element={<Protected adminOnly><SubscriptionPage /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ThemeProvider>

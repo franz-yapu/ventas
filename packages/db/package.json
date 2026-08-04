@@ -13,6 +13,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx --env-file=../../.env src/migrate.ts",
     "seed": "tsx --env-file=../../.env src/seed.ts",
+    "seed-plans": "tsx --env-file=../../.env src/seed-plans.ts",
     "new-tenant": "tsx --env-file=../../.env src/new-tenant.ts",
     "setup-rls": "tsx --env-file=../../.env src/setup-rls.ts",
     "studio": "drizzle-kit studio",

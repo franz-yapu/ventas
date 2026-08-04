@@ -9,7 +9,11 @@ const TZ = 'America/La_Paz';
 
 export async function analyticsRoutes(app: FastifyInstance) {
   // GET /reports/dashboard — datos de todos los widgets en una sola llamada (eficiente en KVM1).
-  app.get('/reports/dashboard', { preHandler: app.requireAuth }, async (req, reply) => {
+  // El panel de análisis es de plan Pro en adelante. La lectura Z de más abajo NO se
+  // limita: es el cierre de caja, parte del POS, y ningún plan puede quedarse sin él.
+  const soloConAnalitica = [app.requireAuth, app.requireFeature('reportes_avanzados')];
+
+  app.get('/reports/dashboard', { preHandler: soloConAnalitica }, async (req, reply) => {
     const businessId = req.authUser!.businessId;
     // Alcance por ubicación: la sucursal ve sólo la suya; la central ve todas.
     // Fragmentos SQL según el alias que use cada consulta (vacío = sin restricción).

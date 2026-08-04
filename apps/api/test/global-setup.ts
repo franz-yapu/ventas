@@ -1,3 +1,4 @@
+import { PLAN_CATALOG } from '@ventafacil/shared';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
@@ -46,6 +47,20 @@ export async function setup() {
   const owner = postgres(OWNER_DB_URL, { max: 1 });
   try {
     await migrate(drizzle(owner), { migrationsFolder: '../../packages/db/migrations' });
+
+    // Catálogo de planes: el mismo que siembra `seed-plans` en producción, para que
+    // los límites que se prueban aquí sean los que se van a cobrar. `plan` no lleva
+    // business_id, así que `resetDb()` (que borra los negocios) no se la lleva.
+    for (const p of PLAN_CATALOG) {
+      await owner`
+        insert into plan (code, name, description, price_monthly, currency,
+                          max_locations, max_users, max_products, features, is_public, sort_order)
+        values (${p.code}, ${p.name}, ${p.description}, ${p.priceMonthly}, ${p.currency},
+                ${p.maxLocations}, ${p.maxUsers}, ${p.maxProducts},
+                ${JSON.stringify(p.features)}::jsonb, ${p.isPublic}, ${p.sortOrder})
+        on conflict (code) do nothing
+      `;
+    }
 
     // El rol con el que corre la app NO puede ser superusuario ni dueño de las tablas:
     // Postgres ignora las políticas de RLS para ambos. Este rol reproduce en los tests

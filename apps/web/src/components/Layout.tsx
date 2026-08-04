@@ -2,6 +2,7 @@ import {
   BarChart3,
   Boxes,
   Coins,
+  CreditCard,
   History,
   LayoutDashboard,
   LogOut,
@@ -17,6 +18,8 @@ import { useEffect, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { SubscriptionBanner } from '@/features/subscription/SubscriptionBanner';
+import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { startSyncWorker } from '@/offline/sync';
 import { useBusiness } from '@/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
@@ -29,9 +32,9 @@ const TOP_NAV = [
   { to: '/inventario', label: 'Inventario', icon: Boxes, adminOnly: false },
 ];
 
-// Grupo "Análisis" (sólo admin).
+// Grupo "Análisis" (sólo admin). `feature` = entra sólo en los planes que la incluyen.
 const ANALYTICS_NAV = [
-  { to: '/panel', label: 'Panel', icon: LayoutDashboard },
+  { to: '/panel', label: 'Panel', icon: LayoutDashboard, feature: 'reportes_avanzados' as const },
   { to: '/reportes', label: 'Reportes', icon: BarChart3 },
   { to: '/caja', label: 'Caja', icon: Coins },
 ];
@@ -40,8 +43,9 @@ const ANALYTICS_NAV = [
 const ADMIN_CHILDREN = [
   { to: '/ubicaciones', label: 'Ubicaciones', icon: MapPin },
   { to: '/usuarios', label: 'Usuarios', icon: Users },
-  { to: '/actividad', label: 'Actividad', icon: History },
+  { to: '/actividad', label: 'Actividad', icon: History, feature: 'auditoria' as const },
   { to: '/configuracion', label: 'Config', icon: Settings },
+  { to: '/suscripcion', label: 'Mi plan', icon: CreditCard },
 ];
 
 const SECTION_LABEL = 'px-3 pb-[7px] pt-4 text-[10px] font-bold uppercase tracking-[0.09em] text-muted/60';
@@ -65,9 +69,14 @@ const bottomItem = (isActive: boolean) =>
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const business = useBusiness();
+  const { has } = useSubscription();
   const routerLoc = useLocation();
   const isAdmin = user?.role === 'admin';
   const items = TOP_NAV.filter((n) => !n.adminOnly || isAdmin);
+  // Las entradas de un plan superior no se muestran. Es cortesía, no seguridad: quien
+  // las cierra de verdad es el API.
+  const analytics = ANALYTICS_NAV.filter((n) => !n.feature || has(n.feature));
+  const adminChildren = ADMIN_CHILDREN.filter((n) => !n.feature || has(n.feature));
   const roleLabel = isAdmin ? 'Administrador' : 'Vendedor';
   const userInitial = (user?.name ?? 'U').charAt(0).toUpperCase();
   // En móvil, cualquier pantalla de administración/análisis marca activa la entrada "Admin".
@@ -101,14 +110,14 @@ export function Layout({ children }: { children: ReactNode }) {
           {isAdmin && (
             <>
               <div className={SECTION_LABEL}>Análisis</div>
-              {ANALYTICS_NAV.map((n) => (
+              {analytics.map((n) => (
                 <NavLink key={n.to} to={n.to} className={({ isActive }) => sideItem(isActive)}>
                   <n.icon size={19} className="shrink-0" />
                   <span className="truncate">{n.label}</span>
                 </NavLink>
               ))}
               <div className={SECTION_LABEL}>Administración</div>
-              {ADMIN_CHILDREN.map((c) => (
+              {adminChildren.map((c) => (
                 <NavLink key={c.to} to={c.to} className={({ isActive }) => sideItem(isActive)}>
                   <c.icon size={19} className="shrink-0" />
                   <span className="truncate">{c.label}</span>
@@ -181,6 +190,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
           </div>
         </div>
+        <SubscriptionBanner />
         {children}
       </main>
     </div>

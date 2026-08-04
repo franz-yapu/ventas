@@ -17,6 +17,13 @@ export const roleEnum = pgEnum('role', ['admin', 'seller']);
 export const saleStatusEnum = pgEnum('sale_status', ['completed', 'cancelled']);
 // 'credit' = fiado (queda como cuenta por cobrar del cliente).
 export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'card', 'qr', 'transfer', 'credit']);
+export const subscriptionStatusEnum = pgEnum('subscription_status', [
+  'trial',
+  'active',
+  'past_due',
+  'suspended',
+  'cancelled',
+]);
 
 // ── Negocio (tenant) ───────────────────────────────────────────
 export const business = pgTable('business', {
@@ -45,6 +52,52 @@ export const businessCounter = pgTable('business_counter', {
   lastReceiptNumber: integer('last_receipt_number').notNull().default(0),
   // Correlativo para generar el SKU automático de productos (cuando no se indica uno).
   lastSku: integer('last_sku').notNull().default(0),
+});
+
+// ── Capa SaaS: planes y suscripciones ──────────────────────────
+//
+// Van FUERA de RLS, junto a `business`, porque son datos de la PLATAFORMA y no del
+// negocio: el panel super-admin (#7) tiene que poder listar todos los tenants, y RLS
+// falla cerrado — con una política de tenant no vería ninguno. Desde el lado del
+// negocio siempre se consultan con `where business_id = <el del token>`, igual que
+// `business`.
+
+/** Catálogo de planes. Se siembra desde `PLAN_CATALOG` (@ventafacil/shared). */
+export const plan = pgTable('plan', {
+  // El código es la clave: es estable, legible en la base y viaja al frontend.
+  code: text('code').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  priceMonthly: numeric('price_monthly', { precision: 12, scale: 2 }).notNull().default('0'),
+  currency: text('currency').notNull().default('BOB'),
+  // null = sin límite.
+  maxLocations: integer('max_locations'),
+  maxUsers: integer('max_users'),
+  maxProducts: integer('max_products'),
+  features: jsonb('features').notNull().default([]),
+  // Los no públicos no se ofrecen en el alta (ej. el plan interno `propietario`).
+  isPublic: boolean('is_public').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+
+/** Una suscripción por negocio: se cobra por negocio, no por sucursal ni por usuario. */
+export const subscription = pgTable('subscription', {
+  businessId: uuid('business_id')
+    .primaryKey()
+    .references(() => business.id, { onDelete: 'cascade' }),
+  planCode: text('plan_code')
+    .notNull()
+    .references(() => plan.code, { onDelete: 'restrict' }),
+  status: subscriptionStatusEnum('status').notNull().default('trial'),
+  // Fin de la prueba gratis. Que la prueba haya vencido se DEDUCE de esta fecha; no
+  // hay un cron que marque estados, porque un cron que no corre regala el servicio.
+  trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+  // Hasta cuándo está pagado el periodo en curso (lo usará el cobro automático, #11).
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  suspendedReason: text('suspended_reason'),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const location = pgTable(

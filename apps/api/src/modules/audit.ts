@@ -18,7 +18,11 @@ const listQuery = z.object({
 
 export async function auditRoutes(app: FastifyInstance) {
   // GET /audit — registro de actividad (solo admin), con filtros y diff before/after.
-  app.get('/audit', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
+  // La bitácora de actividad es de plan Pro en adelante. Se sigue REGISTRANDO siempre
+  // (la auditoría no es opcional); lo que depende del plan es poder consultarla.
+  const verBitacora = [app.requireAuth, app.requireAdmin, app.requireFeature('auditoria')];
+
+  app.get('/audit', { preHandler: verBitacora }, async (req, reply) => {
     const parsed = listQuery.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
     const q = parsed.data;
