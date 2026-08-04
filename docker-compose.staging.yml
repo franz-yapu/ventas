@@ -72,6 +72,9 @@ services:
       API_PORT: 3000
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      # Llave propia del panel de plataforma, distinta de la de los negocios. El API no
+      # arranca sin ella en producción, ni si es igual a JWT_ACCESS_SECRET.
+      JWT_PLATFORM_SECRET: ${JWT_PLATFORM_SECRET}
       DB_POOL_MAX: ${DB_POOL_MAX:-8}
       # Obligatoria en producción: el API no arranca sin ella.
       CORS_ORIGINS: ${CORS_ORIGINS}

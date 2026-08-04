@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env, originPermitido } from './env.js';
 import { authPlugin } from './plugins/auth.js';
 import { auditPlugin } from './plugins/audit.js';
+import { platformAuthPlugin } from './plugins/platform-auth.js';
 import { subscriptionPlugin } from './plugins/subscription.js';
 import { analyticsRoutes } from './modules/analytics.js';
 import { auditRoutes } from './modules/audit.js';
@@ -16,6 +17,7 @@ import { businessRoutes } from './modules/business.js';
 import { categoryRoutes } from './modules/categories.js';
 import { customerRoutes } from './modules/customers.js';
 import { locationRoutes } from './modules/locations.js';
+import { platformRoutes } from './modules/platform.js';
 import { productRoutes } from './modules/products.js';
 import { reportRoutes } from './modules/reports.js';
 import { saleRoutes } from './modules/sales.js';
@@ -68,6 +70,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   });
 
   await app.register(authPlugin);
+  await app.register(platformAuthPlugin);
   await app.register(auditPlugin);
   await app.register(subscriptionPlugin);
 
@@ -76,6 +79,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(
     async (api) => {
       await api.register(authRoutes);
+      await api.register(platformRoutes);
       await api.register(subscriptionRoutes);
       await api.register(businessRoutes);
       await api.register(categoryRoutes);

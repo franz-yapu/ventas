@@ -62,6 +62,23 @@ export function slugDesdeHostname(
   return prefijo;
 }
 
+/**
+ * ¿Se entró por el subdominio del panel de plataforma (`admin.midominio.com`)?
+ *
+ * `admin` ya estaba en SUBDOMINIOS_RESERVADOS, así que ningún negocio puede llamarse
+ * así y quedarse con esa dirección.
+ */
+export function esSubdominioPlataforma(
+  hostname: string,
+  dominioBase: string | undefined,
+): boolean {
+  if (!dominioBase) return false;
+  const host = hostname.toLowerCase();
+  const base = dominioBase.toLowerCase();
+  if (!host.endsWith(`.${base}`)) return false;
+  return host.slice(0, -(base.length + 1)) === 'admin';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);

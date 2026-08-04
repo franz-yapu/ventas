@@ -22,11 +22,12 @@
 | 🟠 | #4 Definir el precio | ✅ Por negocio, 3 planes + prueba de 14 días |
 | 🟠 | #5 Suscripciones | ✅ Hecho |
 | 🟠 | #6 Registro self-service | 🟡 Subdominio hecho · falta la pantalla de alta |
-| 🟠 | #7–#10 Capa SaaS | ⬜ Pendiente |
+| 🟠 | #7 Panel super-admin | ✅ Hecho |
+| 🟠 | #8–#10 Capa SaaS | ⬜ Pendiente |
 | 🔵 | #11–#14 Escala | ⬜ Pendiente |
 
-**El bloque bloqueante está resuelto en todo lo que es programación.** 133 tests en verde
-(110 del API, 23 de la web) y `pnpm typecheck` limpio.
+**El bloque bloqueante está resuelto en todo lo que es programación.** 162 tests en verde
+(134 del API, 28 de la web) y `pnpm typecheck` limpio.
 
 ### Lo que necesita el VPS y no se puede adelantar en local
 
@@ -34,8 +35,14 @@
 2. Crear el rol de aplicación y apuntar `DATABASE_URL` a él.
 3. Activar RLS (`ENABLE_RLS=1`), después de un backup con restauración probada.
 4. Definir `CORS_ORIGINS` — **el API no arranca sin ella** en producción.
-5. DNS comodín `*.vertexweb.lat` y certificado SSL comodín (Let's Encrypt por DNS-01).
-6. Rotar los secretos JWT si alguna vez se usaron los de `.env.example`.
+5. Definir **`JWT_PLATFORM_SECRET`** — **el API tampoco arranca sin ella**, ni si es
+   igual a `JWT_ACCESS_SECRET`. Firma los tokens del panel, que ve y administra todos
+   los negocios: `openssl rand -base64 48`.
+6. DNS comodín `*.vertexweb.lat` y certificado SSL comodín (Let's Encrypt por DNS-01).
+   El comodín ya cubre `admin.vertexweb.lat`, que es el panel.
+7. Crear el primer operador de plataforma:
+   `pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña>`.
+8. Rotar los secretos JWT si alguna vez se usaron los de `.env.example`.
 
 Todo esto ya está ensayado en el staging local, así que en el servidor es ejecución, no
 descubrimiento.
@@ -44,14 +51,19 @@ descubrimiento.
 
 ## 👉 Siguiente tarea
 
-El **bloque 1 está resuelto en local** y la **capa de cobro ya existe**: precio decidido
-(#4) y suscripciones funcionando con límites y feature gating (#5), probadas contra el
-staging en Docker con RLS activo.
+El **bloque 1 está resuelto en local**, la **capa de cobro existe** (#4 precio, #5
+suscripciones) y ya se puede **operar la cartera de clientes** (#7 panel), todo probado
+contra el staging en Docker con RLS activo.
 
-Lo siguiente en local es la **#7 — panel super-admin**, o terminar la **#6** (pantalla de
-registro y recuperación de contraseña). La #7 es la más urgente de las dos: hoy no hay
-forma de suspender ni reactivar a un tenant salvo tocando la base a mano, y eso es lo
-que hace falta en cuanto haya un cliente que no pague.
+Lo siguiente es la **#6 — registro self-service**: pantalla de alta (la lógica ya está
+en `new-tenant.ts`), elegir subdominio y validar que esté libre, y sobre todo
+**recuperación de contraseña**, que hoy no existe y con clientes desconocidos es
+obligatoria — no puedes resetear a mano a cien negocios. Necesita decidir el proveedor
+de email transaccional (Resend / SES).
+
+Alternativa si prefieres cerrar la seguridad antes de abrir el registro: la **#8**
+(revocación de sesiones). Hoy suspendes a un tenant y el corte es inmediato porque el
+API lo comprueba en cada petición, pero sus refresh tokens siguen siendo válidos.
 
 **Recuerda**: cambiar precios o cupos es editar `packages/shared/src/plans.ts` y correr
 `pnpm --filter @ventafacil/db seed-plans`.
@@ -233,12 +245,42 @@ a mano en el resto del código.
 - [ ] Email transaccional (Resend / SES) para verificación y recuperación.
 - [ ] Wizard inicial: sucursal, primeros productos, tema y textos.
 
-## #7 · Panel super-admin 🟠
-- [ ] Operador de plataforma **por encima** de `admin`. Hoy el enum es `['admin','seller']`
-      y nada ve más de un negocio. Recomendado: tabla `platform_admin` aparte, para que
-      ningún token de tenant pueda escalar a verlo todo.
-- [ ] Listado de tenants, estado de suscripción, suspender/reactivar.
-- [ ] Métricas: MRR, tenants activos, churn.
+## #7 · Panel super-admin ✅ HECHO (4 ago 2026)
+- [x] **Tabla `platform_admin` aparte**, no un rol más del enum. Si el super-admin
+      fuera `role: 'platform'`, cualquier fallo que dejara escribir el rol de un
+      usuario convertiría a un cliente en operador de la plataforma.
+- [x] **Dos llaves, no una comprobación**: los tokens del panel se firman con
+      `JWT_PLATFORM_SECRET`, distinto del de los negocios. Un token de tenant no
+      verifica contra él ni aunque le metieran el claim correcto, y el del panel no
+      sirve para entrar al POS de nadie. **El API no arranca en producción sin esa
+      variable, ni si es igual a `JWT_ACCESS_SECRET`.**
+- [x] **Listado de tenants** con plan, estado y buscador; **detalle** con el uso real
+      (usuarios, sucursales, productos, ventas, última venta); **suspender, reactivar
+      y cambiar de plan**. El corte y la reactivación son **inmediatos**: la acción
+      invalida la caché de suscripción en vez de esperar a que caduque. Importa —
+      cuando reactivas a alguien que acaba de pagar, está mirando la pantalla.
+- [x] **Métricas**: MRR de lo que está al día y, aparte, **MRR en riesgo** (morosas).
+      Sumarlo todo daría un número más bonito y menos cierto. Más negocios por estado,
+      y altas y bajas del mes.
+- [x] **Bitácora propia** (`platform_audit_log`): quién suspendió a quién y cuándo.
+      No se mezcla con el `audit_log` del negocio, que es suyo y que él ve.
+- [x] **Panel en el subdominio `admin.`** (`admin.vertexweb.lat` → `/plataforma`), con
+      su propia pantalla de entrada y su token guardado con otra clave: dar soporte con
+      la sesión de un cliente abierta en la misma pestaña no pisa ninguna de las dos.
+- [x] **24 tests** (`apps/api/test/platform.test.ts`), incluida la frontera en las dos
+      direcciones, más prueba end-to-end contra el staging y revisión de la UI en
+      navegador.
+
+> El operador se crea por CLI en el servidor:
+> `pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña>`
+> (mínimo 12 caracteres). No hay pantalla de registro ni recuperación: quien puede
+> crear operadores puede ver y suspender a todos los clientes, así que hace falta
+> acceso al servidor. El mismo comando cambia la contraseña si te quedas fuera.
+
+> **Lo que NO tiene, a sabiendas:** *churn* en porcentaje. Calcularlo exige saber
+> cuántos estaban activos al empezar el mes, y hoy no se guarda histórico de estados.
+> Se muestran las bajas del mes, que es un número cierto, en vez de una tasa inventada.
+> Si el churn hace falta de verdad, primero hay que registrar los cambios de estado.
 
 ## #8 · Revocación de sesiones 🟠
 - [ ] Refresh tokens con `jti` + lista de revocación. Hoy son stateless: si suspendes a un

@@ -15,6 +15,7 @@
     "seed": "tsx --env-file=../../.env src/seed.ts",
     "seed-plans": "tsx --env-file=../../.env src/seed-plans.ts",
     "new-tenant": "tsx --env-file=../../.env src/new-tenant.ts",
+    "new-platform-admin": "tsx --env-file=../../.env src/new-platform-admin.ts",
     "setup-rls": "tsx --env-file=../../.env src/setup-rls.ts",
     "studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"

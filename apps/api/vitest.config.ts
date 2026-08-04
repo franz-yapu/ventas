@@ -27,6 +27,9 @@ export default defineConfig({
       NODE_ENV: 'test',
       JWT_ACCESS_SECRET: 'test_access_secret',
       JWT_REFRESH_SECRET: 'test_refresh_secret',
+      // Distinto de los anteriores a propósito: los tests comprueban que un token de
+      // negocio no vale para el panel de plataforma ni al revés.
+      JWT_PLATFORM_SECRET: 'test_platform_secret_distinto',
     },
     // Las suites comparten la misma BD: en serie para que no se pisen.
     fileParallelism: false,

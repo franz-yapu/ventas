@@ -53,13 +53,48 @@ function resolveCorsOrigins(): string[] | true {
   return list.length > 0 ? list : true;
 }
 
+/**
+ * Secreto con el que se firman los tokens del panel de plataforma.
+ *
+ * Es DISTINTO del de los negocios a propósito: un token de tenant firmado con el
+ * secreto de siempre no puede verificarse como token de plataforma, pase lo que pase
+ * con sus claims. Son dos llaves para dos puertas.
+ *
+ * En producción es obligatorio y el API no arranca sin él. Un valor por defecto aquí
+ * no sería "inseguro por descuido" como en otros sitios: sería una llave maestra
+ * pública para ver y suspender los datos de TODOS los clientes.
+ */
+function resolvePlatformSecret(): string {
+  const secret = process.env.JWT_PLATFORM_SECRET;
+  if (nodeEnv === 'production') {
+    if (!secret) {
+      throw new Error(
+        'JWT_PLATFORM_SECRET es obligatoria en produccion: firma los tokens del panel ' +
+          'de plataforma, que ve y administra TODOS los negocios. Genera uno largo y ' +
+          'aleatorio (openssl rand -base64 48) y no lo reutilices de JWT_ACCESS_SECRET.',
+      );
+    }
+    if (secret === process.env.JWT_ACCESS_SECRET) {
+      throw new Error(
+        'JWT_PLATFORM_SECRET no puede ser igual a JWT_ACCESS_SECRET: si comparten llave, ' +
+          'la separacion entre el token de un negocio y el de la plataforma desaparece.',
+      );
+    }
+    return secret;
+  }
+  return secret ?? 'dev_platform_secret_cambiame';
+}
+
 export const env = {
   port: Number(process.env.API_PORT ?? 3000),
   nodeEnv,
   jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev_access_secret_cambiame',
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? 'dev_refresh_secret_cambiame',
+  jwtPlatformSecret: resolvePlatformSecret(),
   jwtAccessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
   jwtRefreshTtl: process.env.JWT_REFRESH_TTL ?? '30d',
+  /** Sesión del panel más corta: es la cuenta con más alcance de todo el sistema. */
+  jwtPlatformTtl: process.env.JWT_PLATFORM_TTL ?? '8h',
   corsOrigins: resolveCorsOrigins(),
 
   /**

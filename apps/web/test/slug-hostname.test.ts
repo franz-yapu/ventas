@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { slugDesdeHostname } from '@/features/auth/AuthProvider';
+import { esSubdominioPlataforma, slugDesdeHostname } from '@/features/auth/AuthProvider';
 
 /**
  * Deducir el negocio del subdominio es lo que evita pedirle a nadie un "código de
@@ -50,5 +50,34 @@ describe('slugDesdeHostname', () => {
       'llantas-el-rapido',
     );
     expect(slugDesdeHostname('localhost', 'localhost')).toBeUndefined();
+  });
+});
+
+describe('esSubdominioPlataforma', () => {
+  const D = 'ventafacil.com';
+
+  it('reconoce el subdominio del panel', () => {
+    expect(esSubdominioPlataforma('admin.ventafacil.com', D)).toBe(true);
+    expect(esSubdominioPlataforma('ADMIN.VentaFacil.com', D)).toBe(true);
+  });
+
+  it('el subdominio de un negocio no es el panel', () => {
+    expect(esSubdominioPlataforma('llantas.ventafacil.com', D)).toBe(false);
+    expect(esSubdominioPlataforma('ventafacil.com', D)).toBe(false);
+  });
+
+  it('no se cuela un dominio ajeno que termine parecido', () => {
+    // El riesgo real: que `admin.ventafacil.com.malo.io` pasara por el panel.
+    expect(esSubdominioPlataforma('admin.ventafacil.com.malo.io', D)).toBe(false);
+    expect(esSubdominioPlataforma('adminventafacil.com', D)).toBe(false);
+    expect(esSubdominioPlataforma('otro.admin.ventafacil.com', D)).toBe(false);
+  });
+
+  it('sin dominio base configurado no deduce nada', () => {
+    expect(esSubdominioPlataforma('admin.ventafacil.com', undefined)).toBe(false);
+  });
+
+  it('funciona con *.localhost, que es como se prueba en local', () => {
+    expect(esSubdominioPlataforma('admin.localhost', 'localhost')).toBe(true);
   });
 });

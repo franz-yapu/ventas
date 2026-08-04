@@ -11,10 +11,24 @@ export interface AuthUser {
   name: string;
 }
 
+/**
+ * Identidad del operador de plataforma. Deliberadamente NO tiene `businessId`: el
+ * panel no actúa "como" un negocio, mira por encima de todos.
+ */
+export interface PlatformUser {
+  sub: string; // platformAdmin.id
+  email: string;
+  name: string;
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     /** Poblado por el hook de auth. */
     authUser?: AuthUser;
+    /** Poblado por requirePlatform. Nunca coexiste con authUser. */
+    platformUser?: PlatformUser;
+    /** Verificador del JWT de plataforma (namespace `platform` de @fastify/jwt). */
+    platformVerify: <T = unknown>() => Promise<T>;
   }
   interface FastifyInstance {
     requireAuth: import('fastify').preHandlerHookHandler;
@@ -23,6 +37,10 @@ declare module 'fastify' {
     requireFeature: (
       feature: import('@ventafacil/shared').PlanFeature,
     ) => import('fastify').preHandlerHookHandler;
+    /** Exige un token del panel de plataforma (secreto propio, ver platform-auth.ts). */
+    requirePlatform: import('fastify').preHandlerHookHandler;
+    /** Firmador del JWT de plataforma (namespace `platform` de @fastify/jwt). */
+    platformJwt: { sign: (payload: object) => string };
   }
 }
 

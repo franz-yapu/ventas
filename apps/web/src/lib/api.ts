@@ -40,6 +40,18 @@ export class ApiError extends Error {
   }
 }
 
+/** Desenvuelve `{ data, error }` o lanza ApiError. Común a los dos clientes. */
+async function desenvolver<T>(res: Response): Promise<T> {
+  const body = (await res.json().catch(() => ({ data: null, error: res.statusText }))) as
+    | ApiResponse<T>
+    | undefined;
+
+  if (!res.ok) {
+    throw new ApiError(res.status, body?.error ?? 'Error de red', body?.code);
+  }
+  return body!.data as T;
+}
+
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
@@ -53,14 +65,7 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     if (refreshed) return request<T>(path, init, false);
   }
 
-  const body = (await res.json().catch(() => ({ data: null, error: res.statusText }))) as
-    | ApiResponse<T>
-    | undefined;
-
-  if (!res.ok) {
-    throw new ApiError(res.status, body?.error ?? 'Error de red', body?.code);
-  }
-  return body!.data as T;
+  return desenvolver<T>(res);
 }
 
 async function tryRefresh(): Promise<boolean> {
@@ -81,6 +86,42 @@ async function tryRefresh(): Promise<boolean> {
     return false;
   }
 }
+
+// ── Cliente del panel de plataforma ────────────────────────────
+//
+// Token propio, guardado con OTRA clave: si el operador entra al panel desde el mismo
+// navegador donde tiene abierta la sesión de un negocio (cosa habitual mientras das
+// soporte), ninguna de las dos pisa a la otra. Sin refresh: la sesión del panel dura
+// 8 h y se vuelve a entrar; es la cuenta con más alcance y menos piezas que revocar.
+const PLATFORM_KEY = 'vf_platform_access';
+
+export const platformTokens = {
+  get access() {
+    return localStorage.getItem(PLATFORM_KEY);
+  },
+  set(access: string) {
+    localStorage.setItem(PLATFORM_KEY, access);
+  },
+  clear() {
+    localStorage.removeItem(PLATFORM_KEY);
+  },
+};
+
+async function platformRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set('Content-Type', 'application/json');
+  if (platformTokens.access) headers.set('Authorization', `Bearer ${platformTokens.access}`);
+  const res = await fetch(BASE + path, { ...init, headers });
+  return desenvolver<T>(res);
+}
+
+export const platformApi = {
+  get: <T>(path: string) => platformRequest<T>(path),
+  post: <T>(path: string, body?: unknown) =>
+    platformRequest<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown) =>
+    platformRequest<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+};
 
 export const api = {
   get: <T>(path: string) => request<T>(path),

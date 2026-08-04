@@ -100,6 +100,50 @@ export const subscription = pgTable('subscription', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Operador de la plataforma: tú, por encima de cualquier negocio.
+ *
+ * Es una tabla APARTE de `app_user` a propósito. Si el super-admin fuera un rol más
+ * del enum (`admin | seller | platform`), cualquier fallo que dejara escribir el rol
+ * de un usuario — un PATCH mal validado, un seed descuidado — convertiría a un cliente
+ * en operador de la plataforma. Con dos tablas y dos secretos de firma distintos, un
+ * token de negocio no puede llegar a ser un token de plataforma ni por error.
+ */
+export const platformAdmin = pgTable('platform_admin', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Bitácora de lo que hace la plataforma SOBRE un negocio (suspender, reactivar,
+ * cambiar de plan).
+ *
+ * No se mezcla con `audit_log`: aquélla es del negocio, está bajo RLS y el cliente la
+ * ve en su pantalla de Actividad. Suspender a alguien es un acto tuyo, no suyo, y
+ * necesita quedar registrado aunque el negocio ya no pueda entrar.
+ */
+export const platformAuditLog = pgTable(
+  'platform_audit_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    adminId: uuid('admin_id').references(() => platformAdmin.id, { onDelete: 'set null' }),
+    // Se conserva el nombre por si el admin se borra: la bitácora no debe quedar muda.
+    adminEmail: text('admin_email').notNull(),
+    action: text('action').notNull(),
+    businessId: uuid('business_id').references(() => business.id, { onDelete: 'set null' }),
+    businessName: text('business_name'),
+    beforeJson: jsonb('before_json'),
+    afterJson: jsonb('after_json'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('platform_audit_date_idx').on(t.createdAt)],
+);
+
 export const location = pgTable(
   'location',
   {

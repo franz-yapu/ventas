@@ -4,7 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { AdminPage } from '@/features/admin/AdminPage';
 import { AuditPage } from '@/features/audit/AuditPage';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { esSubdominioPlataforma, useAuth } from '@/features/auth/AuthProvider';
 import { CashZPage } from '@/features/cash/CashZPage';
 import { InventoryPage } from '@/features/inventory/InventoryPage';
 import { LoginPage } from '@/features/auth/LoginPage';
@@ -14,6 +14,9 @@ const DashboardPage = lazy(() =>
   import('@/features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
 import { LocationsPage } from '@/features/locations/LocationsPage';
+import { usePlatformAuth } from '@/features/platform/PlatformAuthProvider';
+import { PlatformLoginPage } from '@/features/platform/PlatformLoginPage';
+import { PlatformPage } from '@/features/platform/PlatformPage';
 import { PosPage } from '@/features/pos/PosPage';
 import { ProductsPage } from '@/features/products/ProductsPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
@@ -53,12 +56,42 @@ function Protected({
   return <Layout>{children}</Layout>;
 }
 
+/**
+ * El panel de plataforma vive fuera del mundo de los negocios: sin Layout, sin tema
+ * del cliente y sin `Protected` (ése mira la sesión de un negocio, que aquí no existe).
+ */
+function PlatformArea() {
+  const { admin, loading } = usePlatformAuth();
+  if (loading) {
+    return <div className="flex min-h-full items-center justify-center text-muted">Cargando…</div>;
+  }
+  return admin ? <PlatformPage /> : <PlatformLoginPage />;
+}
+
 export function App() {
+  // Quien entra por `admin.midominio.com` va al panel, no al POS de ningún negocio.
+  const enPlataforma = esSubdominioPlataforma(
+    window.location.hostname,
+    import.meta.env.VITE_APP_DOMAIN,
+  );
+
   return (
     <ThemeProvider>
       <Routes>
+        <Route path="/plataforma" element={<PlatformArea />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<Protected><PosPage /></Protected>} />
+        <Route
+          path="/"
+          element={
+            enPlataforma ? (
+              <Navigate to="/plataforma" replace />
+            ) : (
+              <Protected>
+                <PosPage />
+              </Protected>
+            )
+          }
+        />
         <Route path="/ventas" element={<Protected><SalesPage /></Protected>} />
         <Route path="/productos" element={<Protected><ProductsPage /></Protected>} />
         <Route path="/inventario" element={<Protected><InventoryPage /></Protected>} />

@@ -102,3 +102,23 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 - El bloqueo responde **402**, no 401: el cliente web refresca el token ante un 401 y
   cierra sesión si falla, y echar al usuario al login no es forma de decirle que renueve.
 - La **lectura Z nunca depende del plan**: es el cierre de caja, parte del POS.
+
+## D12 — Panel de plataforma: dos identidades, dos llaves (4 ago 2026)
+- El super-admin es una **tabla aparte** (`platform_admin`), no un valor más del enum
+  `role`. Si fuera un rol, cualquier fallo que dejara escribir el rol de un usuario —un
+  PATCH mal validado, un seed descuidado— ascendería a un cliente a operador de la
+  plataforma.
+- Los tokens del panel se firman con **`JWT_PLATFORM_SECRET`, distinto** del de los
+  negocios (segunda instancia de @fastify/jwt con namespace). Así el aislamiento no
+  depende de comprobar un claim, sino de no tener la llave. El API **se niega a arrancar
+  en producción** si falta o si coincide con `JWT_ACCESS_SECRET`.
+- El panel **no tiene puerta trasera a los datos de los clientes**: para contar lo de un
+  tenant entra a su contexto con `withTenant` y con `where business_id` explícito. No
+  existe una consulta que lea las tablas de todos los negocios a la vez, y es a propósito.
+- **Bitácora separada** (`platform_audit_log`): lo que la plataforma hace SOBRE un
+  negocio es un acto tuyo, no suyo, y debe quedar registrado aunque él ya no pueda entrar.
+  El `audit_log` del negocio sigue siendo sólo suyo.
+- El panel vive en el **subdominio `admin.`** con token guardado bajo otra clave de
+  localStorage: dar soporte con la sesión de un cliente abierta no pisa ninguna de las dos.
+- **Sin churn en porcentaje.** Calcularlo exige histórico de estados, que no se guarda.
+  Se muestran las bajas del mes, que es un número cierto, en lugar de una tasa inventada.
