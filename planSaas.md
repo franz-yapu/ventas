@@ -21,13 +21,13 @@
 | 🔴 | #3 Aislamiento (RLS) | 🟡 Código listo y probado · falta activarlo en el VPS |
 | 🟠 | #4 Definir el precio | ✅ Por negocio, 3 planes + prueba de 14 días |
 | 🟠 | #5 Suscripciones | ✅ Hecho |
-| 🟠 | #6 Registro self-service | 🟡 Subdominio hecho · falta la pantalla de alta |
+| 🟠 | #6 Registro self-service | ✅ Hecho (falta sólo el wizard, aplazado) |
 | 🟠 | #7 Panel super-admin | ✅ Hecho |
 | 🟠 | #8–#10 Capa SaaS | ⬜ Pendiente |
 | 🔵 | #11–#14 Escala | ⬜ Pendiente |
 
-**El bloque bloqueante está resuelto en todo lo que es programación.** 162 tests en verde
-(134 del API, 28 de la web) y `pnpm typecheck` limpio.
+**El bloque bloqueante está resuelto en todo lo que es programación.** 183 tests en verde
+(155 del API, 28 de la web) y `pnpm typecheck` limpio.
 
 ### Lo que necesita el VPS y no se puede adelantar en local
 
@@ -51,19 +51,23 @@ descubrimiento.
 
 ## 👉 Siguiente tarea
 
-El **bloque 1 está resuelto en local**, la **capa de cobro existe** (#4 precio, #5
-suscripciones) y ya se puede **operar la cartera de clientes** (#7 panel), todo probado
-contra el staging en Docker con RLS activo.
+**Un negocio desconocido ya puede registrarse solo, usar el POS y ser cobrado.** Están
+hechas la #4 (precio), la #5 (suscripciones), la #7 (panel) y la #6 (registro y
+recuperación de contraseña), todas probadas contra el staging en Docker con RLS activo.
 
-Lo siguiente es la **#6 — registro self-service**: pantalla de alta (la lógica ya está
-en `new-tenant.ts`), elegir subdominio y validar que esté libre, y sobre todo
-**recuperación de contraseña**, que hoy no existe y con clientes desconocidos es
-obligatoria — no puedes resetear a mano a cien negocios. Necesita decidir el proveedor
-de email transaccional (Resend / SES).
+Lo que falta para **abrir el registro al público** son dos cosas, en este orden:
 
-Alternativa si prefieres cerrar la seguridad antes de abrir el registro: la **#8**
-(revocación de sesiones). Hoy suspendes a un tenant y el corte es inmediato porque el
-API lo comprueba en cada petición, pero sus refresh tokens siguen siendo válidos.
+1. **#10 — legales**: términos de servicio y política de privacidad. Van antes del
+   primer registro público, no después.
+2. **#8 — revocación de sesiones**: hoy suspendes a un tenant y el corte es inmediato
+   porque el API lo comprueba en cada petición, pero sus refresh tokens siguen siendo
+   válidos, y restablecer la contraseña no echa a quien ya está dentro.
+
+Y en el servidor: `RESEND_API_KEY`, `EMAIL_FROM` y `APP_URL_TEMPLATE`. **Sin la clave de
+Resend el alta funciona pero nadie recibe el correo.**
+
+La **#9 (caja/arqueo)** sigue siendo la brecha de producto más visible para vender, y no
+depende de nada de lo anterior.
 
 **Recuerda**: cambiar precios o cupos es editar `packages/shared/src/plans.ts` y correr
 `pnpm --filter @ventafacil/db seed-plans`.
@@ -235,15 +239,40 @@ a mano en el resto del código.
       por cliente los orígenes no se pueden enumerar. Probado en staging con dos negocios.
       **Exige en producción: DNS comodín y certificado SSL comodín** (Let's Encrypt por
       DNS-01). Detalles en `STAGING.md`.
-- [ ] Pantalla de registro que haga lo que hoy hace `new-tenant.ts` (negocio + sucursal +
-      admin + contador de recibos). La lógica ya está escrita, sólo falta exponerla.
-      Ojo al orden: insertar en `business` (fuera de RLS) y seguir con `withTenant`,
-      porque el registro correrá con el rol de la app y no con el superusuario.
-- [ ] Elegir el subdominio en el alta y validar que esté libre.
-- [ ] **Recuperación de contraseña** — hoy no existe. Con clientes desconocidos es
-      obligatorio: no puedes resetear a mano a cien negocios.
-- [ ] Email transaccional (Resend / SES) para verificación y recuperación.
-- [ ] Wizard inicial: sucursal, primeros productos, tema y textos.
+- [x] **Pantalla de registro** ✅ (4 ago 2026). El alta vive en `crearNegocio()`
+      (`packages/db/src/create-tenant.ts`) y la usan **el CLI y la web**: dos
+      implementaciones acabarían divergiendo y creando negocios a medias — sin
+      contador de recibos, por ejemplo, con lo que la primera venta fallaría. Hay un
+      test que comprueba justamente eso.
+- [x] **Subdominio elegido en el alta**, propuesto desde el nombre y comprobado
+      mientras se teclea. Las reglas (formato, longitud, reservados) están en
+      `packages/shared/src/subdomain.ts`, una sola lista para la web y el API.
+      Las mayúsculas se normalizan en vez de rechazarse: un hostname no las distingue.
+- [x] **Recuperación de contraseña** ✅. Enlace por correo, válido 1 hora y de un solo
+      uso. Pedir uno nuevo invalida el anterior. En la base se guarda **sólo el sha256**
+      del token: quien leyera la tabla no podría entrar en ninguna cuenta.
+- [x] **Email transaccional**: Resend por HTTP (sin dependencias nuevas). **Sin
+      `RESEND_API_KEY` los correos se escriben en el log del API** con el enlace
+      entero — así el flujo se prueba en local y en staging sin cuenta, y sin mandarle
+      nada por error a nadie.
+- [x] **Verificación del correo**, que **no bloquea**: el negocio vende desde el primer
+      minuto y ve un aviso hasta confirmar. Verificar es lo que permite recuperar la
+      contraseña, y eso es lo que dice el aviso — no un "confirma tu correo" a secas.
+- [x] **Correo editable en el perfil**, para que los usuarios anteriores al registro
+      (que no tienen ninguno) dejen de depender de que se lo resetees a mano.
+      Cambiarlo lo deja sin verificar.
+- [ ] Wizard inicial: sucursal, primeros productos, tema y textos. *(Aplazado a
+      propósito: el alta ya deja el negocio listo para vender, y el wizard se diseña
+      mejor cuando se vea dónde se atasca de verdad un cliente nuevo.)*
+
+> **Antes de abrir el registro al público** hace falta la #10 (términos y privacidad) y
+> definir `RESEND_API_KEY`, `EMAIL_FROM` y `APP_URL_TEMPLATE` en el servidor. Sin la
+> clave de Resend el alta funciona pero **nadie recibe el correo**: los enlaces se
+> quedan en el log.
+
+> **Topes**: registro y "olvidé mi contraseña" están limitados a 5 por hora y por IP.
+> Lo que se frena ahí no es la fuerza bruta, es usar el endpoint como máquina gratis
+> para inundar el buzón de alguien o llenar la base de negocios basura.
 
 ## #7 · Panel super-admin ✅ HECHO (4 ago 2026)
 - [x] **Tabla `platform_admin` aparte**, no un rol más del enum. Si el super-admin

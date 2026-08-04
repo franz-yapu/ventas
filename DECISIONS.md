@@ -122,3 +122,29 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   localStorage: dar soporte con la sesión de un cliente abierta no pisa ninguna de las dos.
 - **Sin churn en porcentaje.** Calcularlo exige histórico de estados, que no se guarda.
   Se muestran las bajas del mes, que es un número cierto, en lugar de una tasa inventada.
+
+## D13 — Registro self-service y recuperación de contraseña (4 ago 2026)
+- **Una sola función de alta** (`crearNegocio`, en `packages/db/src/create-tenant.ts`)
+  para el CLI y para la pantalla de registro. Dos implementaciones acabarían divergiendo
+  y creando negocios a medias: sin contador de recibos, por ejemplo, la primera venta
+  falla. Hay un test que comprueba pieza por pieza que el negocio queda listo para vender.
+- **Verificar el correo NO bloquea el uso.** El negocio vende desde el primer minuto y
+  ve un aviso hasta confirmar. Exigirlo antes de entrar pierde altas por cada correo que
+  tarda o cae en spam; el incentivo honesto es que sin correo confirmado no se puede
+  recuperar la contraseña, y eso es literalmente lo que dice el aviso.
+- **Del token sólo se guarda el sha256.** Lo que viaja al correo son 256 bits aleatorios;
+  la tabla `auth_token` guarda su hash. Quien leyera esa tabla no entraría en ninguna
+  cuenta. sha256 pelado y no argon2 a propósito: no hay contraseña que adivinar, así que
+  un hash lento no compraría seguridad y sí retrasaría cada petición.
+- `auth_token` va **fuera de RLS**: el enlace se abre sin sesión y hay que encontrar el
+  token antes de saber de qué negocio es. El control de acceso ahí es el token mismo.
+- **Un enlace, un uso.** Pedir uno nuevo invalida el anterior; si no, un correo viejo
+  interceptado seguiría abriendo la cuenta días después.
+- **"Olvidé mi contraseña" responde siempre igual**, exista el correo o no. Distinguirlo
+  convertiría el endpoint en una forma de averiguar quién tiene cuenta en cada negocio.
+- **Correo transaccional con dos drivers**: Resend por HTTP (sin dependencias) y, si no
+  hay `RESEND_API_KEY`, escritura en el log. Así el flujo entero se prueba en local y en
+  staging sin cuenta ni dominio verificado, y sin enviarle nada por error a nadie.
+  Un fallo al enviar NO rompe el alta: la persona no puede arreglarlo reintentando.
+- **Topes de 5/hora por IP** en registro y recuperación. Lo que se frena no es la fuerza
+  bruta, es usar el endpoint como máquina gratis de correo.

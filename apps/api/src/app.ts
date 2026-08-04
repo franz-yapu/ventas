@@ -19,6 +19,7 @@ import { customerRoutes } from './modules/customers.js';
 import { locationRoutes } from './modules/locations.js';
 import { platformRoutes } from './modules/platform.js';
 import { productRoutes } from './modules/products.js';
+import { registerRoutes } from './modules/register.js';
 import { reportRoutes } from './modules/reports.js';
 import { saleRoutes } from './modules/sales.js';
 import { subscriptionRoutes } from './modules/subscription.js';
@@ -79,6 +80,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(
     async (api) => {
       await api.register(authRoutes);
+      await api.register(registerRoutes);
       await api.register(platformRoutes);
       await api.register(subscriptionRoutes);
       await api.register(businessRoutes);

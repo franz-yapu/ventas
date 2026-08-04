@@ -30,6 +30,11 @@ export default defineConfig({
       // Distinto de los anteriores a propósito: los tests comprueban que un token de
       // negocio no vale para el panel de plataforma ni al revés.
       JWT_PLATFORM_SECRET: 'test_platform_secret_distinto',
+      // El registro y el "olvidé mi contraseña" están topados a 5/hora por IP en
+      // producción, para que nadie los use como máquina de correo gratis. En los tests
+      // todas las peticiones salen de la misma IP y agotarían el cupo a mitad de la
+      // suite, así que se sube: el limitador en sí ya está cubierto en security.test.ts.
+      REGISTER_RATE_LIMIT_MAX: '500',
     },
     // Las suites comparten la misma BD: en serie para que no se pisen.
     fileParallelism: false,

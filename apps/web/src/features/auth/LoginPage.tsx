@@ -1,6 +1,6 @@
 import { Eye, EyeOff } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -95,6 +95,12 @@ export function LoginPage() {
             <Button type="submit" size="lg" disabled={busy} className="mt-1">
               {busy ? 'Ingresando…' : 'Ingresar'}
             </Button>
+            <Link
+              to="/olvide-contrasena"
+              className="text-center text-[13px] text-muted hover:text-fg"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
           </form>
         </CardContent>
       </Card>

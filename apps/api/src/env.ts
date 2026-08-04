@@ -112,4 +112,25 @@ export const env = {
    */
   loginRateLimitMax: Number(process.env.LOGIN_RATE_LIMIT_MAX ?? 20),
   loginRateLimitWindow: process.env.LOGIN_RATE_LIMIT_WINDOW ?? '5 minutes',
+
+  /**
+   * Registro y recuperación de contraseña: mucho más estrictos que el login.
+   *
+   * No es fuerza bruta lo que se frena aquí, sino el abuso del CORREO: sin tope, el
+   * endpoint de "olvidé mi contraseña" es una máquina gratis para inundar el buzón de
+   * cualquiera, y el de registro, para llenar la base de negocios basura.
+   */
+  registerRateLimitMax: Number(process.env.REGISTER_RATE_LIMIT_MAX ?? 5),
+  registerRateLimitWindow: process.env.REGISTER_RATE_LIMIT_WINDOW ?? '1 hour',
+
+  // ── Correo transaccional ─────────────────────────────────────
+  /** Sin clave, los correos se escriben en el log en vez de enviarse. Ver mailer.ts. */
+  resendApiKey: process.env.RESEND_API_KEY ?? '',
+  emailFrom: process.env.EMAIL_FROM ?? 'VentaFácil <no-responder@localhost>',
+  /** URL de la app de un negocio. `{slug}` se sustituye por su subdominio. */
+  appUrlTemplate: process.env.APP_URL_TEMPLATE ?? 'http://{slug}.localhost:5174',
+
+  /** Cuánto valen los enlaces que van por correo. */
+  resetTokenTtlMin: Number(process.env.RESET_TOKEN_TTL_MIN ?? 60),
+  verifyTokenTtlHours: Number(process.env.VERIFY_TOKEN_TTL_HOURS ?? 72),
 };

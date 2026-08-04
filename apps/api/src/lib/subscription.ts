@@ -133,9 +133,17 @@ export async function cargarAcceso(businessId: string): Promise<TenantAccess> {
  * mostraría una pantalla en blanco en vez de "tu prueba terminó, elige un plan".
  */
 const RUTAS_LIBRES = new Set(
-  ['/auth/me', '/auth/login', '/auth/refresh', '/subscription/me', '/plans', '/business/me'].map(
-    (r) => API_PREFIX + r,
-  ),
+  [
+    '/auth/me',
+    '/auth/login',
+    '/auth/refresh',
+    // Confirmar el correo estando suspendido es inofensivo, y es justo lo que necesita
+    // quien quiere poder recuperar su cuenta.
+    '/auth/resend-verification',
+    '/subscription/me',
+    '/plans',
+    '/business/me',
+  ].map((r) => API_PREFIX + r),
 );
 
 export function hasFeature(access: TenantAccess, feature: PlanFeature): boolean {

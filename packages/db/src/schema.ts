@@ -170,6 +170,10 @@ export const appUser = pgTable(
     locationId: uuid('location_id').references(() => location.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     username: text('username').notNull(),
+    // Sin correo no se puede recuperar la contraseña. Es nulo porque los usuarios
+    // anteriores al registro self-service no tienen ninguno; se añade desde el perfil.
+    email: text('email'),
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     passwordHash: text('password_hash').notNull(),
     role: roleEnum('role').notNull().default('seller'),
     isActive: boolean('is_active').notNull().default(true),
@@ -177,8 +181,49 @@ export const appUser = pgTable(
   },
   (t) => [
     unique('app_user_business_username_uq').on(t.businessId, t.username),
+    // Único POR NEGOCIO, no global: la misma persona puede ser dueña de dos negocios
+    // con el mismo correo. Postgres admite varios NULL, así que los usuarios sin
+    // correo no chocan entre sí.
+    unique('app_user_business_email_uq').on(t.businessId, t.email),
     index('app_user_business_idx').on(t.businessId),
   ],
+);
+
+/**
+ * Enlaces de un solo uso que viajan por correo: restablecer la contraseña y verificar
+ * la dirección.
+ *
+ * Se guarda el **hash** del token, nunca el token. Lo que llega al correo es un valor
+ * aleatorio de 256 bits; en la base sólo queda su sha256. Así, quien consiguiera leer
+ * la tabla no podría entrar en ninguna cuenta.
+ *
+ * Va FUERA de RLS a propósito: el enlace se abre SIN sesión, y hay que encontrar el
+ * token antes de saber de qué negocio es. El control de acceso aquí es el token en sí
+ * — 256 bits aleatorios no se adivinan.
+ */
+export const authTokenPurposeEnum = pgEnum('auth_token_purpose', [
+  'password_reset',
+  'email_verify',
+]);
+
+export const authToken = pgTable(
+  'auth_token',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => business.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => appUser.id, { onDelete: 'cascade' }),
+    purpose: authTokenPurposeEnum('purpose').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // Un enlace usado no vuelve a valer, aunque no haya caducado.
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('auth_token_user_idx').on(t.userId, t.purpose)],
 );
 
 export const category = pgTable(

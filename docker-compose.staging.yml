@@ -76,6 +76,10 @@ services:
       # arranca sin ella en producción, ni si es igual a JWT_ACCESS_SECRET.
       JWT_PLATFORM_SECRET: ${JWT_PLATFORM_SECRET}
       DB_POOL_MAX: ${DB_POOL_MAX:-8}
+      # Sin RESEND_API_KEY los correos se escriben en el log del contenedor en vez de
+      # enviarse: `docker logs vf-staging-api` es el buzón de staging.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      APP_URL_TEMPLATE: ${APP_URL_TEMPLATE}
       # Obligatoria en producción: el API no arranca sin ella.
       CORS_ORIGINS: ${CORS_ORIGINS}
     ports:

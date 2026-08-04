@@ -4,10 +4,13 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { AdminPage } from '@/features/admin/AdminPage';
 import { AuditPage } from '@/features/audit/AuditPage';
-import { esSubdominioPlataforma, useAuth } from '@/features/auth/AuthProvider';
+import { esSubdominioPlataforma, slugDesdeHostname, useAuth } from '@/features/auth/AuthProvider';
 import { CashZPage } from '@/features/cash/CashZPage';
 import { InventoryPage } from '@/features/inventory/InventoryPage';
+import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage';
+import { VerifyEmailPage } from '@/features/auth/VerifyEmailPage';
 
 // Dashboard usa Recharts (pesado): se carga sólo al abrirlo, no penaliza el POS del vendedor.
 const DashboardPage = lazy(() =>
@@ -18,6 +21,7 @@ import { usePlatformAuth } from '@/features/platform/PlatformAuthProvider';
 import { PlatformLoginPage } from '@/features/platform/PlatformLoginPage';
 import { PlatformPage } from '@/features/platform/PlatformPage';
 import { PosPage } from '@/features/pos/PosPage';
+import { RegisterPage } from '@/features/register/RegisterPage';
 import { ProductsPage } from '@/features/products/ProductsPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 // Reportes usa Recharts (pesado): se carga sólo al abrirlo, no penaliza el POS del vendedor.
@@ -74,17 +78,33 @@ export function App() {
     window.location.hostname,
     import.meta.env.VITE_APP_DOMAIN,
   );
+  // Dominio base (sin subdominio de negocio) y sin un negocio fijado por build: es la
+  // puerta pública, donde vive el registro.
+  const enDominioBase =
+    !enPlataforma &&
+    !slugDesdeHostname(window.location.hostname, import.meta.env.VITE_APP_DOMAIN) &&
+    !import.meta.env.VITE_BUSINESS_SLUG;
 
   return (
     <ThemeProvider>
       <Routes>
         <Route path="/plataforma" element={<PlatformArea />} />
+        {/* Rutas sin sesión. `/registro` es del dominio base (quien llega no tiene aún
+            subdominio); las otras tres se abren desde un enlace del correo, ya en el
+            subdominio del negocio. */}
+        <Route path="/registro" element={<RegisterPage />} />
+        <Route path="/olvide-contrasena" element={<ForgotPasswordPage />} />
+        <Route path="/restablecer" element={<ResetPasswordPage />} />
+        <Route path="/verificar" element={<VerifyEmailPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/"
           element={
             enPlataforma ? (
               <Navigate to="/plataforma" replace />
+            ) : enDominioBase ? (
+              // Nadie entra al POS desde el dominio base: no hay negocio que abrir.
+              <Navigate to="/registro" replace />
             ) : (
               <Protected>
                 <PosPage />

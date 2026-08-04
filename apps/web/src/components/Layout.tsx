@@ -18,6 +18,7 @@ import { useEffect, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { EmailVerifyBanner } from '@/features/auth/EmailVerifyBanner';
 import { SubscriptionBanner } from '@/features/subscription/SubscriptionBanner';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { startSyncWorker } from '@/offline/sync';
@@ -191,6 +192,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <SubscriptionBanner />
+        <EmailVerifyBanner />
         {children}
       </main>
     </div>

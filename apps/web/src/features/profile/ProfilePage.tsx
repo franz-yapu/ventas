@@ -43,6 +43,7 @@ export function ProfilePage() {
   const { user, updateProfile, logout } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -53,6 +54,7 @@ export function ProfilePage() {
   const roleLabel = user?.role === 'admin' ? 'Administrador' : 'Vendedor';
   const wantsPasswordChange = newPassword.length > 0 || confirmPassword.length > 0 || currentPassword.length > 0;
   const nameChanged = name.trim() !== '' && name.trim() !== (user?.name ?? '');
+  const emailChanged = email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase();
 
   async function onSave() {
     setError(null);
@@ -63,12 +65,14 @@ export function ProfilePage() {
       if (newPassword !== confirmPassword) return setError('Las contraseñas nuevas no coinciden');
       if (!currentPassword) return setError('Ingresa tu contraseña actual');
     }
-    if (!nameChanged && !wantsPasswordChange) return setError('No hay cambios para guardar');
+    if (!nameChanged && !wantsPasswordChange && !emailChanged)
+      return setError('No hay cambios para guardar');
 
     setBusy(true);
     try {
       await updateProfile({
         name: nameChanged ? name.trim() : undefined,
+        email: emailChanged ? email.trim() || null : undefined,
         currentPassword: wantsPasswordChange ? currentPassword : undefined,
         newPassword: wantsPasswordChange ? newPassword : undefined,
       });
@@ -108,6 +112,23 @@ export function ProfilePage() {
           <div>
             <label className="text-sm text-muted">Nombre</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre" />
+          </div>
+
+          <div>
+            <label className="text-sm text-muted">Correo</label>
+            <Input
+              type="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@correo.com"
+            />
+            <p className="mt-1 text-xs text-muted">
+              {user?.emailVerified
+                ? 'Confirmado. Podrás recuperar tu contraseña si la olvidas.'
+                : 'Sin un correo confirmado no podrás recuperar tu contraseña.'}
+            </p>
           </div>
 
           <div className="mt-1 border-t border-border pt-3">

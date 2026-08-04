@@ -43,6 +43,44 @@ export const loginSchema = z.object({
   business: z.string().min(1).optional(),
 });
 
+/**
+ * Contraseñas: 8 caracteres como mínimo en todo lo que se crea desde fuera.
+ *
+ * Los usuarios que da de alta un admin siguen con 6 (`createUserSchema`) para no
+ * romper a quien ya los tiene así; pero quien se registra solo, y quien restablece su
+ * contraseña, empiezan con el listón más alto.
+ */
+export const passwordNueva = z
+  .string()
+  .min(8, 'La contraseña debe tener al menos 8 caracteres');
+
+// ── Registro self-service ──────────────────────────────────────
+export const registerSchema = z.object({
+  businessName: z.string().min(2, 'Escribe el nombre del negocio').max(80),
+  // El subdominio. Se valida el formato aquí y la disponibilidad en el servidor.
+  slug: z.string().min(3).max(30),
+  adminName: z.string().min(2, 'Escribe tu nombre').max(80),
+  email: z.string().email('Correo inválido').max(200),
+  username: z.string().min(3, 'El usuario debe tener al menos 3 caracteres').max(40),
+  password: passwordNueva,
+});
+
+// ── Recuperación de contraseña ─────────────────────────────────
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().max(200),
+  /** Slug del negocio. Lo pone el frontend desde el subdominio. */
+  business: z.string().min(1).optional(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20),
+  password: passwordNueva,
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(20),
+});
+
 // ── Usuarios / ubicaciones ─────────────────────────────────────
 export const createUserSchema = z.object({
   name: z.string().min(1),
@@ -125,12 +163,21 @@ export const cancelSaleSchema = z.object({
 export const updateProfileSchema = z
   .object({
     name: z.string().min(1).optional(),
+    /**
+     * Sin correo no hay forma de recuperar la contraseña. Se puede añadir desde el
+     * perfil, que es como los usuarios anteriores al registro self-service (que no
+     * tienen ninguno) dejan de depender de que alguien se la resetee a mano.
+     */
+    email: z.string().email('Correo inválido').max(200).nullable().optional(),
     currentPassword: z.string().min(1).optional(),
     newPassword: z.string().min(6).optional(),
   })
-  .refine((d) => d.name !== undefined || d.newPassword !== undefined, {
-    message: 'No hay cambios para guardar',
-  })
+  .refine(
+    (d) => d.name !== undefined || d.newPassword !== undefined || d.email !== undefined,
+    {
+      message: 'No hay cambios para guardar',
+    },
+  )
   .refine((d) => d.newPassword === undefined || !!d.currentPassword, {
     message: 'Ingresa tu contraseña actual',
     path: ['currentPassword'],

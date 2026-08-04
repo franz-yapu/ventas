@@ -1,4 +1,4 @@
-import type { Role } from '@ventafacil/shared';
+import { SUBDOMINIOS_RESERVADOS, type Role } from '@ventafacil/shared';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, tokens } from '@/lib/api';
 
@@ -9,6 +9,13 @@ export interface AuthUser {
   isCentral: boolean;
   role: Role;
   name: string;
+  /**
+   * Correo y su estado. No van en el JWT porque cambian sin volver a firmarlo; los
+   * añade GET /auth/me. Sin correo verificado no se puede recuperar la contraseña,
+   * y de eso avisa la app.
+   */
+  email?: string | null;
+  emailVerified?: boolean;
 }
 
 interface LoginResponse {
@@ -19,6 +26,7 @@ interface LoginResponse {
 
 export interface ProfileUpdate {
   name?: string;
+  email?: string | null;
   currentPassword?: string;
   newPassword?: string;
 }
@@ -30,12 +38,11 @@ interface AuthContextValue {
   login: (username: string, password: string, business?: string) => Promise<void>;
   logout: () => void;
   updateProfile: (input: ProfileUpdate) => Promise<void>;
+  /** Relee /auth/me. Se usa tras confirmar el correo para quitar el aviso. */
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-/** Subdominios que son de la plataforma, no de un negocio. */
-const SUBDOMINIOS_RESERVADOS = new Set(['www', 'app', 'api', 'admin', 'staging']);
 
 /**
  * Deduce el negocio del subdominio: `llantas.ventafacil.com` -> `llantas`.
@@ -114,7 +121,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       business: slug,
     });
     tokens.set(res.accessToken, res.refreshToken);
+    // La respuesta del login no trae correo ni verificación (no van en el token).
+    // Se relee /auth/me para que el aviso aparezca ya en la primera pantalla.
     setUser(res.user);
+    api
+      .get<AuthUser>('/auth/me')
+      .then(setUser)
+      .catch(() => undefined);
   }, []);
 
   const logout = useCallback(() => {
@@ -122,15 +135,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  // Actualiza nombre/contraseña propios. El JWT conserva el nombre viejo hasta
-  // el próximo login/refresh, así que reflejamos el nuevo nombre en memoria.
-  const updateProfile = useCallback(async (input: ProfileUpdate) => {
-    const updated = await api.patch<{ name: string }>('/auth/me', input);
-    setUser((prev) => (prev ? { ...prev, name: updated.name } : prev));
+  /** Relee la identidad completa. El JWT no lleva correo ni verificación. */
+  const refresh = useCallback(async () => {
+    const me = await api.get<AuthUser>('/auth/me');
+    setUser(me);
   }, []);
 
+  const updateProfile = useCallback(
+    async (input: ProfileUpdate) => {
+      await api.patch<{ name: string }>('/auth/me', input);
+      // Se relee en vez de parchear en memoria: si cambió el correo, el servidor lo
+      // deja sin verificar, y eso hay que reflejarlo.
+      await refresh();
+    },
+    [refresh],
+  );
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateProfile, refresh }}>
       {children}
     </AuthContext.Provider>
   );

@@ -64,6 +64,13 @@
       "when": 1785856223160,
       "tag": "0008_nifty_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785859983780,
+      "tag": "0009_graceful_franklin_richards",
+      "breakpoints": true
     }
   ]
 }
