@@ -29,7 +29,7 @@
 | 🔵 | #12 Operación | ✅ Hecho en local (falta el monitor de uptime) |
 | 🔵 | #11, #13, #14 Escala | ⬜ Pendiente |
 
-**Todo el bloque 2 está resuelto en programación.** 238 tests en verde (210 del API,
+**Todo el bloque 2 está resuelto en programación.** 271 tests en verde (243 del API,
 28 de la web) y `pnpm typecheck` limpio.
 
 ### Lo que necesita el VPS y no se puede adelantar en local
