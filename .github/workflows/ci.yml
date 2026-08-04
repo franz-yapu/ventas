@@ -1,0 +1,93 @@
+# Integración continua.
+#
+# Corre en los servidores de GitHub, no en el VPS: esto no despliega nada. Su trabajo es
+# que un cambio que rompe algo se sepa ANTES de llegar al servidor, en vez de cuando
+# llama un cliente.
+#
+# Los tests necesitan un Postgres de verdad —RLS, índices parciales y transacciones no
+# se pueden simular con un doble— así que se levanta uno como servicio. El global-setup
+# de los tests crea y borra la base `ventafacil_test` en cada corrida.
+#
+# NO hay comprobación de formato: hoy 88 archivos no pasan `prettier --check`, y añadir
+# un paso que falla desde el primer día sólo enseña a ignorar el CI. Formatear el repo
+# entero es una limpieza aparte —un commit grande que no debe mezclarse con cambios de
+# verdad—; cuando se haga, este paso son dos líneas:
+#   - name: Formato
+#     run: pnpm exec prettier --check "**/*.{ts,tsx}"
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+
+# Un push nuevo cancela la corrida anterior de la misma rama: no tiene sentido gastar
+# minutos comprobando un commit que ya quedó atrás.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Tipos, tests y build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ventafacil
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: ventafacil
+        # El puerto 5434 es el que usan por defecto los tests y el compose local, así
+        # que la configuración de CI y la de la máquina de cada uno no divergen.
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U ventafacil"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Los tests crean el rol sin privilegios con el que corre la app (es la única
+      # forma de que las políticas de RLS les apliquen), así que aquí va el DUEÑO.
+      TEST_DATABASE_URL: postgres://ventafacil:ci_password@localhost:5434/ventafacil_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Tipos
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # Las migraciones se generan a mano (`pnpm db:generate`) y es fácil cambiar el
+      # esquema y olvidarse. Si al regenerar aparece un archivo nuevo, es que faltaba:
+      # se descubriría al desplegar, con la base ya en producción.
+      - name: ¿Falta alguna migración?
+        run: |
+          pnpm db:generate
+          if [ -n "$(git status --porcelain packages/db/migrations)" ]; then
+            echo "::error::El esquema cambió sin generar la migración. Corre: pnpm db:generate"
+            git status --porcelain packages/db/migrations
+            exit 1
+          fi

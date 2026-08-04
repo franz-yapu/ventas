@@ -199,3 +199,17 @@ describe('los errores no cuentan de más', () => {
     expect(typeof res.json().error).toBe('string');
   });
 });
+
+describe('health check', () => {
+  it('comprueba la BASE DE DATOS, no sólo que el proceso responda', async () => {
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    const d = res.json().data;
+    expect(d.status).toBe('ok');
+    // Un API que contesta "ok" con la base caída es el falso positivo que vuelve
+    // inútil un monitor de uptime.
+    expect(d.db).toBe('ok');
+    expect(typeof d.dbMs).toBe('number');
+    expect(typeof d.uptimeSeg).toBe('number');
+  });
+})

@@ -13,6 +13,10 @@ services:
     image: postgres:16-alpine
     container_name: vf-staging-db
     restart: unless-stopped
+    # El VPS es 1 vCPU para el stack ENTERO. Fijar ambos contenedores al mismo núcleo
+    # es lo que hace que una prueba de carga aquí signifique algo: sin esto, staging
+    # mide la máquina de desarrollo (varios núcleos) y las cifras salen 3-4x infladas.
+    cpuset: "0"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -55,6 +59,7 @@ services:
     image: ventafacil-api:staging
     container_name: vf-staging-api
     restart: unless-stopped
+    cpuset: "0"
     depends_on:
       db:
         condition: service_healthy
@@ -80,9 +85,11 @@ services:
       # enviarse: `docker logs vf-staging-api` es el buzón de staging.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       APP_URL_TEMPLATE: ${APP_URL_TEMPLATE}
+      ALERT_EMAIL: ${ALERT_EMAIL:-}
       # Topes de peticiones. En staging se suben para poder ejercitar los flujos de
       # punta a punta sin que el limitador corte la prueba; los valores REALES son los
       # de .env.example, y el limitador en sí está cubierto por los tests.
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-600}
       LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:-20}
       REGISTER_RATE_LIMIT_MAX: ${REGISTER_RATE_LIMIT_MAX:-5}
       EXPORT_RATE_LIMIT_MAX: ${EXPORT_RATE_LIMIT_MAX:-5}

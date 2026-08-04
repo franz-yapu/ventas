@@ -3,7 +3,10 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { API_PREFIX } from '@ventafacil/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { db } from '@ventafacil/db';
+import { sql } from 'drizzle-orm';
 import { env, originPermitido } from './env.js';
+import { avisarDeError } from './lib/alertas.js';
 import { authPlugin } from './plugins/auth.js';
 import { auditPlugin } from './plugins/audit.js';
 import { platformAuthPlugin } from './plugins/platform-auth.js';
@@ -92,6 +95,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     const status = err.statusCode ?? 500;
     if (status >= 500) {
       req.log.error({ err }, 'error no controlado');
+      // Además del log, un aviso: nadie mira un log a las 3 de la tarde de un martes.
+      avisarDeError(err, `${req.method} ${req.routeOptions?.url ?? req.url}`, app.log);
       return reply.code(500).send({ data: null, error: 'Error interno del servidor' });
     }
     // Debajo de 500 el mensaje SÍ le sirve a quien llama. Algunas piezas (el limitador
@@ -104,7 +109,34 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     reply.code(404).send({ data: null, error: 'Ruta no encontrada' }),
   );
 
-  app.get('/health', async () => ({ data: { status: 'ok' }, error: null }));
+  /**
+   * Health check para el monitor de uptime.
+   *
+   * Comprueba la BASE DE DATOS, no sólo que el proceso responda: un API que contesta
+   * "ok" con la base caída es exactamente el falso positivo que hace inútil un monitor.
+   * Devuelve 503 cuando algo falla, que es lo que dispara la alerta.
+   */
+  app.get('/health', async (_req, reply) => {
+    const t0 = performance.now();
+    try {
+      await db.execute(sql`select 1`);
+    } catch (e) {
+      app.log.error({ err: e }, 'health: la base de datos no responde');
+      return reply.code(503).send({
+        data: { status: 'error', db: 'no responde' },
+        error: 'Base de datos no disponible',
+      });
+    }
+    return reply.send({
+      data: {
+        status: 'ok',
+        db: 'ok',
+        dbMs: Math.round(performance.now() - t0),
+        uptimeSeg: Math.round(process.uptime()),
+      },
+      error: null,
+    });
+  });
 
   await app.register(
     async (api) => {

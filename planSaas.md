@@ -26,7 +26,8 @@
 | 🟠 | #9 Caja / arqueo | ✅ Hecho |
 | 🟠 | #8 Revocación de sesiones | ✅ Hecho |
 | 🟠 | #10 Legales | 🟡 Escrito · falta revisión de un abogado |
-| 🔵 | #11–#14 Escala | ⬜ Pendiente |
+| 🔵 | #12 Operación | ✅ Hecho en local (falta el monitor de uptime) |
+| 🔵 | #11, #13, #14 Escala | ⬜ Pendiente |
 
 **Todo el bloque 2 está resuelto en programación.** 238 tests en verde (210 del API,
 28 de la web) y `pnpm typecheck` limpio.
@@ -67,10 +68,13 @@ registro al público no es código:
    `APP_URL_TEMPLATE` entre las variables nuevas. **Sin la clave de Resend el alta
    funciona pero nadie recibe el correo.**
 
-Después, el bloque 3 (🔵): lo más valioso ahí es la **#12 — CI/CD y monitoreo**, porque
-hoy cada despliegue es manual y no hay forma de enterarse de que algo se rompió salvo
-que un cliente llame. Y la **#11 — cobro automático**, en cuanto haya suficientes
-clientes como para que cobrar a mano moleste.
+La **#12 ya está hecha en local**: CI, `/health` que comprueba la base, avisos por
+correo, `docs/API.md` generado y la capacidad del VPS **medida** (ver la #12). Lo único
+que le falta necesita el servidor: un monitor de uptime apuntando a `/health`.
+
+Del bloque 3 quedan la **#11 (cobro automático)**, bloqueada por el alta como comercio
+en la pasarela más que por código —el dunning sí se puede hacer ya—, y la **#13
+(producto)**, que es toda local.
 
 **Recuerda**: cambiar precios o cupos es editar `packages/shared/src/plans.ts` y correr
 `pnpm --filter @ventafacil/db seed-plans`.
@@ -424,12 +428,70 @@ Nada de aquí bloquea vender. Se atiende cuando el uso lo pida.
 - [ ] Pasarela local (Libélula / PagosNet / Tigo Money / QR Simple).
 - [ ] Dunning: reintentos de cobro y suspensión automática.
 
-## #12 · Operación 🔵
-- [ ] CI/CD con GitHub Actions (hoy no hay `.github/`): lint → typecheck → test → build.
-- [ ] Sentry + health checks sobre `/health` + alertas de uptime.
-- [ ] **Infra:** el VPS es 1 vCPU / 4 GB con `max_connections=20` y `DB_POOL_MAX=8`.
-      Aguanta unos pocos tenants; define en qué número migras a algo mayor.
-- [ ] Documentación de la API (OpenAPI).
+## #12 · Operación ✅ HECHO EN LOCAL (4 ago 2026)
+- [x] **CI en GitHub Actions** (`.github/workflows/ci.yml`): tipos → tests → build,
+      con un Postgres de verdad como servicio (RLS, índices parciales y transacciones no
+      se prueban con un doble). Incluye un paso que **falla si el esquema cambió sin
+      generar la migración** — un olvido que hoy se descubriría al desplegar, con la
+      base ya en producción.
+      *Sin comprobación de formato*: 88 archivos no pasan `prettier --check` y un CI que
+      falla desde el primer día enseña a ignorarlo. Formatear el repo es una limpieza
+      aparte, y entonces el paso son dos líneas (van comentadas en el propio workflow).
+- [x] **`/health` que comprueba la BASE DE DATOS**, no sólo que el proceso conteste.
+      Devuelve **503** si la base no responde, que es lo que hace saltar al monitor. Un
+      API que dice "ok" con la base caída es el falso positivo que vuelve inútil un
+      monitor de uptime.
+- [x] **Aviso de errores por correo** (`ALERT_EMAIL`), reutilizando el mailer de Resend:
+      sin dependencias nuevas ni otra cuenta. **Agrupado**: un fallo no llega solo, y
+      cien correos idénticos se filtran; se manda uno por ventana (10 min) con la cuenta
+      y las rutas afectadas. Se descartó Sentry para no meter OpenTelemetry en un VPS de
+      1 vCPU; si algún día hace falta su agrupación, el enganche está en un solo sitio.
+- [x] **Documentación de la API**: `docs/API.md`, **generado** desde las rutas reales
+      (`scripts/gen-api-docs.mjs`). Una lista escrita a mano se queda obsoleta en una
+      semana y entonces es peor que nada. No documenta cuerpos: la validación vive en
+      Zod (`packages/shared/src/schemas.ts`), que es una sola fuente y se lee mejor.
+- [x] **Prueba de carga** (`scripts/load-test.mjs`) — ver abajo.
+- [ ] Monitor de uptime externo apuntando a `/health` público. *(Necesita el VPS; es
+      configurar un servicio, no código.)*
+
+### Cuánto aguanta el VPS: medido, no estimado
+
+El staging se corrigió para que la medición signifique algo: **antes limitaba memoria
+pero no CPU**, así que usaba los 16 núcleos de la máquina de desarrollo y daba cifras
+3-4× infladas. Ahora ambos contenedores comparten **un solo núcleo** (`cpuset: "0"`),
+como el VPS.
+
+Con ese ajuste, cajas simulando lo que hace una de verdad (mirar catálogo, listar
+ventas, cobrar):
+
+| Cajas simultáneas | req/s | p50 | p95 | Errores |
+|---|---|---|---|---|
+| 3 | 248 | 9 ms | 25 ms | 0 |
+| 5 | 250 | 16 ms | 40 ms | 0 |
+| 10 | 226 | 37 ms | 88 ms | 0 |
+| 20 | 236 | 69 ms | 155 ms | 0 |
+| 40 | 244 | 131 ms | **285 ms** | 0 |
+
+**El techo es ~240 peticiones/s** y no se mueve: el servidor está saturado desde las 3
+cajas simultáneas, y a partir de ahí sólo crece la espera. **Cero errores** en todos los
+casos — el pool de 8 conexiones encola bien y `max_connections=20` no se acercó al
+límite (9 conexiones en el pico).
+
+**Cuándo migrar.** No por número de negocios, sino por señal:
+
+- **p95 por encima de 300 ms sostenido** durante el horario de más movimiento. En la
+  tabla eso ocurre alrededor de 40 peticiones en vuelo a la vez.
+- **La base pasando del 60% del disco.** Medido: ~1,5 KB por venta (32 MB con 22.000
+  ventas de 167 negocios). Un negocio que hace 100 ventas al día son ~20 MB al año.
+
+Con esos números, la CPU no es lo que se agota primero a la escala que viene: una app
+offline-first genera pocas peticiones por tienda (el catálogo va en el dispositivo y las
+ventas se sincronizan en lote). **Lo que hay que vigilar es el p95, no el contador de
+clientes.**
+
+> Para repetir la medición: `node scripts/load-test.mjs --cajas 3,5,10,20,40`.
+> Necesita `RATE_LIMIT_MAX` alto en staging, o mide el limitador en vez del servidor:
+> toda la carga sale de una sola IP.
 
 ## #13 · Producto 🔵
 - [ ] Mostrar en la UI las ventas `failed` de la cola offline y ofrecer reintento manual.

@@ -138,6 +138,15 @@ export const env = {
   /** URL de la app de un negocio. `{slug}` se sustituye por su subdominio. */
   appUrlTemplate: process.env.APP_URL_TEMPLATE ?? 'http://{slug}.localhost:5174',
 
+  // ── Avisos de operación ──────────────────────────────────────
+  /**
+   * A dónde avisar cuando el servidor lanza errores. Vacío = no se avisa (sólo log).
+   * Reutiliza el mismo mailer que los correos de los clientes: sin cuenta nueva.
+   */
+  alertEmail: process.env.ALERT_EMAIL ?? '',
+  /** Ventana de agrupación: un correo por ventana, con la cuenta de lo que pasó. */
+  alertWindowMin: Number(process.env.ALERT_WINDOW_MIN ?? 10),
+
   /** Cuánto valen los enlaces que van por correo. */
   resetTokenTtlMin: Number(process.env.RESET_TOKEN_TTL_MIN ?? 60),
   verifyTokenTtlHours: Number(process.env.VERIFY_TOKEN_TTL_HOURS ?? 72),

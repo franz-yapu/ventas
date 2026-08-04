@@ -239,3 +239,27 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   cualquier fallo; ahora sólo ante un 401.
 - **No prometer con dos días de datos**: la proyección marca `confiable: false` con menos
   de 7 días, en vez de dar una cifra exacta y sin margen extrapolada de una tarde.
+
+## D18 — Operación: CI, salud y capacidad (4 ago 2026)
+- **El staging no medía lo que decía medir.** Limitaba memoria pero no CPU, así que usaba
+  los 16 núcleos de la máquina de desarrollo y daba cifras de capacidad 3-4× infladas.
+  Con `cpuset: "0"` en ambos contenedores —el VPS es 1 vCPU para el stack entero— el
+  techo real resultó ser ~240 req/s, no ~650.
+- **La señal para migrar de servidor es el p95, no el número de clientes.** Medido: p95
+  cruza los 300 ms alrededor de 40 peticiones en vuelo; cero errores en todos los casos
+  (el pool de 8 encola bien). Y ~1,5 KB por venta, que es el dato para planificar disco.
+- **`/health` comprueba la base de datos**, no sólo que el proceso responda, y devuelve
+  503 cuando falla. Un "ok" con la base caída es el falso positivo que vuelve inútil un
+  monitor de uptime.
+- **Avisos por correo en vez de Sentry.** Sentry v8 arrastra OpenTelemetry, que en un VPS
+  de 1 vCPU no es gratis; y el mailer de Resend ya estaba puesto. Los avisos van
+  AGRUPADOS —uno por ventana de 10 min con la cuenta y las rutas— porque cien correos
+  idénticos se filtran, y un aviso filtrado no avisa de nada.
+- **La documentación de la API se genera**, no se escribe: una lista de endpoints a mano
+  se queda obsoleta en una semana y entonces manda a quien la lee a rutas que ya no
+  existen. No cubre los cuerpos: eso vive en Zod, en una sola fuente compartida.
+- **El CI no comprueba formato, a propósito.** 88 archivos no pasan `prettier --check`;
+  un CI que falla desde el primer día enseña a ignorarlo. Formatear el repo es una
+  limpieza aparte que no debe mezclarse con cambios de verdad.
+- **El CI sí comprueba que no falte una migración.** El esquema se cambia a mano con
+  `db:generate`, y olvidarlo se descubriría al desplegar, con la base ya en producción.
