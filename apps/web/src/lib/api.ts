@@ -54,7 +54,9 @@ async function desenvolver<T>(res: Response): Promise<T> {
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
+  // Sólo con cuerpo: Fastify rechaza con 400 una petición que declara JSON y llega
+  // vacía. Pasaba en los POST sin datos ("cerrar en todos", "reenviar correo").
+  if (init.body !== undefined) headers.set('Content-Type', 'application/json');
   if (tokens.access) headers.set('Authorization', `Bearer ${tokens.access}`);
 
   const res = await fetch(BASE + path, { ...init, headers });
@@ -109,7 +111,7 @@ export const platformTokens = {
 
 async function platformRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
+  if (init.body !== undefined) headers.set('Content-Type', 'application/json');
   if (platformTokens.access) headers.set('Authorization', `Bearer ${platformTokens.access}`);
   const res = await fetch(BASE + path, { ...init, headers });
   return desenvolver<T>(res);

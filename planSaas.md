@@ -24,11 +24,12 @@
 | 🟠 | #6 Registro self-service | ✅ Hecho (falta sólo el wizard, aplazado) |
 | 🟠 | #7 Panel super-admin | ✅ Hecho |
 | 🟠 | #9 Caja / arqueo | ✅ Hecho |
-| 🟠 | #8 y #10 Capa SaaS | ⬜ Pendiente |
+| 🟠 | #8 Revocación de sesiones | ✅ Hecho |
+| 🟠 | #10 Legales | 🟡 Escrito · falta revisión de un abogado |
 | 🔵 | #11–#14 Escala | ⬜ Pendiente |
 
-**El bloque bloqueante está resuelto en todo lo que es programación.** 212 tests en verde
-(184 del API, 28 de la web) y `pnpm typecheck` limpio.
+**Todo el bloque 2 está resuelto en programación.** 238 tests en verde (210 del API,
+28 de la web) y `pnpm typecheck` limpio.
 
 ### Lo que necesita el VPS y no se puede adelantar en local
 
@@ -57,16 +58,19 @@ ser cobrado.** Están hechas la #4 (precio), la #5 (suscripciones), la #6 (regis
 recuperación), la #7 (panel) y la #9 (caja/arqueo), todas probadas contra el staging en
 Docker con RLS activo.
 
-Lo que falta para **abrir el registro al público** son dos cosas, en este orden:
+**El bloque 2 está terminado en lo que es programación.** Lo que falta para abrir el
+registro al público no es código:
 
-1. **#10 — legales**: términos de servicio y política de privacidad. Van antes del
-   primer registro público, no después.
-2. **#8 — revocación de sesiones**: hoy suspendes a un tenant y el corte es inmediato
-   porque el API lo comprueba en cada petición, pero sus refresh tokens siguen siendo
-   válidos, y restablecer la contraseña no echa a quien ya está dentro.
+1. **Que un abogado revise** los términos y la privacidad, y completar los marcadores de
+   `packages/shared/src/legal.ts` (razón social, NIT, ciudad, correo, hosting).
+2. **Llevar todo al VPS**: la lista de arriba, con `RESEND_API_KEY`, `EMAIL_FROM` y
+   `APP_URL_TEMPLATE` entre las variables nuevas. **Sin la clave de Resend el alta
+   funciona pero nadie recibe el correo.**
 
-Y en el servidor: `RESEND_API_KEY`, `EMAIL_FROM` y `APP_URL_TEMPLATE`. **Sin la clave de
-Resend el alta funciona pero nadie recibe el correo.**
+Después, el bloque 3 (🔵): lo más valioso ahí es la **#12 — CI/CD y monitoreo**, porque
+hoy cada despliegue es manual y no hay forma de enterarse de que algo se rompió salvo
+que un cliente llame. Y la **#11 — cobro automático**, en cuanto haya suficientes
+clientes como para que cobrar a mano moleste.
 
 **Recuerda**: cambiar precios o cupos es editar `packages/shared/src/plans.ts` y correr
 `pnpm --filter @ventafacil/db seed-plans`.
@@ -382,9 +386,31 @@ cierra contando lo que hay.
 > **Un cajón, un turno**: un índice parcial único impide dos cajas abiertas en la misma
 > ubicación. Con dos abiertas sobre el mismo cajón físico, ningún arqueo significa nada.
 
-## #10 · Legales, antes del primer registro público 🟠
-- [ ] Términos de servicio y política de privacidad.
-- [ ] Exportación de datos por tenant (si un cliente se va, tiene derecho a sus ventas).
+## #10 · Legales, antes del primer registro público 🟡 ESCRITO, falta revisión legal
+- [x] **Términos y política de privacidad** en `/terminos` y `/privacidad` (públicas).
+      Redactadas a partir de lo que el sistema hace de verdad —los planes, la prueba,
+      que la morosidad no corta, dónde viven los datos, qué se guarda en el navegador—
+      y no de una plantilla genérica.
+- [x] **Constancia de aceptación**: el alta exige la casilla y guarda **la fecha y la
+      versión** (`business.terms_accepted_at` / `terms_version`). La versión importa:
+      los términos cambian, y sin ella dentro de un año no habría forma de saber qué
+      aceptó cada negocio. Se exige en el esquema, no sólo en el formulario.
+- [x] **Exportación por tenant** (`GET /business/export`, admin): copia completa en JSON
+      —productos, inventario, ventas con su detalle, clientes, cajas, actividad— con las
+      relaciones intactas, para guardar o migrar. **Nunca exporta hashes de contraseña.**
+      Botón en Administración.
+- [ ] ⚠️ **Que un abogado revise los textos** antes de abrir el registro al público.
+- [ ] Completar los marcadores de `packages/shared/src/legal.ts`: razón social, NIT,
+      ciudad, correo de contacto y dónde está alojado. Están `[ENTRE CORCHETES]` a
+      propósito — inventar una razón social o un NIT sería peor que dejarlos vacíos.
+
+> **Yo no soy abogado y esto no está revisado por uno.** Los textos son sólidos y
+> describen el servicio con honestidad, pero la limitación de responsabilidad y el
+> tratamiento de datos personales conviene que los mire alguien con criterio legal en
+> Bolivia. `faltanDatosLegales()` avisa si quedan marcadores sin completar.
+
+> Si cambias los textos, **sube `TERMS_VERSION`**: es lo que se guarda con cada
+> aceptación.
 
 **✅ Salida del bloque:** un negocio desconocido se registra, usa el POS y te paga.
 

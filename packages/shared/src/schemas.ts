@@ -63,6 +63,14 @@ export const registerSchema = z.object({
   email: z.string().email('Correo inválido').max(200),
   username: z.string().min(3, 'El usuario debe tener al menos 3 caracteres').max(40),
   password: passwordNueva,
+  /**
+   * Aceptación de los términos. Se exige en el esquema y no sólo en el formulario:
+   * un alta por API sin aceptar nada dejaría un negocio sin constancia de haber
+   * aceptado, que es justo lo que hace falta poder demostrar.
+   */
+  acceptTerms: z.literal(true, {
+    errorMap: () => ({ message: 'Debes aceptar los términos para continuar' }),
+  }),
 });
 
 // ── Recuperación de contraseña ─────────────────────────────────

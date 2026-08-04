@@ -43,6 +43,13 @@ export const business = pgTable('business', {
   taxRate: numeric('tax_rate', { precision: 6, scale: 4 }).notNull().default('0'),
   // Prefijo del SKU automático de productos (ej. 'P' -> P000001; 'LLA-' -> LLA-000001).
   skuPrefix: text('sku_prefix').notNull().default('P'),
+  /**
+   * Constancia de que alguien aceptó los términos, y cuáles. Se guarda la VERSIÓN
+   * porque los términos cambian: sin ella, dentro de un año no habría forma de saber
+   * qué aceptó realmente este negocio.
+   */
+  termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
+  termsVersion: text('terms_version'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

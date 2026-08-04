@@ -1,6 +1,7 @@
 import { MENSAJE_SLUG, slugDesdeNombre, TRIAL_DAYS, validarSlug } from '@ventafacil/shared';
 import { Check, Eye, EyeOff, Loader2, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,7 @@ export function RegisterPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [verPassword, setVerPassword] = useState(false);
+  const [acepta, setAcepta] = useState(false);
 
   const [disp, setDisp] = useState<Disponibilidad | null>(null);
   const [comprobando, setComprobando] = useState(false);
@@ -86,6 +88,7 @@ export function RegisterPage() {
         email: email.trim(),
         username: username.trim(),
         password,
+        acceptTerms: acepta,
       });
       setCreado(res);
     } catch (err) {
@@ -130,7 +133,13 @@ export function RegisterPage() {
 
   const slugOk = disp?.disponible === true;
   const puedeEnviar =
-    slugOk && businessName.trim() && adminName.trim() && email.trim() && username.trim().length >= 3 && password.length >= 8;
+    slugOk &&
+    acepta &&
+    businessName.trim() &&
+    adminName.trim() &&
+    email.trim() &&
+    username.trim().length >= 3 &&
+    password.length >= 8;
 
   return (
     <div className="flex min-h-full items-center justify-center p-4">
@@ -268,6 +277,26 @@ export function RegisterPage() {
                 </button>
               </div>
             </div>
+
+            <label className="flex items-start gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                checked={acepta}
+                onChange={(e) => setAcepta(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-primary)]"
+              />
+              <span className="text-muted">
+                Acepto los{' '}
+                <Link to="/terminos" target="_blank" className="underline underline-offset-2">
+                  términos del servicio
+                </Link>{' '}
+                y la{' '}
+                <Link to="/privacidad" target="_blank" className="underline underline-offset-2">
+                  política de privacidad
+                </Link>
+                .
+              </span>
+            </label>
 
             {error && <p className="text-[13px] text-danger">{error}</p>}
 

@@ -86,6 +86,9 @@ export async function registerRoutes(app: FastifyInstance) {
         adminUsername: d.username.toLowerCase().trim(),
         adminPasswordHash: await argon2.hash(d.password),
         adminEmail: email,
+        // El esquema ya exige `acceptTerms: true`, así que llegar aquí implica que se
+        // aceptaron; se pasa explícito para que quede claro de dónde sale la constancia.
+        aceptaTerminos: d.acceptTerms,
       });
     } catch (e) {
       // Dos altas simultáneas con el mismo slug: la segunda choca contra el índice

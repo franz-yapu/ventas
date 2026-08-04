@@ -2,6 +2,7 @@ import type { PlanFeature } from '@ventafacil/shared';
 import { CreditCard, History, MapPin, Settings, Users, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import { ExportarDatos } from '@/features/legal/ExportarDatos';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 
 const SECTIONS: Array<{
@@ -48,6 +49,18 @@ export function AdminPage() {
           </Link>
         ))}
       </div>
+
+      <ExportarDatos />
+
+      <p className="text-[13px] text-muted">
+        <Link to="/terminos" className="underline underline-offset-2">
+          Términos del servicio
+        </Link>
+        {' · '}
+        <Link to="/privacidad" className="underline underline-offset-2">
+          Política de privacidad
+        </Link>
+      </p>
     </div>
   );
 }

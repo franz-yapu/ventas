@@ -35,6 +35,8 @@ export default defineConfig({
       // todas las peticiones salen de la misma IP y agotarían el cupo a mitad de la
       // suite, así que se sube: el limitador en sí ya está cubierto en security.test.ts.
       REGISTER_RATE_LIMIT_MAX: '500',
+      // Igual que arriba: el tope real (5/hora) cortaría la suite a mitad.
+      EXPORT_RATE_LIMIT_MAX: '500',
     },
     // Las suites comparten la misma BD: en serie para que no se pisen.
     fileParallelism: false,

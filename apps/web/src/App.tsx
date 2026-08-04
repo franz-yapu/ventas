@@ -8,6 +8,7 @@ import { esSubdominioPlataforma, slugDesdeHostname, useAuth } from '@/features/a
 import { CashPage } from '@/features/cash/CashPage';
 import { CashZPage } from '@/features/cash/CashZPage';
 import { InventoryPage } from '@/features/inventory/InventoryPage';
+import { LegalPage } from '@/features/legal/LegalPage';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage';
@@ -94,6 +95,9 @@ export function App() {
             subdominio); las otras tres se abren desde un enlace del correo, ya en el
             subdominio del negocio. */}
         <Route path="/registro" element={<RegisterPage />} />
+        {/* Públicas: se leen antes de tener cuenta, y desde cualquier subdominio. */}
+        <Route path="/terminos" element={<LegalPage tipo="terminos" />} />
+        <Route path="/privacidad" element={<LegalPage tipo="privacidad" />} />
         <Route path="/olvide-contrasena" element={<ForgotPasswordPage />} />
         <Route path="/restablecer" element={<ResetPasswordPage />} />
         <Route path="/verificar" element={<VerifyEmailPage />} />

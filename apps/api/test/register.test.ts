@@ -25,6 +25,8 @@ const ALTA = {
   email: 'ana@ferreteria.test',
   username: 'ana',
   password: 'clave-segura-1',
+  // Obligatorio desde la #10: sin constancia de aceptación no hay alta.
+  acceptTerms: true as const,
 };
 
 async function registrar(cambios: Partial<typeof ALTA> = {}) {

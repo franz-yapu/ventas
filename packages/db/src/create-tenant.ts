@@ -1,4 +1,4 @@
-import { DEFAULT_PLAN_CODE, TRIAL_DAYS } from '@ventafacil/shared';
+import { DEFAULT_PLAN_CODE, TERMS_VERSION, TRIAL_DAYS } from '@ventafacil/shared';
 import { eq } from 'drizzle-orm';
 import { db } from './client.js';
 import * as s from './schema.js';
@@ -14,6 +14,11 @@ export interface NuevoNegocio {
   adminEmail?: string | null;
   /** Plan de arranque. Por defecto, el de prueba. */
   planCode?: string;
+  /**
+   * Si se aceptaron los términos en el alta. El CLI no los acepta por nadie: crear un
+   * negocio desde consola es una operación interna, no una aceptación del cliente.
+   */
+  aceptaTerminos?: boolean;
 }
 
 export interface NegocioCreado {
@@ -55,7 +60,12 @@ export async function crearNegocio(input: NuevoNegocio): Promise<NegocioCreado> 
 
   const [biz] = await db
     .insert(s.business)
-    .values({ name: input.name, slug: input.slug })
+    .values({
+      name: input.name,
+      slug: input.slug,
+      termsAcceptedAt: input.aceptaTerminos ? new Date() : null,
+      termsVersion: input.aceptaTerminos ? TERMS_VERSION : null,
+    })
     .returning();
   const businessId = biz!.id;
 

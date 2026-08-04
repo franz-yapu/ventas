@@ -192,3 +192,18 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   cierra: ahí puede que no seas tú quien está en control.
 - Los tokens sin `tv` (los anteriores a este cambio) se tratan como versión 0, que es la
   que tiene todo usuario sin revocaciones: desplegarlo no echa a nadie de golpe.
+
+## D16 — Legales y exportación de datos (4 ago 2026)
+- **Se guarda la VERSIÓN de los términos aceptados**, no sólo la fecha. Los términos
+  cambian; sin la versión, dentro de un año no habría forma de saber qué aceptó cada
+  negocio, que es justo lo que hace falta poder demostrar.
+- La aceptación se exige **en el esquema de la petición**, no sólo en el formulario: un
+  alta por API sin aceptar dejaría un negocio sin constancia.
+- Los textos legales son un **borrador redactado a partir de lo que el sistema hace de
+  verdad** (planes, prueba, morosidad que no corta, dónde viven los datos, qué se guarda
+  en el navegador) y NO están revisados por un abogado. Los datos de la empresa quedan
+  como marcadores `[ENTRE CORCHETES]`: inventar una razón social o un NIT sería peor que
+  dejarlos vacíos, y así el hueco es visible.
+- La **exportación es JSON y no CSV**: el CSV para Excel ya existe en los reportes; esto
+  es la copia completa con las relaciones intactas, que sirve para migrar de sistema.
+  Nunca incluye hashes de contraseña. Se arma en UNA transacción para que sea coherente.

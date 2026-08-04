@@ -123,6 +123,14 @@ export const env = {
   registerRateLimitMax: Number(process.env.REGISTER_RATE_LIMIT_MAX ?? 5),
   registerRateLimitWindow: process.env.REGISTER_RATE_LIMIT_WINDOW ?? '1 hour',
 
+  /**
+   * Exportación completa del negocio: es una consulta pesada. Se topa para que no se
+   * pueda usar como forma barata de castigar al servidor; un negocio no necesita
+   * llevarse una copia entera cada minuto.
+   */
+  exportRateLimitMax: Number(process.env.EXPORT_RATE_LIMIT_MAX ?? 5),
+  exportRateLimitWindow: process.env.EXPORT_RATE_LIMIT_WINDOW ?? '1 hour',
+
   // ── Correo transaccional ─────────────────────────────────────
   /** Sin clave, los correos se escriben en el log en vez de enviarse. Ver mailer.ts. */
   resendApiKey: process.env.RESEND_API_KEY ?? '',
