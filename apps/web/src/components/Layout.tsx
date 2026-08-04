@@ -3,6 +3,7 @@ import {
   Boxes,
   Coins,
   CreditCard,
+  FileText,
   History,
   LayoutDashboard,
   LogOut,
@@ -31,13 +32,16 @@ const TOP_NAV = [
   { to: '/ventas', label: 'Ventas', icon: Receipt, adminOnly: false },
   { to: '/productos', label: 'Productos', icon: Package, adminOnly: false },
   { to: '/inventario', label: 'Inventario', icon: Boxes, adminOnly: false },
+  // La caja es operativa, no analítica: la abre y la cierra quien está en el mostrador.
+  // `end` para que estando en /caja/z (la lectura Z) no se marque también esta entrada.
+  { to: '/caja', label: 'Caja', icon: Coins, adminOnly: false, end: true },
 ];
 
 // Grupo "Análisis" (sólo admin). `feature` = entra sólo en los planes que la incluyen.
 const ANALYTICS_NAV = [
   { to: '/panel', label: 'Panel', icon: LayoutDashboard, feature: 'reportes_avanzados' as const },
   { to: '/reportes', label: 'Reportes', icon: BarChart3 },
-  { to: '/caja', label: 'Caja', icon: Coins },
+  { to: '/caja/z', label: 'Lectura Z', icon: FileText },
 ];
 
 // Submenú de "Administración" (sólo admin).

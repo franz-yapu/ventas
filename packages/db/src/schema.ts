@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -9,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -419,7 +421,18 @@ export const userDashboardConfig = pgTable('user_dashboard_config', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Cash register (Fase 5) — lo dejamos declarado para no re-migrar despues.
+/**
+ * Turno de caja (arqueo). Se abre con el efectivo con el que arranca el cajón y se
+ * cierra contando lo que hay dentro.
+ *
+ *   openingAmount  — con cuánto se abrió.
+ *   expectedAmount — lo que DEBERÍA haber según el sistema, congelado al cerrar.
+ *   closingAmount  — lo que la persona CONTÓ de verdad.
+ *
+ * La diferencia entre los dos últimos es el punto de todo esto, y por eso el esperado
+ * se guarda en vez de recalcularse: una venta que sincroniza tarde, o una anulación
+ * posterior, cambiarían el número y el arqueo de ayer dejaría de cuadrar solo.
+ */
 export const cashRegister = pgTable(
   'cash_register',
   {
@@ -430,14 +443,57 @@ export const cashRegister = pgTable(
     locationId: uuid('location_id')
       .notNull()
       .references(() => location.id, { onDelete: 'cascade' }),
+    // Quién abrió. Quién cerró puede ser otra persona: los turnos se relevan.
     userId: uuid('user_id')
       .notNull()
       .references(() => appUser.id, { onDelete: 'restrict' }),
+    closedBy: uuid('closed_by').references(() => appUser.id, { onDelete: 'set null' }),
     openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     openingAmount: numeric('opening_amount', { precision: 12, scale: 2 }).notNull(),
     closingAmount: numeric('closing_amount', { precision: 12, scale: 2 }),
     expectedAmount: numeric('expected_amount', { precision: 12, scale: 2 }),
+    /** Explicación de la diferencia, si la hubo. */
+    notes: text('notes'),
   },
-  (t) => [index('cash_register_business_idx').on(t.businessId)],
+  (t) => [
+    index('cash_register_business_idx').on(t.businessId),
+    index('cash_register_location_idx').on(t.locationId, t.openedAt),
+    // UNA sola caja abierta por ubicación. Es un cajón físico: dos turnos abiertos a la
+    // vez sobre el mismo cajón harían que ninguno de los dos arqueos signifique nada.
+    // Índice PARCIAL: sólo restringe las filas sin cerrar.
+    uniqueIndex('cash_register_una_abierta_uq')
+      .on(t.locationId)
+      .where(sql`closed_at is null`),
+  ],
+);
+
+/**
+ * Entradas y salidas de efectivo que NO son ventas: se saca plata para pagar a un
+ * proveedor, se mete cambio, se retira la recaudación a media tarde.
+ *
+ * Sin esto, cada retiro aparecería como un descuadre. Y un arqueo que siempre descuadra
+ * enseña a la gente a ignorar los descuadres, que es justo lo contrario de para lo que
+ * sirve un arqueo.
+ */
+export const cashMovementTypeEnum = pgEnum('cash_movement_type', ['in', 'out']);
+
+export const cashMovement = pgTable(
+  'cash_movement',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => business.id, { onDelete: 'cascade' }),
+    cashRegisterId: uuid('cash_register_id')
+      .notNull()
+      .references(() => cashRegister.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => appUser.id, { onDelete: 'set null' }),
+    type: cashMovementTypeEnum('type').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    /** Obligatorio: un movimiento sin motivo es indistinguible de un faltante. */
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('cash_movement_register_idx').on(t.cashRegisterId)],
 );

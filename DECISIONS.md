@@ -148,3 +148,27 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   Un fallo al enviar NO rompe el alta: la persona no puede arreglarlo reintentando.
 - **Topes de 5/hora por IP** en registro y recuperación. Lo que se frena no es la fuerza
   bruta, es usar el endpoint como máquina gratis de correo.
+
+## D14 — Arqueo de caja (4 ago 2026)
+- **El esperado se congela al cerrar** (`expected_amount` guardado, no recalculado). Una
+  venta offline que sincroniza mañana, o una anulación posterior, cambiarían el número y
+  el arqueo de ayer dejaría de cuadrar solo. Un cierre es una foto de lo que se contó.
+- **Las ventas se cuentan por `client_created_at`**, no por `synced_at`: el billete entró
+  al cajón cuando se vendió, aunque el servidor se entere tres horas después.
+- **Se añadió `cash_movement`, que no estaba en el plan.** Sin registrar retiros e
+  ingresos, cada vez que alguien saca plata para pagar a un proveedor el cierre marca un
+  faltante. Un arqueo que siempre descuadra enseña a ignorar los descuadres, que es justo
+  lo contrario de para lo que existe. El motivo es obligatorio: un movimiento sin motivo
+  es indistinguible de un faltante.
+- **Qué es efectivo y qué no**: suman apertura, ventas en efectivo, abonos de fiado en
+  efectivo e ingresos; resta retiros. Tarjeta y QR no (ese dinero no está en el cajón),
+  fiado tampoco (no entró nada), anuladas tampoco (se devolvió).
+- Los abonos de fiado se atribuyen a la ubicación **del usuario que los cobró**:
+  `customer_payment` no tiene ubicación, y quien cobró tenía el cajón delante. Es la
+  única atribución posible sin añadir una columna.
+- **Un cajón, un turno**: índice parcial único sobre `location_id where closed_at is null`.
+  Con dos cajas abiertas sobre el mismo cajón físico, ningún arqueo significa nada.
+- **La caja es operativa, no de análisis**: la abre y la cierra quien está en el mostrador,
+  así que `/caja` no es sólo para admin. La lectura Z por día sí sigue siéndolo.
+- La pantalla enseña el **desglose entero**, no sólo el esperado, y la diferencia aparece
+  **mientras se teclea lo contado**: es el momento en que todavía se puede volver a contar.

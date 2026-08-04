@@ -71,6 +71,13 @@
       "when": 1785859983780,
       "tag": "0009_graceful_franklin_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785869357739,
+      "tag": "0010_elite_lyja",
+      "breakpoints": true
     }
   ]
 }

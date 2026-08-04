@@ -5,6 +5,7 @@ import { Layout } from '@/components/Layout';
 import { AdminPage } from '@/features/admin/AdminPage';
 import { AuditPage } from '@/features/audit/AuditPage';
 import { esSubdominioPlataforma, slugDesdeHostname, useAuth } from '@/features/auth/AuthProvider';
+import { CashPage } from '@/features/cash/CashPage';
 import { CashZPage } from '@/features/cash/CashZPage';
 import { InventoryPage } from '@/features/inventory/InventoryPage';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
@@ -136,7 +137,8 @@ export function App() {
             </Protected>
           }
         />
-        <Route path="/caja" element={<Protected adminOnly><CashZPage /></Protected>} />
+        <Route path="/caja" element={<Protected><CashPage /></Protected>} />
+        <Route path="/caja/z" element={<Protected adminOnly><CashZPage /></Protected>} />
         <Route path="/administracion" element={<Protected adminOnly><AdminPage /></Protected>} />
         <Route path="/ubicaciones" element={<Protected adminOnly><LocationsPage /></Protected>} />
         <Route path="/usuarios" element={<Protected adminOnly><UsersPage /></Protected>} />

@@ -23,11 +23,12 @@
 | 🟠 | #5 Suscripciones | ✅ Hecho |
 | 🟠 | #6 Registro self-service | ✅ Hecho (falta sólo el wizard, aplazado) |
 | 🟠 | #7 Panel super-admin | ✅ Hecho |
-| 🟠 | #8–#10 Capa SaaS | ⬜ Pendiente |
+| 🟠 | #9 Caja / arqueo | ✅ Hecho |
+| 🟠 | #8 y #10 Capa SaaS | ⬜ Pendiente |
 | 🔵 | #11–#14 Escala | ⬜ Pendiente |
 
-**El bloque bloqueante está resuelto en todo lo que es programación.** 183 tests en verde
-(155 del API, 28 de la web) y `pnpm typecheck` limpio.
+**El bloque bloqueante está resuelto en todo lo que es programación.** 212 tests en verde
+(184 del API, 28 de la web) y `pnpm typecheck` limpio.
 
 ### Lo que necesita el VPS y no se puede adelantar en local
 
@@ -51,9 +52,10 @@ descubrimiento.
 
 ## 👉 Siguiente tarea
 
-**Un negocio desconocido ya puede registrarse solo, usar el POS y ser cobrado.** Están
-hechas la #4 (precio), la #5 (suscripciones), la #7 (panel) y la #6 (registro y
-recuperación de contraseña), todas probadas contra el staging en Docker con RLS activo.
+**Un negocio desconocido ya puede registrarse solo, usar el POS —con cierre de caja— y
+ser cobrado.** Están hechas la #4 (precio), la #5 (suscripciones), la #6 (registro y
+recuperación), la #7 (panel) y la #9 (caja/arqueo), todas probadas contra el staging en
+Docker con RLS activo.
 
 Lo que falta para **abrir el registro al público** son dos cosas, en este orden:
 
@@ -65,9 +67,6 @@ Lo que falta para **abrir el registro al público** son dos cosas, en este orden
 
 Y en el servidor: `RESEND_API_KEY`, `EMAIL_FROM` y `APP_URL_TEMPLATE`. **Sin la clave de
 Resend el alta funciona pero nadie recibe el correo.**
-
-La **#9 (caja/arqueo)** sigue siendo la brecha de producto más visible para vender, y no
-depende de nada de lo anterior.
 
 **Recuerda**: cambiar precios o cupos es editar `packages/shared/src/plans.ts` y correr
 `pnpm --filter @ventafacil/db seed-plans`.
@@ -315,14 +314,42 @@ a mano en el resto del código.
 - [ ] Refresh tokens con `jti` + lista de revocación. Hoy son stateless: si suspendes a un
       tenant, sus tokens siguen válidos hasta que expiren.
 
-## #9 · Caja / arqueo 🟠
-La tabla `cash_register` existe en el esquema **pero no tiene ni un endpoint ni una
-pantalla** — está huérfana (`features/cash` es sólo el reporte Z). Es la brecha de
-producto más visible: un POS sin cierre de caja cuesta venderlo a un negocio con empleados.
+## #9 · Caja / arqueo ✅ HECHO (4 ago 2026)
+La tabla `cash_register` llevaba desde la Fase 5 sin un solo endpoint ni pantalla. Ya
+no: se abre el turno con el efectivo del cajón, se anotan las entradas y salidas, y se
+cierra contando lo que hay.
 
-- [ ] Endpoints de apertura y cierre, con monto esperado vs. contado.
-- [ ] Pantalla de arqueo y reporte de diferencias.
-- [ ] Cierre Z apoyado en el reporte que ya existe.
+- [x] **Apertura y cierre** con esperado vs. contado, y la diferencia calculada.
+- [x] **Movimientos de efectivo** (`cash_movement`, tabla nueva): retiros para pagar a
+      un proveedor, ingresos de cambio. **No estaban en el plan y se añadieron a
+      propósito**: sin ellos, cada retiro aparece como un descuadre, y un arqueo que
+      siempre descuadra enseña a la gente a ignorar los descuadres. El motivo es
+      obligatorio — un movimiento sin motivo no se distingue de un faltante.
+- [x] **Pantalla de arqueo** con el desglose ENTERO de cómo se llega al esperado, no
+      sólo la cifra final: un cajero que no entiende de dónde sale el número no puede
+      discutirlo. La diferencia se muestra **mientras se teclea lo contado**, que es
+      cuando la persona todavía puede volver a contar.
+- [x] **Historial de cierres** con su diferencia (cuadra / faltan / sobran).
+- [x] **Lectura Z del turno** integrada: el desglose por método de pago del turno sale
+      del mismo cálculo. El reporte Z por día sigue donde estaba, ahora en `/caja/z`.
+- [x] **29 tests** (`apps/api/test/cash.test.ts`), casi todos sobre el cálculo.
+
+> **La caja pasó a ser operativa, no de análisis**: `/caja` la ve cualquier usuario
+> (quien está en el mostrador es quien abre y cierra), y la lectura Z por día sigue
+> siendo de admin. En el menú, "Caja" bajó al bloque operativo.
+
+> **Qué cuenta como efectivo y qué no** (es lo que hace creíble el esperado):
+> suman la apertura, las ventas en efectivo, los abonos de fiado cobrados en efectivo
+> y los ingresos; resta los retiros. **No** suman la tarjeta ni el QR (ese dinero no
+> está en el cajón), ni el fiado (no entró nada), ni las ventas anuladas (se devolvió).
+>
+> Las ventas se cuentan por `client_created_at`, no por cuándo sincronizaron: el billete
+> entró al cajón cuando se vendió. Y **el esperado se congela al cerrar**: si mañana
+> sincroniza una venta de hoy o se anula una de ayer, el arqueo de hoy sigue diciendo
+> lo que dijo cuando alguien contó los billetes.
+
+> **Un cajón, un turno**: un índice parcial único impide dos cajas abiertas en la misma
+> ubicación. Con dos abiertas sobre el mismo cajón físico, ningún arqueo significa nada.
 
 ## #10 · Legales, antes del primer registro público 🟠
 - [ ] Términos de servicio y política de privacidad.

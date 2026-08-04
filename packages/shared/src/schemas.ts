@@ -183,6 +183,30 @@ export const updateProfileSchema = z
     path: ['currentPassword'],
   });
 
+// ── Caja / arqueo ──────────────────────────────────────────────
+export const CASH_MOVEMENT_TYPES = ['in', 'out'] as const;
+export type CashMovementType = (typeof CASH_MOVEMENT_TYPES)[number];
+
+export const openCashSchema = z.object({
+  /** Efectivo con el que arranca el cajón. Puede ser 0. */
+  openingAmount: money,
+  /** Sólo la central elige ubicación; el resto abre la suya. */
+  locationId: z.string().uuid().optional(),
+});
+
+export const closeCashSchema = z.object({
+  /** Lo que la persona CONTÓ de verdad, no lo que el sistema espera. */
+  countedAmount: money,
+  notes: z.string().max(500).optional(),
+});
+
+export const cashMovementSchema = z.object({
+  type: z.enum(CASH_MOVEMENT_TYPES),
+  amount: money.refine((v) => Number(v) > 0, 'El monto debe ser mayor a cero'),
+  // Un movimiento sin motivo es indistinguible de un faltante.
+  reason: z.string().min(3, 'Explica el motivo').max(200),
+});
+
 // ── Clientes / fiado ───────────────────────────────────────────
 export const upsertCustomerSchema = z.object({
   name: z.string().min(1),

@@ -117,6 +117,60 @@ export interface CashZ {
   grandTotal: string;
 }
 
+// ── Caja / arqueo ──────────────────────────────────────────────
+export interface CashBreakdown {
+  openingAmount: string;
+  cashSales: string;
+  cashPayments: string;
+  movementsIn: string;
+  movementsOut: string;
+  /** Lo que DEBERÍA haber en el cajón. */
+  expected: string;
+  byPaymentMethod: Array<{ paymentMethod: string; total: string; count: number }>;
+  salesCount: number;
+}
+
+export interface CashMovement {
+  id: string;
+  type: 'in' | 'out';
+  amount: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface CashRegister {
+  id: string;
+  locationId: string;
+  userId: string;
+  closedBy: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  openingAmount: string;
+  closingAmount: string | null;
+  expectedAmount: string | null;
+  notes: string | null;
+}
+
+export interface CashCurrent {
+  register: CashRegister;
+  breakdown: CashBreakdown;
+  movements: CashMovement[];
+}
+
+export interface CashHistoryRow {
+  id: string;
+  locationName: string;
+  openedBy: string;
+  openedAt: string;
+  closedAt: string | null;
+  openingAmount: string;
+  expectedAmount: string | null;
+  closingAmount: string | null;
+  notes: string | null;
+  /** `null` mientras el turno sigue abierto. */
+  difference: string | null;
+}
+
 export interface Customer {
   id: string;
   name: string;

@@ -37,6 +37,7 @@ const TENANT_TABLES = [
   'audit_log',
   'user_dashboard_config',
   'cash_register',
+  'cash_movement',
 ] as const;
 
 /**
