@@ -135,8 +135,14 @@ export const env = {
   /** Sin clave, los correos se escriben en el log en vez de enviarse. Ver mailer.ts. */
   resendApiKey: process.env.RESEND_API_KEY ?? '',
   emailFrom: process.env.EMAIL_FROM ?? 'VentaFácil <no-responder@localhost>',
-  /** URL de la app de un negocio. `{slug}` se sustituye por su subdominio. */
-  appUrlTemplate: process.env.APP_URL_TEMPLATE ?? 'http://{slug}.localhost:5174',
+  /**
+   * URL de la app de un negocio. `{slug}` se sustituye por su subdominio.
+   *
+   * El puerto por defecto es el 5173, que es donde escucha Vite (`vite.config.ts`).
+   * Cualquier otro deja los enlaces de los correos —verificar la cuenta, restablecer
+   * la contraseña— apuntando a un puerto donde no hay nada.
+   */
+  appUrlTemplate: process.env.APP_URL_TEMPLATE ?? 'http://{slug}.localhost:5173',
 
   // ── Avisos de operación ──────────────────────────────────────
   /**

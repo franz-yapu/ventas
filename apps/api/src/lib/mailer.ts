@@ -89,7 +89,7 @@ export async function enviarCorreo(
 
 /**
  * URL de la app del negocio. `APP_URL_TEMPLATE` lleva `{slug}` donde va el subdominio,
- * y así el mismo código sirve para `http://mi-negocio.localhost:5174` en local y para
+ * y así el mismo código sirve para `http://mi-negocio.localhost:5173` en local y para
  * `https://mi-negocio.vertexweb.lat` en producción.
  */
 export function urlDelNegocio(slug: string, ruta = ''): string {
