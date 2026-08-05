@@ -4,6 +4,10 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // Las variables VITE_* viven en el .env de la RAÍZ del monorepo, junto a las del API
+  // (así lo documentan README y .env.example). Sin esto Vite sólo miraría apps/web y
+  // VITE_APP_DOMAIN quedaba sin definir: el login no deducía el negocio del subdominio.
+  envDir: fileURLToPath(new URL('../../', import.meta.url)),
   plugins: [
     react(),
     VitePWA({

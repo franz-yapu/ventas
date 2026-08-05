@@ -5,6 +5,8 @@ export interface PlatformAdmin {
   sub: string;
   email: string;
   name: string;
+  /** Principal: el único que administra a los demás operadores. */
+  isOwner: boolean;
 }
 
 interface PlatformAuthValue {
@@ -12,6 +14,8 @@ interface PlatformAuthValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Relee la cuenta tras cambiar el propio nombre o correo. */
+  refrescar: () => void;
 }
 
 const Ctx = createContext<PlatformAuthValue | null>(null);
@@ -53,7 +57,18 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
     setAdmin(null);
   }, []);
 
-  return <Ctx.Provider value={{ admin, loading, login, logout }}>{children}</Ctx.Provider>;
+  // `/platform/me` se relee de la base, así que también trae los cambios de rango:
+  // a quien acaban de nombrar principal le aparecen las opciones sin volver a entrar.
+  const refrescar = useCallback(() => {
+    platformApi
+      .get<PlatformAdmin>('/platform/me')
+      .then(setAdmin)
+      .catch(() => undefined);
+  }, []);
+
+  return (
+    <Ctx.Provider value={{ admin, loading, login, logout, refrescar }}>{children}</Ctx.Provider>
+  );
 }
 
 export function usePlatformAuth() {

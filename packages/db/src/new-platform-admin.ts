@@ -1,24 +1,28 @@
 /**
  * Alta de un operador del panel de plataforma.
  *
- *   pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña>
+ *   pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña> [--owner]
  *
- * Se hace por CLI y no por pantalla a propósito: quien puede crear operadores puede
- * ver y suspender a todos los clientes. Que haga falta acceso al servidor para crear
- * el primero (y los siguientes) es parte de la protección.
+ * Con `--owner` el operador queda como PRINCIPAL: el único perfil que puede dar de alta,
+ * desactivar o cambiarle la contraseña a otro operador desde el panel.
  *
- * Si el correo ya existe, se le cambia la contraseña y se reactiva — así este mismo
- * comando sirve para recuperar el acceso si te quedas fuera.
+ * El primer principal se crea aquí y no por pantalla a propósito: quien puede crear
+ * operadores puede ver y suspender a todos los clientes. Que haga falta acceso al
+ * servidor para abrir esa puerta la primera vez es parte de la protección — y es
+ * también la salida si te quedas fuera, porque este mismo comando cambia la contraseña
+ * de un operador que ya existe.
  */
 import argon2 from 'argon2';
 import { eq } from 'drizzle-orm';
 import { db, queryClient } from './client.js';
 import * as s from './schema.js';
 
-const [emailArg, name, password] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const owner = args.includes('--owner');
+const [emailArg, name, password] = args.filter((a) => a !== '--owner');
 if (!emailArg || !name || !password) {
   console.error(
-    'Uso: pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña>',
+    'Uso: pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña> [--owner]',
   );
   process.exit(1);
 }
@@ -41,17 +45,25 @@ async function main() {
     .limit(1);
 
   if (existente) {
+    // `--owner` sólo asciende, nunca degrada: quitar el rango es una decisión que se
+    // toma mirando quién más lo tiene, y eso se hace desde el panel, no a ciegas aquí.
     await db
       .update(s.platformAdmin)
-      .set({ passwordHash, name: name!, isActive: true })
+      .set({ passwordHash, name: name!, isActive: true, ...(owner ? { isOwner: true } : {}) })
       .where(eq(s.platformAdmin.id, existente.id));
-    console.log(`✓ Operador "${email}" actualizado (contraseña nueva y cuenta activa).`);
+    console.log(
+      `✓ Operador "${email}" actualizado (contraseña nueva y cuenta activa)` +
+        (owner ? ', ahora es PRINCIPAL.' : '.'),
+    );
     return;
   }
 
-  await db.insert(s.platformAdmin).values({ email, name: name!, passwordHash });
-  console.log(`✓ Operador de plataforma creado: ${email}`);
+  await db.insert(s.platformAdmin).values({ email, name: name!, passwordHash, isOwner: owner });
+  console.log(`✓ Operador de plataforma creado: ${email}${owner ? ' (PRINCIPAL)' : ''}`);
   console.log('  Entra por el subdominio admin de tu dominio, en /plataforma.');
+  if (!owner) {
+    console.log('  Sin --owner no podrá crear ni desactivar a otros operadores.');
+  }
 }
 
 main()

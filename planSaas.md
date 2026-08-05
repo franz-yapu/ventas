@@ -307,11 +307,52 @@ a mano en el resto del código.
       direcciones, más prueba end-to-end contra el staging y revisión de la UI en
       navegador.
 
-> El operador se crea por CLI en el servidor:
-> `pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña>`
-> (mínimo 12 caracteres). No hay pantalla de registro ni recuperación: quien puede
-> crear operadores puede ver y suspender a todos los clientes, así que hace falta
-> acceso al servidor. El mismo comando cambia la contraseña si te quedas fuera.
+### #7b · Soporte y operadores desde el panel ✅ HECHO (5 ago 2026)
+
+Lo que faltaba para dar soporte sin entrar al servidor. El panel dejó de ser sólo
+"cobrar y cortar".
+
+- [x] **Cuenta atrás del vencimiento** (`vence: {concepto, fecha, dias}`), calculada en
+      el servidor y no en el navegador: el panel tiene que contar igual que cuenta el
+      API cuando bloquea. En prueba mide contra `trialEndsAt`; ya pagando, contra
+      `currentPeriodEnd`. Rojo si venció, ámbar a una semana o menos.
+- [x] **Mi cuenta**: nombre, correo (que es el usuario de entrada) y contraseña propia.
+      Cambiarla exige la actual aunque la sesión esté abierta — es lo único que separa
+      "me dejé el panel abierto" de "me quitaron la cuenta". Cambiar el correo obliga a
+      volver a entrar: viaja dentro del token.
+- [x] **Operador PRINCIPAL** (`platform_admin.is_owner`): el único que da de alta, baja
+      y contraseña a otros operadores. El plan original exigía el servidor para cada
+      alta; esto conserva la puerta estrecha sin obligar a entrar por SSH. El primero se
+      sigue creando por CLI (`new-platform-admin … --owner`), que es también la salida
+      si te quedas fuera. Se comprueba **contra la base, no contra el token**: a quien
+      degradan o dan de baja se le cierra en la siguiente petición, no en 8 horas.
+      No se puede desactivar uno a sí mismo, ni dejar la plataforma sin ningún principal
+      activo — eso cerraría la administración de operadores para todos.
+- [x] **Renombrar un negocio y mudarlo de subdominio**, con la misma validación de slug
+      que el alta. La respuesta devuelve la dirección nueva, para pasársela al cliente:
+      la anterior deja de funcionar en el acto.
+- [x] **Usuarios de un negocio** (`GET /platform/tenants/:id/users`): identidad y estado,
+      nunca contraseñas ni datos de venta. Es la mitad de las llamadas de soporte —
+      "¿cuál era mi usuario?".
+- [x] **Rescate de acceso**: contraseña temporal legible por teléfono (alfabeto sin
+      O/0 ni I/l/1), mostrada **una sola vez**, enviada también por correo si el usuario
+      tiene uno. Cierra todas sus sesiones: si perdió el acceso porque entró otro,
+      dejarle la sesión viva al otro convertiría el rescate en un regalo. Queda en la
+      bitácora el hecho, jamás la clave.
+- [x] **26 tests más** (269 en el API), incluidos los dos que importan: que un operador
+      normal reciba 403 en `/platform/admins` sin perder lo demás, y que un id de otro
+      negocio no cuele en el rescate.
+
+> **Lo que NO tiene todavía:** para un negocio en plan de pago la cuenta atrás sólo
+> aparece si alguien fijó `currentPeriodEnd`, y hoy no lo fija nada — es del cobro
+> automático (#11). Mientras tanto, la cuenta atrás es real en las pruebas gratis y
+> queda vacía en los activos. Preferible a inventar una fecha de cobro.
+
+> El PRIMER operador principal se crea por CLI en el servidor:
+> `pnpm --filter @ventafacil/db new-platform-admin <email> "<Nombre>" <contraseña> --owner`
+> (mínimo 12 caracteres). Los operadores no tienen pantalla de registro ni recuperación
+> por correo: si uno pierde la contraseña, se la cambia un principal desde el panel; si
+> se pierden todos, el mismo comando la reescribe desde el servidor.
 
 > **Lo que NO tiene, a sabiendas:** *churn* en porcentaje. Calcularlo exige saber
 > cuántos estaban activos al empezar el mes, y hoy no se guarda histórico de estados.

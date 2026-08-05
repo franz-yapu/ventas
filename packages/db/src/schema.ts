@@ -133,6 +133,19 @@ export const platformAdmin = pgTable('platform_admin', {
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
   isActive: boolean('is_active').notNull().default(true),
+  /**
+   * Operador PRINCIPAL: el único que puede dar de alta, desactivar o cambiarle la
+   * contraseña a otro operador.
+   *
+   * Existe porque crear operadores no es una acción más del panel: quien puede crearlos
+   * puede ver y suspender a todos los clientes. Antes hacía falta entrar al servidor
+   * para cada alta; con esta marca la puerta sigue siendo estrecha, pero se abre desde
+   * el panel. El primer principal se sigue creando por CLI (`new-platform-admin
+   * --owner`), que es también la salida si te quedas fuera.
+   *
+   * Por defecto `false`: un operador nuevo administra clientes, no operadores.
+   */
+  isOwner: boolean('is_owner').notNull().default(false),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

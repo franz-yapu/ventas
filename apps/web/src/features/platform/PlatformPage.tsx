@@ -1,6 +1,6 @@
 import type { EffectiveStatus, SubscriptionStatus } from '@ventafacil/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LogOut, Search, ShieldCheck } from 'lucide-react';
+import { Copy, KeyRound, LogOut, Search, ShieldCheck, UserCog, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,9 +8,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
+import { MiCuentaModal } from '@/features/platform/MiCuentaModal';
+import { OperadoresModal } from '@/features/platform/OperadoresModal';
 import { usePlatformAuth } from '@/features/platform/PlatformAuthProvider';
 import type { PlanInfo } from '@/features/subscription/SubscriptionProvider';
 import { platformApi } from '@/lib/api';
+
+/** Cuánto falta para el próximo corte. Lo calcula el servidor: manda su reloj. */
+interface Vence {
+  concepto: 'prueba' | 'periodo';
+  fecha: string;
+  dias: number;
+}
 
 interface TenantRow {
   id: string;
@@ -25,6 +34,7 @@ interface TenantRow {
   blocked: boolean;
   trialEndsAt: string | null;
   suspendedReason: string | null;
+  vence: Vence | null;
 }
 
 interface TenantDetail {
@@ -36,6 +46,7 @@ interface TenantDetail {
     suspendedReason: string | null;
   } | null;
   blocked: boolean;
+  vence: Vence | null;
   usage: {
     users: number;
     locations: number;
@@ -43,6 +54,17 @@ interface TenantDetail {
     sales: number;
     lastSaleAt: string | null;
   };
+}
+
+interface TenantUser {
+  id: string;
+  username: string;
+  name: string;
+  email: string | null;
+  role: 'admin' | 'seller';
+  isActive: boolean;
+  emailVerifiedAt: string | null;
+  locationName: string | null;
 }
 
 interface Metrics {
@@ -68,6 +90,32 @@ function EstadoBadge({ status }: { status: EffectiveStatus | null }) {
   if (!status) return <Badge tone="neutral">Sin suscripción</Badge>;
   const e = ESTADO[status] ?? { label: status, tone: 'neutral' as BadgeTone };
   return <Badge tone={e.tone}>{e.label}</Badge>;
+}
+
+/**
+ * "Le quedan 3 días" en vez de una fecha que hay que restar mentalmente.
+ *
+ * El color acompaña a la urgencia porque este texto se lee de reojo en una lista larga:
+ * vencido en rojo, una semana o menos en ámbar, el resto en gris.
+ */
+function cuentaAtras(v: Vence | null): { texto: string; tone: BadgeTone } | null {
+  if (!v) return null;
+  const que = v.concepto === 'prueba' ? 'Prueba' : 'Periodo';
+  if (v.dias < 0) {
+    const d = Math.abs(v.dias);
+    return { texto: `${que} vencida hace ${d} ${d === 1 ? 'día' : 'días'}`, tone: 'danger' };
+  }
+  if (v.dias === 0) return { texto: `${que} vence hoy`, tone: 'danger' };
+  return {
+    texto: `${que}: ${v.dias} ${v.dias === 1 ? 'día' : 'días'}`,
+    tone: v.dias <= 7 ? 'warning' : 'neutral',
+  };
+}
+
+function VenceBadge({ vence }: { vence: Vence | null }) {
+  const c = cuentaAtras(vence);
+  if (!c) return null;
+  return <Badge tone={c.tone}>{c.texto}</Badge>;
 }
 
 /**
@@ -108,6 +156,8 @@ export function PlatformPage() {
   const qc = useQueryClient();
   const [busqueda, setBusqueda] = useState('');
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [miCuenta, setMiCuenta] = useState(false);
+  const [operadores, setOperadores] = useState(false);
 
   const { data: metrics } = useQuery({
     queryKey: ['platform', 'metrics'],
@@ -137,12 +187,35 @@ export function PlatformPage() {
           </div>
           <div>
             <div className="text-[15px] font-bold tracking-[-0.02em]">Plataforma</div>
-            <div className="text-[12px] text-muted">{admin?.email}</div>
+            <div className="text-[12px] text-muted">
+              {admin?.email}
+              {admin?.isOwner && ' · principal'}
+            </div>
           </div>
         </div>
-        <Button variant="outline" onClick={logout} className="h-9 px-3 text-[13px]">
-          <LogOut size={15} /> Salir
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Administrar operadores sólo aparece para quien puede: un botón que
+              siempre responde "no tienes permiso" es peor que no estar. */}
+          {admin?.isOwner && (
+            <Button
+              variant="outline"
+              onClick={() => setOperadores(true)}
+              className="h-9 px-3 text-[13px]"
+            >
+              <Users size={15} /> Operadores
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => setMiCuenta(true)}
+            className="h-9 px-3 text-[13px]"
+          >
+            <UserCog size={15} /> Mi cuenta
+          </Button>
+          <Button variant="outline" onClick={logout} className="h-9 px-3 text-[13px]">
+            <LogOut size={15} /> Salir
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-col gap-4 p-4">
@@ -197,7 +270,10 @@ export function PlatformPage() {
                         {t.priceMonthly ? ` · Bs. ${t.priceMonthly}/mes` : ''}
                       </div>
                     </div>
-                    <EstadoBadge status={t.status} />
+                    <div className="flex shrink-0 items-center gap-2">
+                      <VenceBadge vence={t.vence} />
+                      <EstadoBadge status={t.status} />
+                    </div>
                   </button>
                 </li>
               ))}
@@ -216,6 +292,8 @@ export function PlatformPage() {
           }}
         />
       )}
+      {miCuenta && <MiCuentaModal onClose={() => setMiCuenta(false)} />}
+      {operadores && <OperadoresModal onClose={() => setOperadores(false)} />}
     </div>
   );
 }
@@ -275,8 +353,22 @@ function TenantModal({
             <span className="text-[13px] text-muted">
               {data.business.slug ?? 'sin subdominio'}
             </span>
-            <EstadoBadge status={sub?.status ?? null} />
+            <div className="flex items-center gap-2">
+              <VenceBadge vence={data.vence} />
+              <EstadoBadge status={sub?.status ?? null} />
+            </div>
           </div>
+
+          {data.vence && (
+            <div className="text-[13px] text-muted">
+              {data.vence.concepto === 'prueba' ? 'La prueba termina' : 'El periodo termina'} el{' '}
+              {new Date(data.vence.fecha).toLocaleDateString('es-BO', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2 text-[13px]">
             <Dato label="Usuarios" valor={data.usage.users} />
@@ -290,6 +382,15 @@ function TenantModal({
               ? new Date(data.usage.lastSaleAt).toLocaleDateString('es-BO')
               : 'nunca'}
           </div>
+
+          <DatosDelNegocio
+            id={id}
+            nombre={data.business.name}
+            slug={data.business.slug}
+            onGuardado={onGuardado}
+          />
+
+          <UsuariosDelNegocio id={id} />
 
           {sub?.suspendedReason && (
             <div className="rounded-theme bg-danger-bg p-3 text-[13px] text-danger">
@@ -375,6 +476,227 @@ function Dato({ label, valor }: { label: string; valor: number }) {
     <div className="rounded-theme border border-border p-2">
       <div className="text-[11px] uppercase tracking-[0.06em] text-muted">{label}</div>
       <div className="text-base font-bold">{valor}</div>
+    </div>
+  );
+}
+
+/**
+ * Renombrar el negocio y mudarlo de subdominio.
+ *
+ * Van juntos pero no pesan igual: el nombre es cosmético, el subdominio es la dirección
+ * por la que el cliente entra cada mañana. Cambiarlo tumba la anterior en el acto, así
+ * que el aviso está al lado del campo y no escondido en una confirmación.
+ */
+function DatosDelNegocio({
+  id,
+  nombre,
+  slug,
+  onGuardado,
+}: {
+  id: string;
+  nombre: string;
+  slug: string | null;
+  onGuardado: () => void;
+}) {
+  const qc = useQueryClient();
+  const [abierto, setAbierto] = useState(false);
+  const [n, setN] = useState(nombre);
+  const [s, setS] = useState(slug ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [nuevaUrl, setNuevaUrl] = useState<string | null>(null);
+
+  const guardar = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      platformApi.patch<{ url: string | null }>(`/platform/tenants/${id}`, body),
+    onSuccess: (res) => {
+      setError(null);
+      setNuevaUrl(s !== (slug ?? '') ? res.url : null);
+      qc.invalidateQueries({ queryKey: ['platform', 'tenant', id] });
+      onGuardado();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  if (!abierto) {
+    return (
+      <Button variant="outline" className="h-9 text-[13px]" onClick={() => setAbierto(true)}>
+        Editar nombre y subdominio
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-theme border border-border p-3">
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold">Nombre del negocio</label>
+        <Input value={n} onChange={(e) => setN(e.target.value)} />
+      </div>
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold">Subdominio</label>
+        <Input value={s} onChange={(e) => setS(e.target.value)} placeholder="mi-negocio" />
+        <p className="mt-1 text-[12px] text-warning">
+          Si lo cambias, la dirección actual deja de funcionar de inmediato. Avísale al
+          cliente antes.
+        </p>
+      </div>
+      {error && <p className="text-[13px] text-danger">{error}</p>}
+      {nuevaUrl && (
+        <p className="text-[13px] text-success">Nueva dirección: {nuevaUrl}</p>
+      )}
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={() => setAbierto(false)}>
+          Cerrar
+        </Button>
+        <Button
+          className="flex-1"
+          disabled={guardar.isPending}
+          onClick={() => {
+            const body: Record<string, unknown> = {};
+            if (n !== nombre) body.name = n;
+            if (s !== (slug ?? '')) body.slug = s;
+            if (!Object.keys(body).length) return setError('No cambiaste nada.');
+            guardar.mutate(body);
+          }}
+        >
+          {guardar.isPending ? 'Guardando…' : 'Guardar'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Los usuarios del negocio, con el rescate de acceso.
+ *
+ * Es la pantalla de la llamada de soporte: "no puedo entrar". Primero se le dice cuál
+ * era su usuario — la mitad de las veces el problema es ése — y sólo si hace falta se
+ * le genera una contraseña.
+ */
+function UsuariosDelNegocio({ id }: { id: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const { data: usuarios, isLoading } = useQuery({
+    queryKey: ['platform', 'tenant', id, 'users'],
+    queryFn: () => platformApi.get<TenantUser[]>(`/platform/tenants/${id}/users`),
+    enabled: abierto,
+  });
+
+  if (!abierto) {
+    return (
+      <Button variant="outline" className="h-9 text-[13px]" onClick={() => setAbierto(true)}>
+        <Users size={15} /> Ver usuarios y dar acceso
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-theme border border-border p-3">
+      <div className="text-[13px] font-semibold">Usuarios del negocio</div>
+      {isLoading && <div className="text-[13px] text-muted">Cargando…</div>}
+      <ul className="divide-y divide-border">
+        {usuarios?.map((u) => (
+          <li key={u.id} className="py-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-[13px] font-semibold">{u.username}</span>
+                  <Badge tone={u.role === 'admin' ? 'info' : 'neutral'}>
+                    {u.role === 'admin' ? 'Admin' : 'Vendedor'}
+                  </Badge>
+                  {!u.isActive && <Badge tone="danger">Inactivo</Badge>}
+                </div>
+                <div className="truncate text-[12px] text-muted">
+                  {u.name}
+                  {u.locationName ? ` · ${u.locationName}` : ''}
+                </div>
+                <div className="truncate text-[12px] text-muted">
+                  {u.email ?? 'sin correo'}
+                  {u.email && !u.emailVerifiedAt && ' (sin verificar)'}
+                </div>
+              </div>
+              <RescateAcceso tenantId={id} userId={u.id} />
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[12px] text-muted">
+        Un usuario sin correo verificado no puede recuperar su contraseña solo: es el
+        caso en el que hace falta darle una desde aquí.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Genera una contraseña temporal y la enseña UNA vez.
+ *
+ * No se puede volver a consultar: en la base sólo queda el hash, igual que con
+ * cualquier otra contraseña. Si se cierra el panel sin copiarla, se genera otra.
+ */
+function RescateAcceso({ tenantId, userId }: { tenantId: string; userId: string }) {
+  const [resultado, setResultado] = useState<{
+    tempPassword: string;
+    username: string;
+    correoEnviado: boolean;
+    email: string | null;
+  } | null>(null);
+  const [copiado, setCopiado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const generar = useMutation({
+    mutationFn: () =>
+      platformApi.post<{
+        tempPassword: string;
+        username: string;
+        correoEnviado: boolean;
+        email: string | null;
+      }>(`/platform/tenants/${tenantId}/users/${userId}/password`),
+    onSuccess: (r) => {
+      setError(null);
+      setResultado(r);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  if (resultado) {
+    return (
+      <div className="w-44 shrink-0 rounded-theme bg-success-bg p-2">
+        <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-success">
+          Contraseña temporal
+        </div>
+        <div className="mt-1 select-all font-mono text-[13px] font-bold">
+          {resultado.tempPassword}
+        </div>
+        <Button
+          variant="ghost"
+          className="mt-1 h-7 px-1 text-[11px]"
+          onClick={() => {
+            navigator.clipboard?.writeText(resultado.tempPassword);
+            setCopiado(true);
+          }}
+        >
+          <Copy size={11} /> {copiado ? 'Copiada' : 'Copiar'}
+        </Button>
+        <p className="mt-1 text-[11px] text-muted">
+          {resultado.correoEnviado
+            ? `Enviada también a ${resultado.email}.`
+            : 'No tiene correo: dísela tú.'}{' '}
+          No se puede volver a ver.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="shrink-0 text-right">
+      <Button
+        variant="outline"
+        className="h-8 px-2 text-[12px]"
+        disabled={generar.isPending}
+        onClick={() => generar.mutate()}
+      >
+        <KeyRound size={12} /> {generar.isPending ? 'Generando…' : 'Clave temporal'}
+      </Button>
+      {error && <p className="mt-1 text-[11px] text-danger">{error}</p>}
     </div>
   );
 }
