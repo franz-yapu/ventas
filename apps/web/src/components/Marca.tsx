@@ -2,9 +2,10 @@ import { useMarca } from '@/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
 
 const TAMANOS = {
-  sm: { caja: 'h-8 w-8 rounded-[9px]', texto: 'text-[15px]' },
-  md: { caja: 'h-11 w-11 rounded-[12px]', texto: 'text-xl' },
-  lg: { caja: 'h-16 w-16 rounded-[16px]', texto: 'text-2xl' },
+  sm: { caja: 'h-8 w-8 rounded-theme-sm', texto: 'text-[15px]' },
+  md: { caja: 'h-10 w-10 rounded-theme-sm', texto: 'text-base' },
+  lg: { caja: 'h-14 w-14 rounded-theme', texto: 'text-xl' },
+  xl: { caja: 'h-16 w-16 rounded-theme', texto: 'text-2xl' },
 } as const;
 
 /**
@@ -21,9 +22,16 @@ const TAMANOS = {
  */
 export function Marca({
   size = 'md',
+  inverso = false,
   className,
 }: {
   size?: keyof typeof TAMANOS;
+  /**
+   * Sobre un fondo del color primario (la banda del login en escritorio). Ahí el
+   * distintivo se invierte —caja clara, inicial en primario— porque la versión normal
+   * es primario sobre primario: desaparece.
+   */
+  inverso?: boolean;
   className?: string;
 }) {
   const marca = useMarca();
@@ -35,9 +43,12 @@ export function Marca({
       <div
         className={cn(
           t.caja,
-          // Fondo blanco y borde: un logo con transparencia o de color claro necesita
-          // algo detrás, o desaparece sobre el fondo cálido de la app.
-          'flex shrink-0 items-center justify-center overflow-hidden border border-border bg-surface',
+          // Algo detrás siempre: un logo con transparencia o de color claro desaparece
+          // sobre el fondo de la app. Sobre la banda del primario la caja va CLARA y sin
+          // borde — con `bg-surface` en modo oscuro salía un cuadro negro pegado al
+          // color de marca, que es justo donde peor se ve.
+          'flex shrink-0 items-center justify-center overflow-hidden',
+          inverso ? 'bg-white' : 'border border-border bg-surface',
           className,
         )}
       >
@@ -51,7 +62,8 @@ export function Marca({
       className={cn(
         t.caja,
         t.texto,
-        'flex shrink-0 items-center justify-center font-bold text-primary-fg',
+        'flex shrink-0 items-center justify-center font-bold',
+        !inverso && 'text-primary-fg',
         className,
       )}
       // Degradado de los DOS colores de la marca. Un negocio sin logo tiene aquí lo
