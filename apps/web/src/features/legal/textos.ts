@@ -48,7 +48,7 @@ export const TERMINOS: Seccion[] = [
     titulo: '3. Prueba, planes y pagos',
     parrafos: [
       `Al registrarte tienes ${TRIAL_DAYS} días de prueba sin costo y sin tarjeta. Al terminar, para seguir usando el servicio hay que elegir un plan.`,
-      'Cada plan incluye un cupo de sucursales, usuarios y productos. Puedes cambiar de plan cuando quieras; el cambio se aplica de inmediato.',
+      'Cada plan incluye un cupo de sucursales, usuarios y productos. Para cambiar de plan, escríbenos y lo aplicamos sobre tu cuenta.',
       'Los precios están en bolivianos y pueden cambiar. Si cambian, te avisaremos antes de que te afecte.',
     ],
   },
@@ -136,8 +136,9 @@ export const PRIVACIDAD: Seccion[] = [
   {
     titulo: '4. Quién puede verlos',
     parrafos: [
-      'Tú y los usuarios que tú crees. Los negocios están aislados entre sí: la base de datos aplica esa separación por sí misma, no sólo el programa.',
+      'Tú y los usuarios que tú crees. Los negocios están aislados entre sí: ninguna consulta del sistema devuelve información de otro negocio.',
       'Nuestro equipo puede acceder cuando haga falta para dar soporte o resolver una falla, y esos accesos quedan registrados.',
+      'Si pierdes el acceso y nos lo pides, podemos generar una contraseña temporal para un usuario tuyo. Hacerlo cierra todas sus sesiones abiertas y queda registrado con quién lo hizo y cuándo.',
       `La información se aloja en ${EMPRESA.hosting}.`,
     ],
   },
@@ -145,7 +146,7 @@ export const PRIVACIDAD: Seccion[] = [
     titulo: '5. Sesión y almacenamiento en tu dispositivo',
     parrafos: [
       'Guardamos en tu navegador lo necesario para mantener la sesión y para que la aplicación funcione sin internet (catálogo y ventas pendientes de sincronizar). No usamos cookies de publicidad.',
-      'Al cerrar sesión, esa información se borra del dispositivo y la sesión se cierra también en nuestro servidor.',
+      'Al cerrar sesión, la sesión se cierra también en nuestro servidor y el dispositivo deja de tener acceso. Si prestas o vendes el equipo, borra los datos del navegador desde su configuración.',
     ],
   },
   {
@@ -165,7 +166,7 @@ export const PRIVACIDAD: Seccion[] = [
   {
     titulo: '8. Seguridad',
     parrafos: [
-      'Las contraseñas se guardan cifradas y no se pueden recuperar, sólo restablecer. Las conexiones van cifradas. Hacemos copias de seguridad periódicas.',
+      'Las contraseñas se guardan cifradas y no se pueden recuperar, sólo restablecer. Las conexiones van cifradas.',
       'Ningún sistema es infalible. Si ocurriera un incidente que afecte tus datos, te lo comunicaremos.',
     ],
   },
