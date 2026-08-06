@@ -52,7 +52,9 @@
      derivado del tema con color-mix para respetar el white-label. */
   .ds-nav-tint {
     background: var(--color-primary-soft);
-    color: var(--color-primary);
+    /* La variante legible: aquí el color de marca es TEXTO, y el tinte de fondo apenas
+       se despega de la superficie, así que hereda su mismo problema en oscuro. */
+    color: var(--color-primary-ink);
   }
 }
 
@@ -121,6 +123,15 @@
   --color-primary: #2f68d8;
   --color-primary-fg: #ffffff;
   --color-primary-700: #234f9e;
+  /**
+   * El primario CUANDO ES TEXTO sobre la superficie.
+   *
+   * Arranca igual que el primario y lo recalcula `lib/color.ts` en cuanto se conoce la
+   * marca y el modo. Existe porque la regla "el color del negocio no cambia en oscuro"
+   * es buena para rellenos y mala para texto: sobre el fondo oscuro, cinco de los seis
+   * temas quedaban por debajo del mínimo legible y el gris grafito desaparecía.
+   */
+  --color-primary-ink: var(--color-primary);
   --color-secondary: #f59e0b;
   --color-secondary-fg: #17171a;
 
@@ -141,6 +152,18 @@
   --color-warning-bg: #fbf4e6;
   --color-info: #2a5f8a;
   --color-info-bg: #eef3f8;
+
+  /**
+   * Los mismos semánticos, para cuando el fondo es `--color-fg` (una superficie
+   * INVERTIDA: el toast del POS, que es casi negro en claro y casi blanco en oscuro).
+   *
+   * Son el verde y el ámbar del modo CONTRARIO, y por eso se cruzan más abajo. El verde
+   * claro se lee sobre negro y el oscuro sobre blanco; usar el semántico normal deja el
+   * icono del mismo tono que el fondo justo en uno de los dos modos, que es lo que
+   * pasaba: `text-emerald-400` sobre el toast se veía en claro y desaparecía en oscuro.
+   */
+  --color-success-inv: #5fbf87;
+  --color-warning-inv: #d3ae4e;
 
   /**
    * Superficies teñidas con el color de marca.
@@ -169,6 +192,7 @@
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-lg: calc(var(--radius) * 1.4);
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.12);
 
   /* Tipografía. */
   --font-sans: 'Onest', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -202,6 +226,12 @@
   --color-info: #7fb0d6;
   --color-info-bg: #16232c;
 
+  /* Cruzados a propósito: aquí la superficie invertida es casi BLANCA. Un punto más
+     oscuros que sus equivalentes del modo claro, medidos contra ese casi-blanco: el verde
+     de la app se queda en 3.55 encima y aquí no hay un aspecto previo que conservar. */
+  --color-success-inv: #2a774e;
+  --color-warning-inv: #846918;
+
   --color-soft-base: #1b1b19;
   --color-table-head: #201f1d;
   --color-track: #2a2926;
@@ -209,8 +239,26 @@
   --color-skel-b: #201f1c;
   --color-icon-dim: #5d5b55;
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-card-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
 
   color-scheme: dark;
+}
+
+/* Riel del control deslizante (radio de bordes en Configuración). El pulgar ya sigue a
+   `accent-color`, pero el riel es del navegador y en oscuro se quedaba blanco. */
+input[type='range'] {
+  accent-color: var(--color-primary);
+  background: transparent;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  background: var(--color-track);
+  border-radius: 999px;
+  height: 4px;
+}
+input[type='range']::-moz-range-track {
+  background: var(--color-track);
+  border-radius: 999px;
+  height: 4px;
 }
 
 html,

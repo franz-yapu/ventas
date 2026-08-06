@@ -14,6 +14,8 @@
  * noche. Es la única preferencia de la app que es por dispositivo.
  */
 
+import { aplicarMarcaLegible } from '@/lib/color';
+
 export type Modo = 'claro' | 'oscuro' | 'auto';
 
 const CLAVE = 'vf_modo';
@@ -49,6 +51,10 @@ export function aplicarModo(modo: Modo): void {
   const fondo = getComputedStyle(raiz).getPropertyValue('--color-bg').trim();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (fondo && meta) meta.setAttribute('content', fondo);
+
+  // La superficie acaba de cambiar, así que el color de marca para TEXTO hay que
+  // recalcularlo: es el que garantiza que un enlace siga leyéndose en oscuro.
+  aplicarMarcaLegible();
 }
 
 export function guardarModo(modo: Modo): void {

@@ -88,10 +88,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (marca.theme?.primary) {
       // Fija también el color del texto que va encima, calculado del color elegido.
       aplicarColorDeMarca('primary', marca.theme.primary);
-      // Refleja el color en la barra del navegador / PWA.
-      document
-        .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', marca.theme.primary);
+      // El `theme-color` NO se toca aquí. Lo lleva `theme/modo.ts`, y con el color del
+      // FONDO: eran tres sitios escribiéndolo (marca, modo y la vista previa), ganaba el
+      // último en ejecutarse, y en oscuro la barra del navegador acababa del color de
+      // marca sobre una pantalla oscura — justo lo que el modo dice querer evitar. La
+      // barra tiene que decir de qué color es la pantalla, no de qué color es el negocio.
     }
     if (marca.theme?.secondary) aplicarColorDeMarca('secondary', marca.theme.secondary);
     if (marca.theme?.radius) root.setProperty('--radius', marca.theme.radius);

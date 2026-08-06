@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contraste, luminancia, oscurecer, textoSobre } from '../src/lib/color';
+import { contraste, legibleSobre, luminancia, oscurecer, textoSobre } from '../src/lib/color';
 
 /**
  * Contraste del texto sobre los colores de marca.
@@ -88,5 +88,71 @@ describe('variante oscura del color', () => {
 
   it('deja pasar sin tocar lo que no es un color', () => {
     expect(oscurecer('no-es-un-color')).toBe('no-es-un-color');
+  });
+});
+
+/**
+ * El color de marca cuando es TEXTO sobre la superficie.
+ *
+ * La regla "el primario no cambia en oscuro" es correcta para rellenos y falsa para
+ * texto: de los seis temas de Configuración, cinco quedaban entre 3.2 y 3.4 sobre el
+ * fondo oscuro —por debajo del mínimo legible— y Grafito en 1.53, o sea invisible.
+ * Afecta a los enlaces, al ítem activo del menú y a los importes marcados.
+ */
+describe('el color de marca se lee también como texto', () => {
+  /** Superficies reales de `index.css`. */
+  const CLARO = '#ffffff';
+  const OSCURO = '#1b1b19';
+
+  /** Los seis primarios que ofrece Configuración. */
+  const PRIMARIOS = ['#2f68d8', '#27794c', '#6d5ae0', '#e0662f', '#c23b2f', '#3a3a42'];
+
+  it('los seis temas se leen sobre la superficie OSCURA', () => {
+    for (const c of PRIMARIOS) {
+      expect(contraste(legibleSobre(c, OSCURO), OSCURO), c).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('los seis temas se leen sobre la superficie CLARA', () => {
+    for (const c of PRIMARIOS) {
+      expect(contraste(legibleSobre(c, CLARO), CLARO), c).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('si ya se lee, no se toca: el color del negocio es el suyo', () => {
+    // La propiedad, no una lista: el que ya cumple sale idéntico. (Escrito primero como
+    // "en claro los seis ya cumplen", que resultó ser falso — ver el caso de abajo.)
+    for (const c of PRIMARIOS) {
+      for (const fondo of [CLARO, OSCURO]) {
+        if (contraste(c, fondo) >= 4.5) expect(legibleSobre(c, fondo), c).toBe(c);
+      }
+    }
+  });
+
+  it('el naranja tampoco se leía en CLARO, y nadie lo había medido', () => {
+    // Hallazgo de paso: los informes daban la paleta clara por buena para el primario,
+    // pero #e0662f sobre blanco se queda en 3.6. El ajuste vale para los dos modos, no
+    // sólo para el oscuro, precisamente porque se decide midiendo y no por el modo.
+    expect(contraste('#e0662f', CLARO)).toBeLessThan(4.5);
+    expect(contraste(legibleSobre('#e0662f', CLARO), CLARO)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('Grafito, que era el caso imposible, acaba legible', () => {
+    // 1.53 sobre el fondo oscuro: literalmente no se veía.
+    expect(contraste('#3a3a42', OSCURO)).toBeLessThan(2);
+    expect(contraste(legibleSobre('#3a3a42', OSCURO), OSCURO)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('se mueve lo MÍNIMO: para de aclarar en cuanto cruza el umbral', () => {
+    // Si se pasara de largo, la marca dejaría de parecerse a sí misma. Se admite un
+    // margen por el tamaño del paso, no un color lavado.
+    for (const c of PRIMARIOS) {
+      expect(contraste(legibleSobre(c, OSCURO), OSCURO), c).toBeLessThan(7);
+    }
+  });
+
+  it('ante una entrada que no entiende, devuelve lo que le dieron', () => {
+    expect(legibleSobre('no-es-un-color', OSCURO)).toBe('no-es-un-color');
+    expect(legibleSobre('#2f68d8', 'tampoco')).toBe('#2f68d8');
   });
 });

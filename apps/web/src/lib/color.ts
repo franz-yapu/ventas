@@ -76,6 +76,60 @@ export function oscurecer(hex: string, factor = 0.78): string {
   return `#${[r, g, b].map((v) => v!.toString(16).padStart(2, '0')).join('')}`;
 }
 
+/** Dos colores mezclados, `t` de 0 (todo `a`) a 1 (todo `b`). */
+function mezclar(a: string, b: string, t: number): string {
+  const ra = aRgb(a);
+  const rb = aRgb(b);
+  if (!ra || !rb) return a;
+  const c = ra.map((v, i) => Math.round(v + (rb[i]! - v) * t));
+  return `#${c.map((v) => v!.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * El color de marca ajustado hasta que se LEA sobre este fondo.
+ *
+ * El primario y el secundario no cambian en modo oscuro, y es lo correcto: la marca del
+ * negocio es su marca a cualquier hora. Pero esa regla vale para RELLENOS —un botón, una
+ * pastilla—, donde el color es el protagonista y el texto encima ya se calcula. Como
+ * TEXTO sobre la superficie oscura no se sostiene: de los seis temas que ofrece
+ * Configuración, cinco quedaban por debajo del mínimo legible (entre 3.2 y 3.4) y Grafito
+ * se iba a 1.53, o sea invisible. Afecta a los enlaces, al ítem activo del menú y a los
+ * importes marcados.
+ *
+ * Así que el relleno conserva el color exacto del negocio y el texto se acerca a la
+ * superficie lo justo para cruzar el 4.5:1. Se sube de veinte en veinte partes y se para
+ * en cuanto llega: mover un tono lo mínimo es lo que hace que siga pareciendo su color.
+ */
+export function legibleSobre(hex: string, fondo: string, minimo = 4.5): string {
+  if (!aRgb(hex) || !aRgb(fondo)) return hex;
+  if (contraste(hex, fondo) >= minimo) return hex;
+  // Un fondo oscuro pide aclarar el color; uno claro, oscurecerlo.
+  const destino = luminancia(fondo) < 0.5 ? '#ffffff' : TEXTO_OSCURO;
+  for (let paso = 1; paso <= 20; paso++) {
+    const candidato = mezclar(hex, destino, paso / 20);
+    if (contraste(candidato, fondo) >= minimo) return candidato;
+  }
+  // Ni mezclándolo del todo llega: se devuelve el extremo, que es lo más legible que hay.
+  return destino;
+}
+
+/**
+ * Recalcula el color de marca para texto a partir de la superficie que hay AHORA.
+ *
+ * Depende de dos cosas que cambian por separado —la marca del negocio y el modo de
+ * pantalla—, así que lo llaman las dos: `aplicarColorDeMarca` y `aplicarModo`. Se lee la
+ * superficie del documento en vez de recibirla por parámetro para que nadie tenga que
+ * acordarse de cuál toca en cada modo.
+ */
+export function aplicarMarcaLegible(): void {
+  const raiz = document.documentElement;
+  const cs = getComputedStyle(raiz);
+  const primario = cs.getPropertyValue('--color-primary').trim();
+  const superficie = cs.getPropertyValue('--color-surface').trim();
+  if (!primario || !superficie) return;
+  raiz.style.setProperty('--color-primary-ink', legibleSobre(primario, superficie));
+}
+
 /**
  * Fija en el documento un color de marca junto con el texto que va encima.
  *
@@ -87,5 +141,8 @@ export function aplicarColorDeMarca(nombre: 'primary' | 'secondary', hex: string
   const root = document.documentElement.style;
   root.setProperty(`--color-${nombre}`, hex);
   root.setProperty(`--color-${nombre}-fg`, textoSobre(hex));
-  if (nombre === 'primary') root.setProperty('--color-primary-700', oscurecer(hex));
+  if (nombre === 'primary') {
+    root.setProperty('--color-primary-700', oscurecer(hex));
+    aplicarMarcaLegible();
+  }
 }
