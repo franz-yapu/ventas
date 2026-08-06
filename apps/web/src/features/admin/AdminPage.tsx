@@ -68,7 +68,10 @@ export function AdminPage() {
         ))}
       </div>
 
-      <ExportarDatos />
+      {/* Llevarse los datos es un acto del negocio entero, y ahora el servidor sólo se lo
+          concede a la central. Sin esta condición, al encargado de sucursal le quedaba el
+          botón a la vista para tropezar con un 403: peor que no ofrecerlo. */}
+      {user?.isCentral && <ExportarDatos />}
 
       <p className="text-[13px] text-muted">
         <Link to="/terminos" className="underline underline-offset-2">

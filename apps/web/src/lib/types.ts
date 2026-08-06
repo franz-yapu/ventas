@@ -8,8 +8,11 @@ export interface Product {
   description: string | null;
   categoryId: string | null;
   price: string;
-  cost: string | null; // precio de compra unitario
-  costWholesale: string | null; // precio de compra por mayor
+  // Opcionales porque el servidor OMITE las claves para el vendedor (no las manda en
+  // `null`): el costo no viaja hacia quien no debe verlo. Si aquí dijeran `string | null`
+  // el compilador dejaría pasar código que da por hecho un costo que nunca llega.
+  cost?: string | null; // precio de compra unitario
+  costWholesale?: string | null; // precio de compra por mayor
   imageUrl: string | null;
   attributes: Record<string, unknown>;
   isActive: boolean;

@@ -20,9 +20,19 @@ export async function exportRoutes(app: FastifyInstance) {
     rateLimit: { max: env.exportRateLimitMax, timeWindow: env.exportRateLimitWindow },
   };
 
+  /**
+   * La exportación es un derecho del NEGOCIO, y quien responde por el negocio es la
+   * central — el mismo argumento que dejó `PATCH /business` en manos del dueño.
+   *
+   * Con `requireAdmin` a secas, un encargado de sucursal se descargaba en un solo JSON
+   * las ventas de los otros locales, los usuarios de la central con su correo y rol, y
+   * los productos con su costo: esta ruta anulaba de un golpe `viewScope()`, el filtro
+   * de `users.ts`, `soloLosMios` de la caja y `sinCostos()`. Ocho puertas cerradas y una
+   * abierta dan el mismo resultado que ninguna cerrada.
+   */
   app.get(
     '/business/export',
-    { preHandler: [app.requireAuth, app.requireAdmin], config: limite },
+    { preHandler: [app.requireAuth, app.requireCentralAdmin], config: limite },
     async (req, reply) => {
       const businessId = req.authUser!.businessId;
 

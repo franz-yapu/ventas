@@ -96,9 +96,10 @@ export async function persistSale(
   if (!loc) throw new Error('LOCATION_SCOPE');
 
   const productIds = [...new Set(input.items.map((it) => it.productId).filter(Boolean))] as string[];
+  const costoDeProducto = new Map<string, string | null>();
   if (productIds.length > 0) {
     const propios = await tx
-      .select({ id: schema.product.id })
+      .select({ id: schema.product.id, cost: schema.product.cost })
       .from(schema.product)
       .where(
         and(
@@ -107,6 +108,7 @@ export async function persistSale(
         ),
       );
     if (propios.length !== productIds.length) throw new Error('PRODUCT_SCOPE');
+    for (const p of propios) costoDeProducto.set(p.id, p.cost);
   }
 
   const existing = await tx
@@ -140,16 +142,43 @@ export async function persistSale(
     clientCreatedAt: new Date(input.clientCreatedAt),
   });
 
+  /**
+   * El costo lo pone el SERVIDOR, no el cliente.
+   *
+   * El precio de venta sí llega del cliente y con razón (es la foto del momento, y el
+   * POS vende sin conexión). Con el costo no se puede hacer lo mismo, por dos motivos
+   * que apuntan al mismo sitio:
+   *
+   * 1. El vendedor ya no lo recibe. Desde que el costo dejó de salir por el cable hacia
+   *    quien no debe verlo, su catálogo offline no lo tiene, así que su venta llegaba
+   *    aquí sin costo y se guardaba en NULL. Los reportes cuentan `COALESCE(costo, 0)`,
+   *    de modo que cada venta suya declaraba como ganancia el precio entero. No fallaba
+   *    nada: sólo salía mal el número que el dueño usa para decidir. Y no se recupera,
+   *    porque `unit_cost_snapshot` es histórico — el costo de hoy no vale para la venta
+   *    de ayer.
+   * 2. Quien no tiene el dato tampoco puede acreditarlo. Cualquier cosa que un vendedor
+   *    mandara en este campo sería inventada, y el margen del negocio no puede depender
+   *    de lo que diga un dispositivo.
+   *
+   * Así que se toma del producto —ya está cargado por la comprobación de tenencia de
+   * arriba, no cuesta una consulta más— y sólo se respeta lo que manda el cliente
+   * cuando quien vende es el administrador, que sí lo tiene y cuya copia offline es más
+   * fiel al momento de la venta que el costo de hoy.
+   */
   await tx.insert(schema.saleItem).values(
-    input.items.map((it) => ({
-      saleId: input.id,
-      productId: it.productId,
-      productNameSnapshot: it.productNameSnapshot,
-      unitPriceSnapshot: it.unitPriceSnapshot,
-      unitCostSnapshot: it.unitCostSnapshot ?? null,
-      quantity: it.quantity,
-      lineTotal: it.lineTotal,
-    })),
+    input.items.map((it) => {
+      const delCliente = ctx.role === 'admin' ? (it.unitCostSnapshot ?? null) : null;
+      const delProducto = it.productId ? (costoDeProducto.get(it.productId) ?? null) : null;
+      return {
+        saleId: input.id,
+        productId: it.productId,
+        productNameSnapshot: it.productNameSnapshot,
+        unitPriceSnapshot: it.unitPriceSnapshot,
+        unitCostSnapshot: delCliente ?? delProducto,
+        quantity: it.quantity,
+        lineTotal: it.lineTotal,
+      };
+    }),
   );
 
   // Descuento automático de stock (sólo ventas completadas y productos con inventario en la ubicación).

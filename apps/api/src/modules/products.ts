@@ -3,6 +3,7 @@ import { upsertProductSchema } from '@ventafacil/shared';
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { sinCostos, sinCostosEnJson } from '../lib/costos.js';
 import { canActOnLocation, viewScope } from '../lib/scope.js';
 import { permiteCrear } from '../lib/subscription.js';
 
@@ -13,26 +14,6 @@ const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
-
-/**
- * Quita el costo y el costo por mayor cuando quien pregunta es un VENDEDOR.
- *
- * La pantalla de Productos ya escondía esas columnas para los vendedores, pero el
- * servidor se las mandaba igual: bastaba abrir las herramientas del navegador para leer
- * el margen de cada producto. Esconder en el dibujo no es proteger — quien decide qué
- * sale por el cable es el servidor.
- *
- * Se borran las claves en vez de mandarlas en `null` para que la diferencia se note si
- * alguna vez alguien vuelve a exponerlas por descuido.
- */
-function sinCostos<T extends { cost?: unknown; costWholesale?: unknown }>(
-  fila: T,
-  user: { role: 'admin' | 'seller' },
-): T {
-  if (user.role === 'admin') return fila;
-  const { cost: _c, costWholesale: _cw, ...resto } = fila;
-  return resto as T;
-}
 
 const productSelect = {
   id: schema.product.id,
@@ -244,9 +225,19 @@ export async function productRoutes(app: FastifyInstance) {
     }));
 
     // Fusionamos ambos orígenes en una sola línea de tiempo (más recientes primero).
+    //
+    // El `after` de un alta es la fila ENTERA del producto, y el de una edición son las
+    // dos versiones completas: el costo viajaba aquí de contrabando, en una ruta que el
+    // vendedor sí puede abrir (necesita ver su movimiento diario). Se limpia al final,
+    // sobre la línea de tiempo ya fusionada, para que ningún origen futuro se escape.
     const merged = [...auditRows, ...saleEntries]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 50);
+      .slice(0, 50)
+      .map((e) => ({
+        ...e,
+        before: sinCostosEnJson(e.before, user),
+        after: sinCostosEnJson(e.after, user),
+      }));
     return reply.send({ data: merged, error: null });
   });
 
