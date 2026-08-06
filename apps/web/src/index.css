@@ -139,16 +139,28 @@
   --color-bg: #f6f5f3;
   --color-surface: #ffffff;
   --color-border: #ecebe6;
-  --color-muted: #8c8a83;
+  /**
+   * El texto apagado, oscurecido de #8c8a83 al mínimo que se lee.
+   *
+   * Venía del diseño original y se quedaba en 3.17 sobre el fondo de la app, 3.31 sobre la
+   * cabecera de tabla y 3.45 sobre la superficie: por debajo del 4.5 que pide un texto
+   * normal. Y no es un rincón — es el color de cada subtítulo, cada cabecera de tabla y
+   * cada rótulo del menú, siempre a 12 o 13px, que es donde menos se perdona.
+   *
+   * Se baja lo MÍNIMO que cruza el umbral en la superficie más exigente (el fondo, no el
+   * blanco), conservando el gris cálido. Oscurecerlo más aclararía el número y apagaría el
+   * aire de la paleta, que es lo que hacía dudar del cambio.
+   */
+  --color-muted: #716f6b;
   --color-fg: #17171a;
 
   /* Tokens semánticos. También cambian en oscuro: el mismo verde sobre un fondo
      oscuro se ve apagado y deja de leerse como "bien". */
-  --color-success: #2f8f5b;
+  --color-success: #2b7d51;
   --color-success-bg: #eef6f1;
   --color-danger: #b8402f;
   --color-danger-bg: #fbeeec;
-  --color-warning: #8a6d18;
+  --color-warning: #876b18;
   --color-warning-bg: #fbf4e6;
   --color-info: #2a5f8a;
   --color-info-bg: #eef3f8;
