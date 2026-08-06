@@ -2,6 +2,8 @@ import type { PlanFeature } from '@ventafacil/shared';
 import { CreditCard, History, MapPin, Settings, Users, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import { Page, PageHeader } from '@/components/ui/page';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { ExportarDatos } from '@/features/legal/ExportarDatos';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 
@@ -11,8 +13,16 @@ const SECTIONS: Array<{
   desc: string;
   icon: LucideIcon;
   feature?: PlanFeature;
+  /** Sólo para la sucursal central: cambia el negocio entero, no una sucursal. */
+  central?: boolean;
 }> = [
-  { to: '/ubicaciones', label: 'Ubicaciones', desc: 'Sucursales y oficina central', icon: MapPin },
+  {
+    to: '/ubicaciones',
+    label: 'Ubicaciones',
+    desc: 'Sucursales y oficina central',
+    icon: MapPin,
+    central: true,
+  },
   { to: '/usuarios', label: 'Usuarios', desc: 'Cuentas y roles del equipo', icon: Users },
   {
     to: '/actividad',
@@ -21,17 +31,25 @@ const SECTIONS: Array<{
     icon: History,
     feature: 'auditoria',
   },
-  { to: '/configuracion', label: 'Configuración', desc: 'Datos del negocio y tema', icon: Settings },
+  {
+    to: '/configuracion',
+    label: 'Configuración',
+    desc: 'Datos del negocio y tema',
+    icon: Settings,
+  },
   { to: '/suscripcion', label: 'Mi plan', desc: 'Plan, estado y cupos usados', icon: CreditCard },
 ];
 
 export function AdminPage() {
   const { has } = useSubscription();
-  const secciones = SECTIONS.filter((s) => !s.feature || has(s.feature));
+  const { user } = useAuth();
+  const secciones = SECTIONS.filter(
+    (s) => (!s.feature || has(s.feature)) && (!s.central || user?.isCentral),
+  );
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Administración</h1>
+    <Page>
+      <PageHeader titulo="Administración" descripcion="Todo lo que sólo tú puedes tocar." />
       <div className="grid gap-3 sm:grid-cols-2">
         {secciones.map((s) => (
           <Link key={s.to} to={s.to}>
@@ -61,6 +79,6 @@ export function AdminPage() {
           Política de privacidad
         </Link>
       </p>
-    </div>
+    </Page>
   );
 }

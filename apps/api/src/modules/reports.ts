@@ -9,7 +9,15 @@ const TZ = 'America/La_Paz';
 export async function reportRoutes(app: FastifyInstance) {
   // GET /reports/summary — comparativo por ubicacion: hoy / semana / mes (solo completadas).
   // Con ?from&to (ISO) añade una columna de rango personalizado.
-  app.get('/reports/summary', { preHandler: app.requireAuth }, async (req, reply) => {
+  /**
+   * Resumen de ventas y GANANCIA por ubicación. Sólo admin.
+   *
+   * Antes bastaba con estar autenticado, así que un vendedor podía pedirlo y leer la
+   * ganancia del negocio — la misma información que se le oculta en Productos, servida
+   * por otra puerta. Que no salga en su menú no cerraba nada: el menú es una cortesía,
+   * la que cierra es esta línea.
+   */
+  app.get('/reports/summary', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
     const parsedQ = z
       .object({
         from: z.string().datetime({ offset: true }).optional(),

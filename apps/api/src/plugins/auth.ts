@@ -54,4 +54,28 @@ export const authPlugin = fp(async (app) => {
       return reply.code(403).send({ data: null, error: 'Requiere rol admin' });
     }
   });
+
+  /**
+   * Admin de la CENTRAL: manda en el negocio entero, no sólo en una sucursal.
+   *
+   * `admin` significa dos trabajos distintos según dónde esté la persona: el dueño, que
+   * está en la central, y el encargado de una sucursal. Mientras las dos cosas se
+   * comprobaran igual, el encargado de una sucursal podía renombrar el negocio, cambiar
+   * su impuesto y el tope de descuento de TODOS los vendedores, dar de alta sucursales
+   * y crear usuarios en cualquiera de ellas. Con una sola sucursal no se notaba; con dos
+   * es justo la persona a la que no le diste esos permisos.
+   *
+   * Lo que sigue siendo del encargado: su stock, su caja, sus ventas y sus vendedores.
+   */
+  app.decorate('requireCentralAdmin', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!req.authUser) {
+      return reply.code(401).send({ data: null, error: 'No autorizado' });
+    }
+    if (req.authUser.role !== 'admin' || !req.authUser.isCentral) {
+      return reply.code(403).send({
+        data: null,
+        error: 'Sólo un administrador de la sucursal central puede hacer esto',
+      });
+    }
+  });
 });

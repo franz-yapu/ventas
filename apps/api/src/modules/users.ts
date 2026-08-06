@@ -4,13 +4,36 @@ import argon2 from 'argon2';
 import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { NINGUNA_UBICACION } from '../lib/scope.js';
 import { revocarTodo } from '../lib/sessions.js';
 import { permiteCrear } from '../lib/subscription.js';
 
+/**
+ * ¿Puede este admin administrar a un usuario de esta ubicación?
+ *
+ * La central administra a cualquiera. El encargado de una sucursal, sólo a la gente de
+ * SU sucursal — ni a los de otra, ni a los de la central. Sin esto, el encargado de una
+ * sucursal podía crear un usuario en la central (y de paso darle visión de todo el
+ * negocio) o cambiarle la contraseña al dueño.
+ */
+function puedeAdministrarA(
+  admin: { isCentral: boolean; locationId: string | null },
+  locationId: string | null | undefined,
+): boolean {
+  if (admin.isCentral) return true;
+  return !!locationId && locationId === admin.locationId;
+}
+
 export async function userRoutes(app: FastifyInstance) {
-  // Lista usuarios (sin exponer el hash de contraseña).
+  // Lista usuarios (sin exponer el hash de contraseña). La sucursal ve sólo los suyos.
   app.get('/users', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
-    const rows = await withTenant(req.authUser!.businessId, (tx) =>
+    const user = req.authUser!;
+    const filtros = [eq(schema.appUser.businessId, user.businessId)];
+    // Mismo criterio que en el resto de la app: la central ve todo, la sucursal lo suyo.
+    if (!user.isCentral) {
+      filtros.push(eq(schema.appUser.locationId, user.locationId ?? NINGUNA_UBICACION));
+    }
+    const rows = await withTenant(user.businessId, (tx) =>
       tx
         .select({
           id: schema.appUser.id,
@@ -21,7 +44,7 @@ export async function userRoutes(app: FastifyInstance) {
           isActive: schema.appUser.isActive,
         })
         .from(schema.appUser)
-        .where(eq(schema.appUser.businessId, req.authUser!.businessId))
+        .where(and(...filtros))
         .orderBy(asc(schema.appUser.name)),
     );
     return reply.send({ data: rows, error: null });
@@ -39,6 +62,16 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.code(400).send({
         data: null,
         error: 'Un vendedor necesita una ubicación: sin ella no podría vender ni ver nada.',
+      });
+    }
+
+    // El encargado de una sucursal da de alta gente para SU sucursal. Poder elegir otra
+    // —la central incluida— sería darse a sí mismo el alcance que no tiene, en dos pasos:
+    // creo un usuario en la central, entro con él, veo todo el negocio.
+    if (!puedeAdministrarA(req.authUser!, parsed.data.locationId)) {
+      return reply.code(403).send({
+        data: null,
+        error: 'Sólo puedes dar de alta usuarios en tu propia sucursal',
       });
     }
 
@@ -92,21 +125,41 @@ export async function userRoutes(app: FastifyInstance) {
         .safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ data: null, error: 'Datos invalidos' });
 
+      // Se lee el usuario ANTES de tocar nada: hace falta saber de qué sucursal es para
+      // decidir si este admin puede administrarlo, y cuál sería su rol final.
+      const [actual] = await withTenant(req.authUser!.businessId, (tx) =>
+        tx
+          .select({ role: schema.appUser.role, locationId: schema.appUser.locationId })
+          .from(schema.appUser)
+          .where(
+            and(eq(schema.appUser.id, id), eq(schema.appUser.businessId, req.authUser!.businessId)),
+          )
+          .limit(1),
+      );
+      if (!actual) return reply.code(404).send({ data: null, error: 'Usuario no encontrado' });
+
+      // Sobre quién está actuando: tiene que ser de su sucursal.
+      if (!puedeAdministrarA(req.authUser!, actual.locationId)) {
+        return reply.code(403).send({
+          data: null,
+          error: 'Sólo puedes administrar usuarios de tu propia sucursal',
+        });
+      }
+      // Y a dónde lo estaría mandando: mover a alguien a otra sucursal (o a la central)
+      // es sacarlo de su alcance, así que también es cosa de la central.
+      if (
+        parsed.data.locationId !== undefined &&
+        !puedeAdministrarA(req.authUser!, parsed.data.locationId)
+      ) {
+        return reply.code(403).send({
+          data: null,
+          error: 'No puedes mover un usuario a otra sucursal',
+        });
+      }
+
       // Mismo motivo que al crear: dejar a un vendedor sin ubicación lo deja sin app.
       if (parsed.data.locationId === null) {
-        const [actual] = await withTenant(req.authUser!.businessId, (tx) =>
-          tx
-            .select({ role: schema.appUser.role })
-            .from(schema.appUser)
-            .where(
-              and(
-                eq(schema.appUser.id, id),
-                eq(schema.appUser.businessId, req.authUser!.businessId),
-              ),
-            )
-            .limit(1),
-        );
-        const rolFinal = parsed.data.role ?? actual?.role;
+        const rolFinal = parsed.data.role ?? actual.role;
         if (rolFinal === 'seller') {
           return reply.code(400).send({
             data: null,

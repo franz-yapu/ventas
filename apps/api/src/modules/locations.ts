@@ -17,9 +17,10 @@ export async function locationRoutes(app: FastifyInstance) {
     return reply.send({ data: rows, error: null });
   });
 
+  // Abrir una sucursal nueva es una decisión del negocio, no de otra sucursal.
   app.post(
     '/locations',
-    { preHandler: [app.requireAuth, app.requireAdmin] },
+    { preHandler: [app.requireAuth, app.requireCentralAdmin] },
     async (req, reply) => {
       const parsed = createLocationSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ data: null, error: 'Datos invalidos' });
@@ -35,9 +36,11 @@ export async function locationRoutes(app: FastifyInstance) {
     },
   );
 
+  // Renombrar o desactivar una sucursal, igual: si el encargado de una pudiera
+  // desactivar otra, dejaría sin trabajar a un local entero que no es el suyo.
   app.patch(
     '/locations/:id',
-    { preHandler: [app.requireAuth, app.requireAdmin] },
+    { preHandler: [app.requireAuth, app.requireCentralAdmin] },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const parsed = createLocationSchema

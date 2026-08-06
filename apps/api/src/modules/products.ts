@@ -14,6 +14,26 @@ const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+/**
+ * Quita el costo y el costo por mayor cuando quien pregunta es un VENDEDOR.
+ *
+ * La pantalla de Productos ya escondía esas columnas para los vendedores, pero el
+ * servidor se las mandaba igual: bastaba abrir las herramientas del navegador para leer
+ * el margen de cada producto. Esconder en el dibujo no es proteger — quien decide qué
+ * sale por el cable es el servidor.
+ *
+ * Se borran las claves en vez de mandarlas en `null` para que la diferencia se note si
+ * alguna vez alguien vuelve a exponerlas por descuido.
+ */
+function sinCostos<T extends { cost?: unknown; costWholesale?: unknown }>(
+  fila: T,
+  user: { role: 'admin' | 'seller' },
+): T {
+  if (user.role === 'admin') return fila;
+  const { cost: _c, costWholesale: _cw, ...resto } = fila;
+  return resto as T;
+}
+
 const productSelect = {
   id: schema.product.id,
   locationId: schema.product.locationId,
@@ -123,8 +143,12 @@ export async function productRoutes(app: FastifyInstance) {
       return { rows, count };
     });
 
-    // Marca qué productos puede gestionar este usuario (su propia ubicación).
-    const items = rows.map((r) => ({ ...r, canManage: canActOnLocation(user, r.locationId) }));
+    // Marca qué productos puede gestionar este usuario (su propia ubicación), y le
+    // quita lo que no le toca ver.
+    const items = rows.map((r) => ({
+      ...sinCostos(r, user),
+      canManage: canActOnLocation(user, r.locationId),
+    }));
     return reply.send({
       data: { items, total: count?.n ?? 0, page: q.page, limit: q.limit },
       error: null,

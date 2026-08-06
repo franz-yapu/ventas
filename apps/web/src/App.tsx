@@ -41,10 +41,17 @@ import { ThemeProvider } from '@/theme/ThemeProvider';
 function Protected({
   children,
   adminOnly,
+  centralOnly,
   feature,
 }: {
   children: ReactNode;
   adminOnly?: boolean;
+  /**
+   * Además de admin, tiene que ser de la sucursal CENTRAL. Son las pantallas que
+   * cambian el negocio entero (configuración, sucursales), no una sucursal. El API
+   * responde 403 igualmente: esto sólo evita enseñar una puerta que no abre.
+   */
+  centralOnly?: boolean;
   /** Pantalla incluida sólo en ciertos planes. El API la cierra igual (requireFeature). */
   feature?: PlanFeature;
 }) {
@@ -58,6 +65,7 @@ function Protected({
   // está en caja no entendería por qué dejó de poder cobrar.
   if (sub?.blocked && sub.status) return <SubscriptionBlocked status={sub.status} />;
   if (adminOnly && user.role !== 'admin') return <Navigate to="/" replace />;
+  if (centralOnly && !user.isCentral) return <Navigate to="/" replace />;
   if (feature && !has(feature)) return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;
 }
@@ -144,7 +152,14 @@ export function App() {
         <Route path="/caja" element={<Protected><CashPage /></Protected>} />
         <Route path="/caja/z" element={<Protected adminOnly><CashZPage /></Protected>} />
         <Route path="/administracion" element={<Protected adminOnly><AdminPage /></Protected>} />
-        <Route path="/ubicaciones" element={<Protected adminOnly><LocationsPage /></Protected>} />
+        <Route
+          path="/ubicaciones"
+          element={
+            <Protected adminOnly centralOnly>
+              <LocationsPage />
+            </Protected>
+          }
+        />
         <Route path="/usuarios" element={<Protected adminOnly><UsersPage /></Protected>} />
         <Route
           path="/actividad"
@@ -154,7 +169,14 @@ export function App() {
             </Protected>
           }
         />
-        <Route path="/configuracion" element={<Protected adminOnly><SettingsPage /></Protected>} />
+        <Route
+          path="/configuracion"
+          element={
+            <Protected adminOnly centralOnly>
+              <SettingsPage />
+            </Protected>
+          }
+        />
         <Route path="/suscripcion" element={<Protected adminOnly><SubscriptionPage /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -9,7 +9,7 @@ import type { AuthUser } from '../types.js';
  * cuando la petición falla, el usuario veía un negocio sin datos en vez de un error —
  * roto y silencioso a la vez, que es el peor de los dos mundos.
  */
-const NINGUNA_UBICACION = '00000000-0000-0000-0000-000000000000';
+export const NINGUNA_UBICACION = '00000000-0000-0000-0000-000000000000';
 
 /**
  * Ubicación por la que se filtra la VISTA. `undefined` = ve todas (usuario de la central).

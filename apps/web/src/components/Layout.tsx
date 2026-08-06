@@ -18,13 +18,13 @@ import {
 import { useEffect, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AvisoDeError } from '@/components/AvisoDeError';
+import { Marca, NombreDeMarca } from '@/components/Marca';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { EmailVerifyBanner } from '@/features/auth/EmailVerifyBanner';
 import { SubscriptionBanner } from '@/features/subscription/SubscriptionBanner';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { startSyncWorker } from '@/offline/sync';
-import { useBusiness } from '@/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
 
 // Menú operativo (lo ve todo el mundo). Es también la barra inferior en móvil.
@@ -45,16 +45,19 @@ const ANALYTICS_NAV = [
   { to: '/caja/z', label: 'Lectura Z', icon: FileText },
 ];
 
-// Submenú de "Administración" (sólo admin).
+// Submenú de "Administración" (sólo admin). `central` = además, sólo la sucursal
+// central: son las pantallas que cambian el negocio entero y el API las cierra a las
+// sucursales. El encargado de una sucursal conserva Usuarios (los suyos) y Actividad.
 const ADMIN_CHILDREN = [
-  { to: '/ubicaciones', label: 'Ubicaciones', icon: MapPin },
+  { to: '/ubicaciones', label: 'Ubicaciones', icon: MapPin, central: true },
   { to: '/usuarios', label: 'Usuarios', icon: Users },
   { to: '/actividad', label: 'Actividad', icon: History, feature: 'auditoria' as const },
-  { to: '/configuracion', label: 'Config', icon: Settings },
-  { to: '/suscripcion', label: 'Mi plan', icon: CreditCard },
+  { to: '/configuracion', label: 'Config', icon: Settings, central: true },
+  { to: '/suscripcion', label: 'Mi plan', icon: CreditCard, central: true },
 ];
 
-const SECTION_LABEL = 'px-3 pb-[7px] pt-4 text-[10px] font-bold uppercase tracking-[0.09em] text-muted/60';
+const SECTION_LABEL =
+  'px-3 pb-[7px] pt-4 text-[10px] font-bold uppercase tracking-[0.09em] text-muted/60';
 
 // Item del sidebar de escritorio: tinte suave del primario cuando está activo
 // (calcado de navStyle del prototipo), gris neutro cuando no.
@@ -74,7 +77,6 @@ const bottomItem = (isActive: boolean) =>
 
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
-  const business = useBusiness();
   const { has } = useSubscription();
   const routerLoc = useLocation();
   const isAdmin = user?.role === 'admin';
@@ -82,7 +84,9 @@ export function Layout({ children }: { children: ReactNode }) {
   // Las entradas de un plan superior no se muestran. Es cortesía, no seguridad: quien
   // las cierra de verdad es el API.
   const analytics = ANALYTICS_NAV.filter((n) => !n.feature || has(n.feature));
-  const adminChildren = ADMIN_CHILDREN.filter((n) => !n.feature || has(n.feature));
+  const adminChildren = ADMIN_CHILDREN.filter(
+    (n) => (!n.feature || has(n.feature)) && (!n.central || user?.isCentral),
+  );
   const roleLabel = isAdmin ? 'Administrador' : 'Vendedor';
   const userInitial = (user?.name ?? 'U').charAt(0).toUpperCase();
   // En móvil, cualquier pantalla de administración/análisis marca activa la entrada "Admin".
@@ -100,14 +104,17 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* ===== Sidebar (sólo escritorio) ===== */}
       <aside className="no-print hidden bg-surface md:sticky md:top-0 md:flex md:h-screen md:w-[230px] md:shrink-0 md:flex-col md:border-r md:border-border">
         <div className="flex items-center gap-3 px-[18px] pb-4 pt-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-primary font-bold text-primary-fg">
-            {(business?.name ?? 'V')[0]}
-          </div>
-          <span className="truncate text-[15px] font-bold tracking-[-0.02em]">{business?.name ?? 'VentaFácil'}</span>
+          <Marca size="sm" />
+          <NombreDeMarca className="truncate text-[15px] font-bold tracking-[-0.02em]" />
         </div>
         <nav className="flex-1 space-y-0.5 overflow-auto px-3 py-1">
           {items.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => sideItem(isActive)}>
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) => sideItem(isActive)}
+            >
               <n.icon size={19} className="shrink-0" />
               <span className="truncate">{n.label}</span>
             </NavLink>
@@ -166,7 +173,12 @@ export function Layout({ children }: { children: ReactNode }) {
         style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}
       >
         {items.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => bottomItem(isActive)}>
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) => bottomItem(isActive)}
+          >
             <n.icon size={22} className="shrink-0" />
             <span>{n.label}</span>
           </NavLink>
@@ -182,7 +194,11 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* ===== Contenido ===== */}
       <main className="order-1 flex-1 pb-24 md:order-2 md:pb-0">
         <div className="no-print sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-4">
-          <span className="font-medium md:hidden">{business?.name ?? 'VentaFácil'}</span>
+          {/* En móvil no hay barra lateral: la marca vive aquí. */}
+          <div className="flex min-w-0 items-center gap-2 md:hidden">
+            <Marca size="sm" className="h-7 w-7 rounded-[8px]" />
+            <NombreDeMarca className="truncate font-semibold" />
+          </div>
           <span className="hidden md:block" />
           <div className="flex items-center gap-3">
             <SyncIndicator />
