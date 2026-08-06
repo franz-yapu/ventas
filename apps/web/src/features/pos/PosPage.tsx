@@ -515,11 +515,11 @@ export function PosPage() {
 
       {/* Toast inferior (escáner / cobro), estilo del prototipo. */}
       {toast && (
-        <div className="no-print fixed inset-x-4 bottom-24 z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-theme bg-fg px-4 py-3 text-sm font-semibold text-white shadow-lg md:bottom-6">
+        <div className="no-print fixed inset-x-4 bottom-24 z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-theme bg-fg px-4 py-3 text-sm font-semibold text-bg shadow-lg md:bottom-6">
           {toast.ok ? (
-            <Check size={16} className="text-emerald-400" />
+            <Check size={16} className="text-success-inv" />
           ) : (
-            <CloudOff size={16} className="text-amber-400" />
+            <CloudOff size={16} className="text-warning-inv" />
           )}
           {toast.text}
         </div>

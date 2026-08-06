@@ -75,7 +75,7 @@ export function LoginPage() {
       {/* ── Banda de marca (sólo escritorio) ──
           A pantalla completa, no una tarjeta flotando: es la primera impresión del
           negocio y su color tiene que llegar al borde. */}
-      <div className="hidden w-[42%] max-w-[560px] shrink-0 flex-col bg-primary p-10 text-primary-fg md:flex xl:p-14">
+      <div className="hidden w-[42%] shrink-0 flex-col bg-primary p-10 text-primary-fg md:flex xl:p-14">
         <div className="flex items-center gap-3">
           <Marca size="md" inverso />
           <NombreDeMarca className="text-[17px] font-semibold" />

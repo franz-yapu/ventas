@@ -154,6 +154,8 @@ function NuevaClave({ id, onError }: { id: string; onError: (m: string) => void 
   return (
     <div className="flex gap-1">
       <Input
+        type="password"
+        autoComplete="new-password"
         value={clave}
         onChange={(e) => setClave(e.target.value)}
         placeholder="Mínimo 12"
@@ -194,11 +196,16 @@ function FormularioAlta({
       <div className="text-[13px] font-semibold">Nuevo operador</div>
       <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" />
       <Input
+        type="email"
+        autoCapitalize="none"
+        autoCorrect="off"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="correo@ejemplo.com"
       />
       <Input
+        type="password"
+        autoComplete="new-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         placeholder="Contraseña (mínimo 12)"

@@ -290,7 +290,7 @@ function Diff({
             const a = fmt(after?.[k]);
             const changed = b !== a;
             return (
-              <tr key={k} className={changed ? 'bg-amber-50' : ''}>
+              <tr key={k} className={changed ? 'bg-warning-bg' : ''}>
                 <td className="p-2 font-medium">{k}</td>
                 <td className="p-2 text-muted">{b}</td>
                 <td className={`p-2 ${changed ? 'font-semibold text-success' : ''}`}>{a}</td>

@@ -21,6 +21,16 @@ export function MiCuentaModal({ onClose }: { onClose: () => void }) {
   const [nueva, setNueva] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  /**
+   * Se está saliendo por haber cambiado el correo.
+   *
+   * Mientras dure, el modal no se puede cerrar. El correo viaja dentro del token, así que
+   * al cambiarlo el que hay en la mano queda viejo y la salida es obligatoria: cancelar el
+   * temporizador dejaría al operador con un token muerto y un 401 sin explicación en la
+   * siguiente petición. Lo que sí se arregla es lo otro — que cerrando el modal en ese
+   * segundo y medio te echaba sin que hubieras llegado a leer por qué.
+   */
+  const [saliendo, setSaliendo] = useState(false);
 
   const guardarPerfil = useMutation({
     mutationFn: (body: { name?: string; email?: string }) =>
@@ -32,6 +42,7 @@ export function MiCuentaModal({ onClose }: { onClose: () => void }) {
       // y la próxima petición sería un 401 sin explicación. Mejor salir a propósito.
       if (res.reloguear) {
         setAviso('Correo cambiado. Vuelve a entrar con el nuevo.');
+        setSaliendo(true);
         setTimeout(logout, 1500);
       } else {
         setAviso('Guardado.');
@@ -58,16 +69,31 @@ export function MiCuentaModal({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <Modal open onClose={onClose} title="Mi cuenta">
+    <Modal open onClose={saliendo ? () => undefined : onClose} title="Mi cuenta">
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-3">
           <div>
-            <label className="mb-1 block text-[13px] font-semibold">Nombre</label>
-            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            <label htmlFor="mi-cuenta-nombre" className="mb-1 block text-[13px] font-semibold">
+              Nombre
+            </label>
+            <Input
+              id="mi-cuenta-nombre"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+            />
           </div>
           <div>
-            <label className="mb-1 block text-[13px] font-semibold">Correo</label>
-            <Input value={correo} onChange={(e) => setCorreo(e.target.value)} />
+            <label htmlFor="mi-cuenta-correo" className="mb-1 block text-[13px] font-semibold">
+              Correo
+            </label>
+            <Input
+              id="mi-cuenta-correo"
+              type="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+            />
             <p className="mt-1 text-[12px] text-muted">
               Es el usuario con el que entras al panel. Si lo cambias, tendrás que volver
               a entrar.

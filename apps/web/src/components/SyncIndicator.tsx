@@ -12,7 +12,7 @@ export function SyncIndicator() {
   let Icon = Check;
   if (!online) {
     label = pending > 0 ? `Sin conexión · ${pending} por subir` : 'Sin conexión';
-    tone = 'bg-amber-100 text-amber-800';
+    tone = 'bg-warning-bg text-warning';
     Icon = CloudOff;
   } else if (pending > 0) {
     label = `${pending} venta${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''}`;

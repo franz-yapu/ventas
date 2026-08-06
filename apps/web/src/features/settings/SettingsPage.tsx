@@ -1,24 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/ui/page';
 import { Input } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/api';
-import { aplicarColorDeMarca } from '@/lib/color';
-import { cn } from '@/lib/utils';
-import { useModo } from '@/theme/ModoProvider';
+import { aplicarColorDeMarca, textoSobre } from '@/lib/color';
+import { ModoSelector } from '@/theme/ModoSelector';
 import type { BusinessConfig } from '@/theme/ThemeProvider';
 
 // Tema por defecto = el del diseño (VentaFácil POS). "Restablecer" vuelve aquí.
 const DESIGN_DEFAULTS = { primary: '#2f68d8', secondary: '#f59e0b', radius: '12px' };
-
-const MODOS = [
-  { valor: 'claro' as const, etiqueta: 'Claro', icono: Sun },
-  { valor: 'oscuro' as const, etiqueta: 'Oscuro', icono: Moon },
-  { valor: 'auto' as const, etiqueta: 'Automático', icono: Monitor },
-];
 
 /**
  * Presets rápidos: PAREJA de colores, no sólo el primario.
@@ -69,7 +62,6 @@ function fileToLogo(file: File): Promise<string> {
 
 export function SettingsPage() {
   const qc = useQueryClient();
-  const { modo, oscuro, cambiar: cambiarModo } = useModo();
   const fileRef = useRef<HTMLInputElement>(null);
   const { data } = useQuery({
     queryKey: ['business', 'edit'],
@@ -115,7 +107,6 @@ export function SettingsPage() {
     aplicarColorDeMarca('primary', form.primary);
     aplicarColorDeMarca('secondary', form.secondary);
     root.setProperty('--radius', form.radius);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', form.primary);
   }, [form.primary, form.secondary, form.radius]);
 
   // Al salir sin guardar, restaura el tema realmente persistido del negocio.
@@ -284,29 +275,11 @@ export function SettingsPage() {
           </div>
 
           {/* Modo claro / oscuro. Va aquí, con el resto de la apariencia, pero NO se
-              guarda con el negocio: es del dispositivo (ver theme/modo.ts). */}
-          <div className="flex flex-col gap-2 border-t border-border pt-5">
-            <label className="text-sm text-muted">Modo de pantalla</label>
-            <div className="inline-flex w-fit rounded-theme border border-border p-1">
-              {MODOS.map((m) => (
-                <button
-                  key={m.valor}
-                  type="button"
-                  onClick={() => cambiarModo(m.valor)}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-theme-sm px-3 py-1.5 text-[13px] font-semibold transition-colors',
-                    modo === m.valor ? 'bg-primary text-primary-fg' : 'text-muted hover:text-fg',
-                  )}
-                >
-                  <m.icono size={15} /> {m.etiqueta}
-                </button>
-              ))}
-            </div>
-            <p className="text-[12px] text-muted">
-              Se guarda en este dispositivo, no en el negocio: la caja de la mañana y la de la noche
-              no tienen la misma luz.
-              {modo === 'auto' && ` Ahora sigue a tu sistema: ${oscuro ? 'oscuro' : 'claro'}.`}
-            </p>
+              guarda con el negocio: es del dispositivo (ver theme/modo.ts). El control
+              es compartido porque Mi perfil también lo ofrece: esta ruta es sólo del
+              dueño, y la preferencia es de cada persona. */}
+          <div className="border-t border-border pt-5">
+            <ModoSelector />
           </div>
 
           {/* Radio de bordes. */}
@@ -327,13 +300,13 @@ export function SettingsPage() {
           <div className="flex items-end gap-2">
             <div
               className="h-10 rounded-theme px-4 text-sm font-medium leading-10"
-              style={{ background: form.primary, color: '#fff' }}
+              style={{ background: form.primary, color: textoSobre(form.primary) }}
             >
               Vista previa
             </div>
             <div
               className="h-10 rounded-theme px-4 text-sm font-medium leading-10"
-              style={{ background: form.secondary, color: '#1f2937' }}
+              style={{ background: form.secondary, color: textoSobre(form.secondary) }}
             >
               Secundario
             </div>

@@ -3,9 +3,42 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-    <meta name="theme-color" content="#2f68d8" />
+    <meta name="theme-color" content="#f6f5f3" />
     <link rel="preload" href="/fonts/onest-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>VentaFácil</title>
+    <!--
+      El modo se decide AQUÍ, en un script en línea y bloqueante.
+
+      `main.tsx` ya lo hacía "antes de montar React", pero es un módulo: se difiere, y el
+      CSS bloquea el pintado por su cuenta, así que el navegador puede pintar el fondo
+      claro antes de que ese código llegue a ejecutarse. Abrir la app en oscuro daba un
+      fogonazo — en una caja a las once de la noche, deslumbra de verdad.
+
+      Duplica tres líneas de `theme/modo.ts` a propósito: es el único código que puede
+      correr antes del primer pintado, y para eso no puede depender de un import. La clave
+      de almacenamiento y el color son los mismos; si allí cambian, aquí también.
+
+      El `theme-color` por defecto pasó a ser el fondo claro (#f6f5f3) en vez del azul de
+      marca: es el color que de verdad va a tener la pantalla mientras carga.
+    -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('vf_modo') || 'auto';
+          var oscuro =
+            m === 'oscuro' ||
+            (m === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (oscuro) {
+            document.documentElement.setAttribute('data-modo', 'oscuro');
+            document.documentElement.style.colorScheme = 'dark';
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', '#121211');
+          }
+        } catch (e) {
+          /* Sin localStorage (modo privado en algunos navegadores) se abre en claro. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

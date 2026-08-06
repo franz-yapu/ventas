@@ -57,13 +57,40 @@ export function Marca({
     );
   }
 
+  /**
+   * Sin logo, sobre la banda del primario: caja CLARA e inicial en primario.
+   *
+   * Es lo que promete el prop, y era lo único que no estaba hecho: `inverso` sólo
+   * quitaba `text-primary-fg` y dejaba el degradado, que sobre la banda del mismo color
+   * se funde por un lado y vira a gris sucio por el otro. Se veía en cualquier negocio
+   * recién registrado, que es precisamente el que todavía no ha subido su logo.
+   *
+   * La inicial usa el primario a secas y no la variante legible: aquí el fondo es blanco
+   * en los dos modos, así que el color de marca contrasta por sí solo.
+   */
+  if (inverso) {
+    return (
+      <div
+        className={cn(
+          t.caja,
+          t.texto,
+          'flex shrink-0 items-center justify-center bg-white font-bold text-primary',
+          className,
+        )}
+        style={{ color: 'var(--color-primary)' }}
+        aria-hidden
+      >
+        {inicial}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
         t.caja,
         t.texto,
-        'flex shrink-0 items-center justify-center font-bold',
-        !inverso && 'text-primary-fg',
+        'flex shrink-0 items-center justify-center font-bold text-primary-fg',
         className,
       )}
       // Degradado de los DOS colores de la marca. Un negocio sin logo tiene aquí lo

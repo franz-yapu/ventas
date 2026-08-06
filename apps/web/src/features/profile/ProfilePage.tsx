@@ -7,6 +7,7 @@ import { Page, PageHeader } from '@/components/ui/page';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ApiError } from '@/lib/api';
+import { ModoSelector } from '@/theme/ModoSelector';
 
 // Campo de contraseña con botón para mostrar/ocultar (reutilizado en el form).
 function PasswordField({
@@ -178,6 +179,15 @@ export function ProfilePage() {
           <Button disabled={busy} onClick={onSave}>
             {busy ? 'Guardando…' : 'Guardar cambios'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* El modo de pantalla es de la PERSONA y de su aparato, no del negocio, así que su
+          sitio natural es aquí: la única pantalla que ve todo el mundo. En Configuración
+          sigue estando, pero esa ruta es sólo del dueño. */}
+      <Card>
+        <CardContent className="p-4">
+          <ModoSelector />
         </CardContent>
       </Card>
 

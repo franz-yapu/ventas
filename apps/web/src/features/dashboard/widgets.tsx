@@ -107,6 +107,33 @@ export function Projection({ data }: { data: DashboardData }) {
 }
 
 /**
+ * Ejes y tooltip de Recharts, atados a los tokens del tema.
+ *
+ * Recharts no hereda el color del CSS: pinta los ejes con su gris `#666` y el tooltip con
+ * un recuadro blanco en línea. En modo oscuro eso deja las etiquetas en 1.9:1 —ilegibles—
+ * y un rectángulo blanco en medio de un panel oscuro. Como es configuración por
+ * propiedades y no por clase, se define una vez aquí y se reparte a las dos gráficas.
+ */
+const EJE = {
+  tick: { fontSize: 10, fill: 'var(--color-muted)' },
+  stroke: 'var(--color-border)',
+} as const;
+
+const TOOLTIP = {
+  contentStyle: {
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--color-fg)',
+    fontSize: 12,
+  },
+  labelStyle: { color: 'var(--color-muted)' },
+  // El resalte de fondo también es un gris fijo suyo, y sobre el panel oscuro se ve como
+  // una mancha clara.
+  cursor: { fill: 'var(--color-track)', stroke: 'var(--color-border)' },
+} as const;
+
+/**
  * Tendencia de 30 días, con los 30 anteriores detrás para comparar.
  *
  * Una línea sola sube y baja pero no dice si eso es bueno: hay que recordar cómo fue el
@@ -128,9 +155,9 @@ export function Trend30({ data }: { data: DashboardData }) {
       <ResponsiveContainer width="100%" height={180}>
         <LineChart data={chart} margin={{ left: -20, right: 8, top: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={5} />
-          <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip formatter={(v: number) => money(v)} />
+          <XAxis dataKey="label" interval={5} {...EJE} />
+          <YAxis {...EJE} />
+          <Tooltip formatter={(v: number) => money(v)} {...TOOLTIP} />
           {/* El periodo anterior va primero para que quede DEBAJO: es el telón de
               fondo, no el dato que se viene a mirar. */}
           {hayComparativa && (
@@ -183,9 +210,9 @@ export function SalesByLocation({ data }: { data: DashboardData }) {
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={chart} margin={{ left: -20, right: 8, top: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip formatter={(v: number) => money(v)} />
+          <XAxis dataKey="name" {...EJE} />
+          <YAxis {...EJE} />
+          <Tooltip formatter={(v: number) => money(v)} {...TOOLTIP} />
           {/* La que más vende va en el primario y el resto en el acento: con todas del
               mismo color hay que leer el eje para saber cuál gana. Vienen ordenadas por
               total de mayor a menor desde el API, así que la primera ES la mayor. */}

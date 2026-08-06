@@ -1,6 +1,10 @@
 import { X } from 'lucide-react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+
+/** Lo que se puede enfocar con el tabulador dentro de la hoja. */
+const ENFOCABLES =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface ModalProps {
   open: boolean;
@@ -13,15 +17,55 @@ interface ModalProps {
 // Hoja/modal calcado del prototipo VentaFácil POS: fondo translúcido con desenfoque,
 // hoja #fbfbf9 pegada abajo en móvil (radio superior) y centrada en escritorio.
 export function Modal({ open, onClose, title, children, className }: ModalProps) {
-  // Escape cierra. Es lo que espera cualquiera que use un teclado, y sin ello la única
-  // salida era acertarle a la X o al fondo.
+  const hoja = useRef<HTMLDivElement>(null);
+
+  /**
+   * Escape cierra, y el tabulador se queda DENTRO.
+   *
+   * `aria-modal="true"` le promete a un lector de pantalla que lo de detrás no existe
+   * mientras esto esté abierto, pero es sólo una etiqueta: el tabulador seguía paseándose
+   * por la página de abajo, así que quien usa teclado acababa escribiendo en un formulario
+   * que no ve. Tres cosas hacen falta y ninguna estaba: llevar el foco a la hoja al abrir,
+   * dar la vuelta al llegar al final, y devolver el foco a donde estaba al cerrar.
+   */
   useEffect(() => {
     if (!open) return;
+    const veniaDe = document.activeElement as HTMLElement | null;
+
+    // Al primer campo si lo hay; si no, a la propia hoja, para que Escape funcione y el
+    // lector de pantalla empiece por el título.
+    const primero = hoja.current?.querySelector<HTMLElement>(ENFOCABLES);
+    (primero ?? hoja.current)?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') return onClose();
+      if (e.key !== 'Tab' || !hoja.current) return;
+      const focos = Array.from(hoja.current.querySelectorAll<HTMLElement>(ENFOCABLES));
+      if (focos.length === 0) return;
+      const inicio = focos[0]!;
+      const fin = focos[focos.length - 1]!;
+      // El ciclo se cierra a mano en los dos extremos; en el medio, el navegador ya
+      // hace lo correcto.
+      if (e.shiftKey && document.activeElement === inicio) {
+        e.preventDefault();
+        fin.focus();
+      } else if (!e.shiftKey && document.activeElement === fin) {
+        e.preventDefault();
+        inicio.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+
+    // El fondo no se desplaza detrás de la hoja: en móvil, con el teclado abierto, el
+    // gesto de bajar movía la página y no el formulario.
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+      veniaDe?.focus?.();
+    };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -31,9 +75,11 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       onClick={onClose}
     >
       <div
+        ref={hoja}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         className={cn(
           'ds-modal max-h-[92vh] w-full max-w-md overflow-auto bg-surface shadow-[0_20px_50px_-20px_rgba(0,0,0,0.35)]',
           // Radios derivados del que elige el negocio: si sube el radio, la hoja
