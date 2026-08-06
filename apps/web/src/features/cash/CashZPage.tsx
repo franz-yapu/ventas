@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Download } from 'lucide-react';
+import { Download, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { EmptyState, Page, PageHeader } from '@/components/ui/page';
 import { api } from '@/lib/api';
 import { money, PAYMENT_LABELS } from '@/lib/format';
 import { downloadCsv } from '@/lib/print';
@@ -20,22 +21,39 @@ export function CashZPage() {
     if (!data) return;
     const rows: (string | number)[][] = [['Cierre de caja (lectura Z)', data.date]];
     rows.push([], ['Vendedor', 'Ubicación', 'Método de pago', 'Total', 'Ventas']);
-    data.rows.forEach((r) => rows.push([r.seller, r.location, PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod, r.total, r.count]));
+    data.rows.forEach((r) =>
+      rows.push([
+        r.seller,
+        r.location,
+        PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod,
+        r.total,
+        r.count,
+      ]),
+    );
     rows.push([], ['TOTAL GENERAL', data.grandTotal]);
     downloadCsv(`cierre-caja-${data.date}.csv`, rows);
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Cierre de caja (Z)</h1>
-        <div className="flex items-center gap-2">
-          <Input type="date" filter value={date} onChange={(e) => setDate(e.target.value)} className="max-w-[12rem]" />
-          <Button variant="outline" onClick={exportCsv}>
-            <Download size={16} /> Excel
-          </Button>
-        </div>
-      </div>
+    <Page>
+      <PageHeader
+        titulo="Cierre de caja (Z)"
+        descripcion="Lo cobrado en el día, repartido por vendedor, sucursal y método de pago."
+        acciones={
+          <>
+            <Input
+              type="date"
+              filter
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="max-w-[12rem]"
+            />
+            <Button variant="outline" onClick={exportCsv}>
+              <Download size={16} /> Excel
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -67,25 +85,39 @@ export function CashZPage() {
               ))}
             </tbody>
           </table>
-          {data && data.rows.length === 0 && <p className="py-8 text-center text-muted">Sin ventas en la fecha</p>}
+          {data && data.rows.length === 0 && (
+            <p className="py-8 text-center text-muted">Sin ventas en la fecha</p>
+          )}
         </CardContent>
 
         {/* Móvil: tarjetas apiladas en vez de tabla. */}
         <div className="flex flex-col gap-2.5 p-3 md:hidden">
           {data?.rows.map((r, i) => (
-            <div key={i} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
+            <div
+              key={i}
+              className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card"
+            >
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-[14px] font-semibold">{r.seller}</span>
-                <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">{money(r.total)}</span>
+                <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">
+                  {money(r.total)}
+                </span>
               </div>
               <div className="mt-1 text-[12px] leading-[1.5] text-muted">
-                {r.location} · {PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod} · {r.count} venta{r.count === 1 ? '' : 's'}
+                {r.location} · {PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod} · {r.count}{' '}
+                venta{r.count === 1 ? '' : 's'}
               </div>
             </div>
           ))}
-          {data && data.rows.length === 0 && <p className="py-8 text-center text-muted">Sin ventas en la fecha</p>}
+          {data && data.rows.length === 0 && (
+            <EmptyState
+              icono={FileText}
+              titulo="Sin ventas en esta fecha"
+              descripcion="Elige otro día. Un día sin ventas también es un cierre válido: la lectura Z sale en cero."
+            />
+          )}
         </div>
       </Card>
-    </div>
+    </Page>
   );
 }

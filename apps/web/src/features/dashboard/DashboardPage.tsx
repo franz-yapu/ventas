@@ -3,21 +3,32 @@ import { ArrowDown, ArrowUp, Download, FileText, Settings2 } from 'lucide-react'
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Page, PageHeader } from '@/components/ui/page';
 import { api } from '@/lib/api';
 import { money } from '@/lib/format';
 import { downloadCsv, printPage } from '@/lib/print';
 import type { DashboardData } from '@/lib/types';
 import { DEFAULT_WIDGET_IDS, getWidget, WIDGET_REGISTRY } from './registry';
 
-const SPAN: Record<string, string> = { sm: 'md:col-span-1', md: 'md:col-span-1', lg: 'md:col-span-2' };
+const SPAN: Record<string, string> = {
+  sm: 'md:col-span-1',
+  md: 'md:col-span-1',
+  lg: 'md:col-span-2',
+};
 
 export function DashboardPage() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [layout, setLayout] = useState<string[]>(DEFAULT_WIDGET_IDS);
 
-  const { data } = useQuery({ queryKey: ['dashboard'], queryFn: () => api.get<DashboardData>('/reports/dashboard') });
-  const { data: config } = useQuery({ queryKey: ['dashboard-config'], queryFn: () => api.get<string[] | null>('/dashboard-config') });
+  const { data } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => api.get<DashboardData>('/reports/dashboard'),
+  });
+  const { data: config } = useQuery({
+    queryKey: ['dashboard-config'],
+    queryFn: () => api.get<string[] | null>('/dashboard-config'),
+  });
 
   useEffect(() => {
     if (config) setLayout(config.filter((id) => getWidget(id)));
@@ -58,10 +69,10 @@ export function DashboardPage() {
   const activeWidgets = layout.map(getWidget).filter(Boolean);
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="no-print flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Panel</h1>
-        <div className="flex gap-2">
+    <Page>
+      <div className="no-print flex flex-wrap items-start justify-between gap-3">
+        <PageHeader titulo="Panel" descripcion="Cómo va el negocio hoy, con lo que elijas ver." />
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={exportCsv}>
             <Download size={16} /> Excel
           </Button>
@@ -89,15 +100,31 @@ export function DashboardPage() {
               const active = layout.includes(w.id);
               const idx = layout.indexOf(w.id);
               return (
-                <div key={w.id} className="flex items-center gap-2 rounded-theme border border-border p-2">
-                  <input type="checkbox" checked={active} onChange={() => toggle(w.id)} className="h-4 w-4" />
+                <div
+                  key={w.id}
+                  className="flex items-center gap-2 rounded-theme border border-border p-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => toggle(w.id)}
+                    className="h-4 w-4"
+                  />
                   <span className="flex-1 text-sm">{w.title}</span>
                   {active && (
                     <>
-                      <button onClick={() => move(w.id, -1)} disabled={idx === 0} className="p-1 text-muted disabled:opacity-30">
+                      <button
+                        onClick={() => move(w.id, -1)}
+                        disabled={idx === 0}
+                        className="p-1 text-muted disabled:opacity-30"
+                      >
                         <ArrowUp size={16} />
                       </button>
-                      <button onClick={() => move(w.id, 1)} disabled={idx === layout.length - 1} className="p-1 text-muted disabled:opacity-30">
+                      <button
+                        onClick={() => move(w.id, 1)}
+                        disabled={idx === layout.length - 1}
+                        className="p-1 text-muted disabled:opacity-30"
+                      >
                         <ArrowDown size={16} />
                       </button>
                     </>
@@ -105,7 +132,11 @@ export function DashboardPage() {
                 </div>
               );
             })}
-            <Button className="mt-2 self-start" disabled={save.isPending} onClick={() => save.mutate(layout)}>
+            <Button
+              className="mt-2 self-start"
+              disabled={save.isPending}
+              onClick={() => save.mutate(layout)}
+            >
               Guardar panel
             </Button>
           </CardContent>
@@ -124,7 +155,9 @@ export function DashboardPage() {
               </div>
             );
           })}
-          {activeWidgets.length === 0 && <p className="text-muted">No hay widgets activos. Usa “Personalizar”.</p>}
+          {activeWidgets.length === 0 && (
+            <p className="text-muted">No hay widgets activos. Usa “Personalizar”.</p>
+          )}
         </div>
       )}
 
@@ -134,6 +167,6 @@ export function DashboardPage() {
           Proyección próximo mes: {money(data.projection.nextMonth)} ({data.projection.method})
         </div>
       )}
-    </div>
+    </Page>
   );
 }

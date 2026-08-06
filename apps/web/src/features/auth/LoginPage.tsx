@@ -1,8 +1,8 @@
 import { Eye, EyeOff } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AuthShell } from '@/components/AuthShell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { slugDesdeHostname, useAuth } from '@/features/auth/AuthProvider';
 import { ApiError } from '@/lib/api';
@@ -64,71 +64,94 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <div className="flex flex-col items-center gap-1 text-center">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-theme bg-primary text-primary-fg text-xl font-bold">
-              V
-            </div>
-            <h1 className="text-xl font-semibold">VentaFácil</h1>
-            <p className="text-sm text-muted">Ingresa a tu punto de venta</p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="flex flex-col gap-3">
-            <Input
-              placeholder="Usuario"
-              autoFocus
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-            <div className="relative">
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Contraseña"
-                className="pr-11"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-muted hover:text-fg"
-                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {needsBusiness && (
-              <div className="flex flex-col gap-1">
-                <Input
-                  placeholder="Código del negocio"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  value={business}
-                  onChange={(e) => setBusiness(e.target.value)}
-                />
-                <p className="text-xs text-muted">
-                  Esta instalación atiende a varios negocios. Escribe el código del tuyo.
-                </p>
-              </div>
-            )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit" size="lg" disabled={busy} className="mt-1">
-              {busy ? 'Ingresando…' : 'Ingresar'}
-            </Button>
+    <AuthShell titulo="Ingresar" descripcion="Ingresa a tu punto de venta">
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <div>
+          <label htmlFor="usuario" className="mb-1.5 block text-[13px] font-semibold">
+            Usuario
+          </label>
+          <Input
+            id="usuario"
+            placeholder="tu usuario"
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <label htmlFor="clave" className="text-[13px] font-semibold">
+              Contraseña
+            </label>
+            {/* Junto al campo, no perdido al final: se busca en el momento en que la
+                contraseña no entra, no después de darle a "Ingresar". */}
             <Link
               to="/olvide-contrasena"
-              className="text-center text-[13px] text-muted hover:text-fg"
+              className="text-[12px] font-semibold text-primary hover:underline"
             >
-              ¿Olvidaste tu contraseña?
+              ¿La olvidaste?
             </Link>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+          </div>
+          <div className="relative">
+            <Input
+              id="clave"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="••••••••"
+              className="pr-11"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-[8px] p-1.5 text-muted transition-colors hover:bg-muted/10 hover:text-fg"
+              title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+        </div>
+
+        {needsBusiness && (
+          <div>
+            <label htmlFor="negocio" className="mb-1.5 block text-[13px] font-semibold">
+              Código del negocio
+            </label>
+            <Input
+              id="negocio"
+              placeholder="mi-negocio"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={business}
+              onChange={(e) => setBusiness(e.target.value)}
+            />
+            <p className="mt-1 text-[12px] text-muted">
+              Esta instalación atiende a varios negocios. Escribe el código del tuyo.
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <p
+            role="alert"
+            className="rounded-theme bg-danger-bg px-3 py-2 text-[13px] font-medium text-danger"
+          >
+            {error}
+          </p>
+        )}
+
+        <Button type="submit" size="lg" disabled={busy} className="mt-1">
+          {busy ? 'Ingresando…' : 'Ingresar'}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

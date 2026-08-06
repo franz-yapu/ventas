@@ -11,9 +11,25 @@ export function Receipt({ sale, business }: { sale: SaleDetail; business: Busine
     <div className="receipt-area mx-auto w-[80mm] max-w-full bg-white p-4 font-mono text-[13px] text-black">
       <div className="text-center">
         {business?.logoUrl && (
-          <img src={business.logoUrl} alt="logo" className="mx-auto mb-1 max-h-16 max-w-[60mm] object-contain" />
+          <img
+            src={business.logoUrl}
+            alt="logo"
+            className="mx-auto mb-1 max-h-16 max-w-[60mm] object-contain"
+          />
         )}
         <div className="text-base font-bold">{appName}</div>
+        {/* Filete del color de acento bajo el nombre. El recibo es el único trozo de
+            marca que el cliente se lleva a casa; en una térmica sale como una línea
+            gris, y en pantalla o en impresora de color, con el color del negocio. */}
+        <div
+          className="mx-auto my-1 h-[3px] w-[28mm] rounded-full"
+          style={{
+            background: business?.theme?.secondary ?? 'var(--color-secondary)',
+            // Sin esto, el navegador quita los fondos al imprimir y el filete desaparece.
+            printColorAdjust: 'exact',
+            WebkitPrintColorAdjust: 'exact',
+          }}
+        />
         {sale.locationName && <div>{sale.locationName}</div>}
         <div className="my-2 border-t border-dashed border-black" />
       </div>
@@ -23,7 +39,9 @@ export function Receipt({ sale, business }: { sale: SaleDetail; business: Busine
         <span>{sale.receiptNumber ? `#${sale.receiptNumber}` : `PROV-${sale.id.slice(0, 8)}`}</span>
       </div>
       {!sale.receiptNumber && (
-        <div className="text-center text-[11px]">(folio provisional — se confirma al sincronizar)</div>
+        <div className="text-center text-[11px]">
+          (folio provisional — se confirma al sincronizar)
+        </div>
       )}
       <div className="flex justify-between">
         <span>Fecha</span>

@@ -104,6 +104,8 @@ export interface SaleDetail extends SaleRow {
 export interface DashboardData {
   kpi: { todayTotal: string; todayCount: number; yesterdayTotal: string; avgTicket: string };
   trend: Array<{ date: string; total: number }>;
+  /** Los 30 días ANTERIORES a `trend`, para comparar periodo contra periodo. */
+  trendPrev?: Array<{ date: string; total: number }>;
   byLocation: Array<{ name: string; total: string; count: number }>;
   bySeller: Array<{ name: string; total: string; count: number }>;
   topProducts: Array<{ name: string; qty: number; revenue: string }>;
@@ -113,7 +115,13 @@ export interface DashboardData {
 
 export interface CashZ {
   date: string;
-  rows: Array<{ seller: string; location: string; paymentMethod: string; total: string; count: number }>;
+  rows: Array<{
+    seller: string;
+    location: string;
+    paymentMethod: string;
+    total: string;
+    count: number;
+  }>;
   grandTotal: string;
 }
 
@@ -180,8 +188,20 @@ export interface Customer {
 }
 
 export interface CustomerDetail extends Customer {
-  creditSales: Array<{ id: string; receiptNumber: number | null; total: string; status: string; clientCreatedAt: string }>;
-  payments: Array<{ id: string; amount: string; method: string; note: string | null; createdAt: string }>;
+  creditSales: Array<{
+    id: string;
+    receiptNumber: number | null;
+    total: string;
+    status: string;
+    clientCreatedAt: string;
+  }>;
+  payments: Array<{
+    id: string;
+    amount: string;
+    method: string;
+    note: string | null;
+    createdAt: string;
+  }>;
 }
 
 export interface AuditRow {

@@ -33,51 +33,76 @@ export function PlatformLoginPage() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-bg p-6">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm rounded-theme border border-border bg-surface p-6"
-      >
-        <div className="mb-5 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-fg text-bg">
-            <ShieldCheck size={20} />
+    <div className="flex min-h-full flex-col items-center justify-center gap-5 px-4 py-8">
+      <div className="w-full max-w-sm">
+        {/* Marca oscura y candado, nunca el logo de un cliente: quien llega aquí tiene
+            que ver de un vistazo que ésta no es la puerta de ningún negocio. */}
+        <div className="mb-5 flex flex-col items-center gap-3 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-[16px] bg-fg text-bg">
+            <ShieldCheck size={30} />
           </div>
           <div>
-            <div className="text-[15px] font-bold tracking-[-0.02em]">Plataforma</div>
-            <div className="text-[13px] text-muted">Administración de VentaFácil</div>
+            <h1 className="text-[22px] font-bold tracking-[-0.02em]">Plataforma</h1>
+            <p className="mt-0.5 text-[13px] text-muted">Administración de todos los negocios</p>
           </div>
         </div>
 
-        <label className="mb-1 block text-[13px] font-semibold" htmlFor="pf-email">
-          Correo
-        </label>
-        <Input
-          id="pf-email"
-          type="email"
-          autoComplete="username"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+        <form
+          onSubmit={onSubmit}
+          className="flex flex-col gap-4 rounded-theme border border-border bg-surface p-5"
+        >
+          <div>
+            <label className="mb-1.5 block text-[13px] font-semibold" htmlFor="pf-email">
+              Correo del operador
+            </label>
+            <Input
+              id="pf-email"
+              type="email"
+              autoFocus
+              autoComplete="username"
+              placeholder="operador@tudominio.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
-        <label className="mb-1 mt-3 block text-[13px] font-semibold" htmlFor="pf-pass">
-          Contraseña
-        </label>
-        <Input
-          id="pf-pass"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+          <div>
+            <label className="mb-1.5 block text-[13px] font-semibold" htmlFor="pf-pass">
+              Contraseña
+            </label>
+            <Input
+              id="pf-pass"
+              type="password"
+              autoComplete="current-password"
+              placeholder="••••••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
 
-        {error && <p className="mt-3 text-[13px] text-danger">{error}</p>}
+          {error && (
+            <p
+              role="alert"
+              className="rounded-theme bg-danger-bg px-3 py-2 text-[13px] font-medium text-danger"
+            >
+              {error}
+            </p>
+          )}
 
-        <Button type="submit" className="mt-5 w-full" disabled={enviando}>
-          {enviando ? 'Entrando…' : 'Entrar'}
-        </Button>
-      </form>
+          <Button type="submit" size="lg" disabled={enviando}>
+            {enviando ? 'Entrando…' : 'Entrar'}
+          </Button>
+        </form>
+
+        {/* No hay "¿olvidaste tu contraseña?" a propósito: los operadores no tienen
+            recuperación por correo. Se la cambia otro principal, o el servidor. */}
+        <p className="mt-5 text-center text-[12px] leading-relaxed text-muted">
+          ¿Perdiste el acceso? Pídele a otro operador principal que te ponga una contraseña nueva, o
+          cámbiala desde el servidor.
+        </p>
+      </div>
     </div>
   );
 }

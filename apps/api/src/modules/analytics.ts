@@ -7,6 +7,13 @@ import { viewScope } from '../lib/scope.js';
 
 const TZ = 'America/La_Paz';
 
+/** Resta días a una fecha 'YYYY-MM-DD' y devuelve otra igual. Sin husos de por medio. */
+function restarDias(fecha: string, dias: number): string {
+  const d = new Date(`${fecha}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - dias);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function analyticsRoutes(app: FastifyInstance) {
   // GET /reports/dashboard — datos de todos los widgets en una sola llamada (eficiente en KVM1).
   // El panel de análisis es de plan Pro en adelante. La lectura Z de más abajo NO se
@@ -25,7 +32,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
 
     // Las 6 consultas comparten UNA transaccion: un solo BEGIN/COMMIT y el contexto
     // de tenant fijado una vez para todas.
-    const { kpi, trend, byLocation, bySeller, topProducts, lowStock } = await withTenant(
+    const { kpi, trend, trendPrev, byLocation, bySeller, topProducts, lowStock } = await withTenant(
       businessId,
       async (tx) => {
         // 1) KPIs de hoy y ticket promedio del mes.
@@ -46,19 +53,32 @@ export async function analyticsRoutes(app: FastifyInstance) {
       WHERE business_id = ${businessId} AND status = 'completed' ${locBare}
     `);
 
-        // 2) Tendencia diaria de los últimos 30 días.
+        // 2) Tendencia diaria. Se piden 60 días en UNA consulta y se parten en dos
+        // series de 30: la actual y la de los 30 días anteriores, para poder
+        // compararlas en el mismo gráfico. Dos consultas costarían el doble de
+        // barridos sobre `sale` por un dato que se mira de reojo.
         const trendRows = await tx.execute<{ date: string; total: string }>(sql`
       SELECT to_char(date_trunc('day', timezone(${TZ}, client_created_at)), 'YYYY-MM-DD') AS date,
              SUM(total) AS total
       FROM sale
       WHERE business_id = ${businessId} AND status = 'completed' ${locBare}
-        AND timezone(${TZ}, client_created_at) >= date_trunc('day', timezone(${TZ}, now())) - interval '29 days'
+        AND timezone(${TZ}, client_created_at) >= date_trunc('day', timezone(${TZ}, now())) - interval '59 days'
       GROUP BY 1 ORDER BY 1
     `);
-        const trend: TrendPoint[] = trendRows.map((r) => ({
-          date: r.date,
-          total: Number(r.total),
-        }));
+        // El corte se calcula con la fecha que devuelve Postgres ya en la zona del
+        // negocio, no con `new Date()` del servidor: si el proceso corre en UTC, la
+        // frontera del día se movería unas horas y el reparto entre las dos series
+        // saldría mal justo en el borde.
+        const [hoyRow] = await tx.execute<{ hoy: string }>(sql`
+      SELECT to_char(date_trunc('day', timezone(${TZ}, now())), 'YYYY-MM-DD') AS hoy
+    `);
+        const corte = restarDias(hoyRow!.hoy, 29);
+
+        const todos = trendRows.map((r) => ({ date: r.date, total: Number(r.total) }));
+        // `trend` conserva EXACTAMENTE lo que era (últimos 30 días): de él sale también
+        // la proyección de fin de mes, y ampliarlo cambiaría ese número.
+        const trend: TrendPoint[] = todos.filter((t) => t.date >= corte);
+        const trendPrev: TrendPoint[] = todos.filter((t) => t.date < corte);
 
         // 3) Ventas por ubicación (mes).
         const byLocation = await tx.execute<{ name: string; total: string; count: number }>(sql`
@@ -100,7 +120,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       WHERE i.business_id = ${businessId} AND i.min_stock IS NOT NULL AND i.quantity <= i.min_stock ${locInv}
       ORDER BY i.quantity ASC LIMIT 20
     `);
-        return { kpi, trend, byLocation, bySeller, topProducts, lowStock };
+        return { kpi, trend, trendPrev, byLocation, bySeller, topProducts, lowStock };
       },
     );
 
@@ -113,6 +133,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
           avgTicket: Number(kpi?.avg_ticket ?? 0).toFixed(2),
         },
         trend,
+        trendPrev,
         byLocation: byLocation.map((r) => ({
           name: r.name,
           total: String(r.total),

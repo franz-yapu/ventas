@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { History, Pencil, Plus, Search, Upload } from 'lucide-react';
+import { History, Package, Pencil, Plus, Search, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { EmptyState, Page, PageHeader, SkeletonRows } from '@/components/ui/page';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { HistoryModal } from '@/features/inventory/HistoryModal';
 import { api, ApiError } from '@/lib/api';
 import { money } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { Location, Product } from '@/lib/types';
 import { useInfiniteList } from '@/lib/useInfinite';
 import { useBusiness } from '@/theme/ThemeProvider';
@@ -36,26 +38,40 @@ export function ProductsPage() {
   if (search) params.set('search', search);
   if (locationId) params.set('locationId', locationId);
   const qs = params.toString();
-  const { items, total, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteList<Product>(
-    ['products', 'admin', search, locationId],
-    `/products${qs ? `?${qs}` : ''}`,
-  );
+  const { items, total, hasNextPage, fetchNextPage, isFetchingNextPage, isLoading } =
+    useInfiniteList<Product>(
+      ['products', 'admin', search, locationId],
+      `/products${qs ? `?${qs}` : ''}`,
+    );
   const reload = () => qc.invalidateQueries({ queryKey: ['products'] });
 
+  // Vacío por filtro y vacío de verdad no son lo mismo: uno se arregla borrando la
+  // búsqueda y el otro dando de alta un producto. Decir lo mismo en los dos casos deja
+  // a la persona buscando un botón que no le sirve.
+  const filtrando = !!search || !!locationId;
+  const vacio = !isLoading && items.length === 0;
+
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Productos</h1>
-        {/* Sólo la central da de alta / importa productos y asigna su ubicación. */}
-        {isCentral && (
-          <div className="flex gap-2">
-            <CsvImport schema={business?.productSchema ?? []} onDone={reload} />
-            <Button onClick={() => setEditing('new')}>
-              <Plus size={18} /> Nuevo
-            </Button>
-          </div>
-        )}
-      </div>
+    <Page>
+      <PageHeader
+        titulo="Productos"
+        descripcion={
+          isCentral
+            ? 'El catálogo del negocio. Sólo la central da de alta productos.'
+            : 'El catálogo del negocio. Los da de alta la central.'
+        }
+        acciones={
+          // Sólo la central da de alta / importa productos y asigna su ubicación.
+          isCentral && (
+            <>
+              <CsvImport schema={business?.productSchema ?? []} onDone={reload} />
+              <Button onClick={() => setEditing('new')}>
+                <Plus size={18} /> Nuevo
+              </Button>
+            </>
+          )
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-md flex-1">
@@ -68,7 +84,12 @@ export function ProductsPage() {
           />
         </div>
         {isCentral && (
-          <Select filter className="max-w-xs" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+          <Select
+            filter
+            className="max-w-xs"
+            value={locationId}
+            onChange={(e) => setLocationId(e.target.value)}
+          >
             <option value="">Todas las ubicaciones</option>
             {locations?.map((l) => (
               <option key={l.id} value={l.id}>
@@ -79,7 +100,41 @@ export function ProductsPage() {
         )}
       </div>
 
-      <Card className="hidden md:block">
+      {isLoading && (
+        <Card>
+          <CardContent className="p-0">
+            <SkeletonRows filas={6} />
+          </CardContent>
+        </Card>
+      )}
+
+      {vacio && (
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icono={Package}
+              titulo={filtrando ? 'Ningún producto coincide' : 'Aún no hay productos'}
+              descripcion={
+                filtrando
+                  ? 'Prueba con otro nombre o SKU, o quita el filtro de ubicación.'
+                  : isCentral
+                    ? 'Da de alta el primero, o impórtalos de una vez desde un CSV.'
+                    : 'Los productos los da de alta la sucursal central.'
+              }
+              accion={
+                !filtrando &&
+                isCentral && (
+                  <Button onClick={() => setEditing('new')}>
+                    <Plus size={18} /> Nuevo producto
+                  </Button>
+                )
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className={cn('hidden', !isLoading && items.length > 0 && 'md:block')}>
         <CardContent className="overflow-x-auto p-0">
           <table className="ds-table w-full">
             <thead className="text-left text-muted">
@@ -100,11 +155,15 @@ export function ProductsPage() {
                   <td className="p-3">{p.name}</td>
                   <td className="p-3 text-muted">{p.locationName ?? '—'}</td>
                   <td className="p-3 text-right font-medium">{money(p.price)}</td>
-                  {isAdmin && <td className="p-3 text-right text-muted">{p.cost ? money(p.cost) : '—'}</td>}
+                  {isAdmin && (
+                    <td className="p-3 text-right text-muted">{p.cost ? money(p.cost) : '—'}</td>
+                  )}
                   {isAdmin && (
                     <td className="p-3 text-right">
                       {p.cost ? (
-                        <span className="text-green-600">{money(Number(p.price) - Number(p.cost))}</span>
+                        <span className="text-green-600">
+                          {money(Number(p.price) - Number(p.cost))}
+                        </span>
                       ) : (
                         '—'
                       )}
@@ -112,11 +171,19 @@ export function ProductsPage() {
                   )}
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => setHistory({ id: p.id, name: p.name })} className="text-muted hover:text-primary" title="Historial">
+                      <button
+                        onClick={() => setHistory({ id: p.id, name: p.name })}
+                        className="text-muted hover:text-primary"
+                        title="Historial"
+                      >
                         <History size={16} />
                       </button>
                       {p.canManage && (
-                        <button onClick={() => setEditing(p)} className="text-muted hover:text-primary" title="Editar">
+                        <button
+                          onClick={() => setEditing(p)}
+                          className="text-muted hover:text-primary"
+                          title="Editar"
+                        >
                           <Pencil size={16} />
                         </button>
                       )}
@@ -126,17 +193,21 @@ export function ProductsPage() {
               ))}
             </tbody>
           </table>
-          {items.length === 0 && <p className="py-8 text-center text-muted">Sin productos</p>}
         </CardContent>
       </Card>
 
       {/* Móvil: tarjetas apiladas en vez de tabla con scroll. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {items.map((p) => (
-          <div key={p.id} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
+          <div
+            key={p.id}
+            className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card"
+          >
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[14px] font-semibold">{p.name}</span>
-              <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">{money(p.price)}</span>
+              <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">
+                {money(p.price)}
+              </span>
             </div>
             <div className="mt-1 text-[12px] leading-[1.5] text-muted">
               <span className="font-mono">{p.sku}</span> · {p.locationName ?? '—'}
@@ -144,7 +215,9 @@ export function ProductsPage() {
             {isAdmin && p.cost && (
               <div className="mt-1 text-[12px] text-muted">
                 Costo {money(p.cost)} · Ganancia{' '}
-                <span className="font-semibold text-success">{money(Number(p.price) - Number(p.cost))}</span>
+                <span className="font-semibold text-success">
+                  {money(Number(p.price) - Number(p.cost))}
+                </span>
               </div>
             )}
             <div className="mt-3.5 flex gap-2">
@@ -165,11 +238,15 @@ export function ProductsPage() {
             </div>
           </div>
         ))}
-        {items.length === 0 && <p className="py-8 text-center text-muted">Sin productos</p>}
       </div>
 
       {hasNextPage && (
-        <Button variant="outline" className="self-center" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
+        <Button
+          variant="outline"
+          className="self-center"
+          disabled={isFetchingNextPage}
+          onClick={() => fetchNextPage()}
+        >
           {isFetchingNextPage ? 'Cargando…' : `Cargar más (${items.length}/${total})`}
         </Button>
       )}
@@ -186,8 +263,14 @@ export function ProductsPage() {
           }}
         />
       )}
-      {history && <HistoryModal productId={history.id} title={`Historial · ${history.name}`} onClose={() => setHistory(null)} />}
-    </div>
+      {history && (
+        <HistoryModal
+          productId={history.id}
+          title={`Historial · ${history.name}`}
+          onClose={() => setHistory(null)}
+        />
+      )}
+    </Page>
   );
 }
 
@@ -230,7 +313,11 @@ function CsvImport({
   return (
     <>
       <input ref={ref} type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
-      <Button variant="outline" onClick={() => ref.current?.click()} title="sku,name,price + atributos">
+      <Button
+        variant="outline"
+        onClick={() => ref.current?.click()}
+        title="sku,name,price + atributos"
+      >
         <Upload size={18} /> CSV
       </Button>
       {result && (
@@ -301,7 +388,10 @@ function ProductForm({
         {isNew && (
           <>
             <label className="text-sm text-muted">Sucursal / Central</label>
-            <Select value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
+            <Select
+              value={form.locationId}
+              onChange={(e) => setForm({ ...form, locationId: e.target.value })}
+            >
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name}
@@ -311,7 +401,9 @@ function ProductForm({
             </Select>
           </>
         )}
-        <label className="text-sm text-muted">SKU {isNew && <span className="text-xs">(opcional · se genera solo)</span>}</label>
+        <label className="text-sm text-muted">
+          SKU {isNew && <span className="text-xs">(opcional · se genera solo)</span>}
+        </label>
         <Input
           value={form.sku}
           placeholder={isNew ? 'Se genera automáticamente' : undefined}

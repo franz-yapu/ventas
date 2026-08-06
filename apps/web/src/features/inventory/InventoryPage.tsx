@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, History, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeftRight, Boxes, History, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { EmptyState, Page, PageHeader, SkeletonRows } from '@/components/ui/page';
 import { Select } from '@/components/ui/select';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { HistoryModal } from '@/features/inventory/HistoryModal';
@@ -26,25 +27,41 @@ export function InventoryPage() {
     queryFn: () => api.get<Location[]>('/locations'),
     enabled: isCentral,
   });
-  const { data: rows } = useQuery({
+  const { data: rows, isLoading } = useQuery({
     queryKey: ['inventory', locationId],
-    queryFn: () => api.get<InventoryRow[]>(`/inventory${locationId ? `?locationId=${locationId}` : ''}`),
+    queryFn: () =>
+      api.get<InventoryRow[]>(`/inventory${locationId ? `?locationId=${locationId}` : ''}`),
   });
   const canTransfer = rows?.some((r) => r.canAdjust) ?? false;
+  // Cuántos están en o por debajo del mínimo. Es el dato por el que se abre esta
+  // pantalla, así que va en el encabezado y no escondido entre las filas.
+  const bajos = rows?.filter((r) => r.minStock != null && r.quantity <= r.minStock).length ?? 0;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Inventario</h1>
-        {canTransfer && (
-          <Button onClick={() => setTransferOpen(true)}>
-            <ArrowLeftRight size={18} /> Transferir
-          </Button>
-        )}
-      </div>
+    <Page>
+      <PageHeader
+        titulo="Inventario"
+        descripcion={
+          bajos > 0
+            ? `${bajos} ${bajos === 1 ? 'producto está' : 'productos están'} en su mínimo o por debajo.`
+            : 'Stock por producto y sucursal. Nada por debajo del mínimo.'
+        }
+        acciones={
+          canTransfer && (
+            <Button variant="secondary" onClick={() => setTransferOpen(true)}>
+              <ArrowLeftRight size={18} /> Transferir
+            </Button>
+          )
+        }
+      />
 
       {isCentral && (
-        <Select filter className="max-w-xs" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+        <Select
+          filter
+          className="max-w-xs"
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
+        >
           <option value="">Todas las ubicaciones</option>
           {locations?.map((l) => (
             <option key={l.id} value={l.id}>
@@ -54,7 +71,27 @@ export function InventoryPage() {
         </Select>
       )}
 
-      <Card className="hidden md:block">
+      {isLoading && (
+        <Card>
+          <CardContent className="p-0">
+            <SkeletonRows filas={6} />
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && rows?.length === 0 && (
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icono={Boxes}
+              titulo="No hay stock que mostrar"
+              descripcion="El inventario aparece cuando hay productos dados de alta. Créalos primero en Productos y aquí verás sus existencias por sucursal."
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className={rows?.length ? 'hidden md:block' : 'hidden'}>
         <CardContent className="overflow-x-auto p-0">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
@@ -72,22 +109,34 @@ export function InventoryPage() {
                 return (
                   <tr key={r.id} style={low ? { background: '#fdf5f3' } : undefined}>
                     <td className="p-3">
-                      <span className="font-medium">{r.productName}</span> <span className="font-mono text-xs text-muted">{r.sku}</span>
+                      <span className="font-medium">{r.productName}</span>{' '}
+                      <span className="font-mono text-xs text-muted">{r.sku}</span>
                     </td>
                     <td className="p-3 text-muted">{r.locationName}</td>
-                    <td className="p-3 text-right font-bold" style={{ color: low ? '#b8402f' : '#17171a' }}>{r.quantity}</td>
+                    <td
+                      className="p-3 text-right font-bold"
+                      style={{ color: low ? '#b8402f' : '#17171a' }}
+                    >
+                      {r.quantity}
+                    </td>
                     <td className="p-3 text-right text-muted">{r.minStock ?? '—'}</td>
                     <td className="p-3">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => setHistory({ productId: r.productId, name: r.productName })}
+                          onClick={() =>
+                            setHistory({ productId: r.productId, name: r.productName })
+                          }
                           className="text-muted hover:text-primary"
                           title="Historial"
                         >
                           <History size={16} />
                         </button>
                         {r.canAdjust && (
-                          <button onClick={() => setAdjust(r)} className="text-muted hover:text-primary" title="Ajustar">
+                          <button
+                            onClick={() => setAdjust(r)}
+                            className="text-muted hover:text-primary"
+                            title="Ajustar"
+                          >
                             <SlidersHorizontal size={16} />
                           </button>
                         )}
@@ -98,7 +147,9 @@ export function InventoryPage() {
               })}
             </tbody>
           </table>
-          {rows && rows.length === 0 && <p className="py-8 text-center text-muted">Sin inventario</p>}
+          {rows && rows.length === 0 && (
+            <p className="py-8 text-center text-muted">Sin inventario</p>
+          )}
         </CardContent>
       </Card>
 
@@ -117,7 +168,10 @@ export function InventoryPage() {
                   <span className="text-[14px] font-semibold">{r.productName}</span>{' '}
                   <span className="font-mono text-xs text-muted">{r.sku}</span>
                 </div>
-                <span className="shrink-0 text-[22px] font-extrabold tracking-[-0.02em]" style={{ color: low ? '#b8402f' : '#17171a' }}>
+                <span
+                  className="shrink-0 text-[22px] font-extrabold tracking-[-0.02em]"
+                  style={{ color: low ? '#b8402f' : '#17171a' }}
+                >
                   {r.quantity}
                 </span>
               </div>
@@ -168,13 +222,25 @@ export function InventoryPage() {
         />
       )}
       {history && (
-        <HistoryModal productId={history.productId} title={`Historial · ${history.name}`} onClose={() => setHistory(null)} />
+        <HistoryModal
+          productId={history.productId}
+          title={`Historial · ${history.name}`}
+          onClose={() => setHistory(null)}
+        />
       )}
-    </div>
+    </Page>
   );
 }
 
-function AdjustModal({ row, onClose, onDone }: { row: InventoryRow; onClose: () => void; onDone: () => void }) {
+function AdjustModal({
+  row,
+  onClose,
+  onDone,
+}: {
+  row: InventoryRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [qty, setQty] = useState(String(row.quantity));
   const [min, setMin] = useState(row.minStock == null ? '' : String(row.minStock));
   const [reason, setReason] = useState('');
@@ -202,13 +268,29 @@ function AdjustModal({ row, onClose, onDone }: { row: InventoryRow; onClose: () 
           </div>
           <div>
             <label className="text-sm text-muted">Mínimo</label>
-            <Input inputMode="numeric" value={min} placeholder="—" onChange={(e) => setMin(e.target.value)} />
+            <Input
+              inputMode="numeric"
+              value={min}
+              placeholder="—"
+              onChange={(e) => setMin(e.target.value)}
+            />
           </div>
         </div>
         <label className="text-sm text-muted">Motivo (obligatorio)</label>
-        <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ej. conteo físico, merma, ingreso" autoFocus />
+        <Input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Ej. conteo físico, merma, ingreso"
+          autoFocus
+        />
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button disabled={reason.trim().length < 3 || save.isPending} onClick={() => { setError(null); save.mutate(); }}>
+        <Button
+          disabled={reason.trim().length < 3 || save.isPending}
+          onClick={() => {
+            setError(null);
+            save.mutate();
+          }}
+        >
           Guardar ajuste
         </Button>
       </div>
@@ -229,12 +311,18 @@ function TransferModal({
 }) {
   // Origen: sólo ubicaciones que el usuario puede ajustar. Destino: cualquiera visible.
   const fromLocs: Location[] = Array.from(
-    new Map(rows.map((r) => [r.locationId, { id: r.locationId, name: r.locationName } as Location])).values(),
+    new Map(
+      rows.map((r) => [r.locationId, { id: r.locationId, name: r.locationName } as Location]),
+    ).values(),
   );
   const toLocs: Location[] = Array.from(
-    new Map(allRows.map((r) => [r.locationId, { id: r.locationId, name: r.locationName } as Location])).values(),
+    new Map(
+      allRows.map((r) => [r.locationId, { id: r.locationId, name: r.locationName } as Location]),
+    ).values(),
   );
-  const products = Array.from(new Map(rows.map((r) => [r.productId, { id: r.productId, name: r.productName }])).values());
+  const products = Array.from(
+    new Map(rows.map((r) => [r.productId, { id: r.productId, name: r.productName }])).values(),
+  );
 
   const [productId, setProductId] = useState(products[0]?.id ?? '');
   const [fromLocationId, setFrom] = useState(fromLocs[0]?.id ?? '');
@@ -242,10 +330,17 @@ function TransferModal({
   const [quantity, setQuantity] = useState('1');
   const [error, setError] = useState<string | null>(null);
 
-  const stockAt = (loc: string) => allRows.find((r) => r.productId === productId && r.locationId === loc)?.quantity ?? 0;
+  const stockAt = (loc: string) =>
+    allRows.find((r) => r.productId === productId && r.locationId === loc)?.quantity ?? 0;
 
   const transfer = useMutation({
-    mutationFn: () => api.post('/inventory/transfer', { productId, fromLocationId, toLocationId, quantity: Number(quantity) }),
+    mutationFn: () =>
+      api.post('/inventory/transfer', {
+        productId,
+        fromLocationId,
+        toLocationId,
+        quantity: Number(quantity),
+      }),
     onSuccess: onDone,
     onError: (e) => setError(e instanceof ApiError ? e.message : 'Error al transferir'),
   });
@@ -288,7 +383,10 @@ function TransferModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <Button
           disabled={transfer.isPending || Number(quantity) < 1 || fromLocationId === toLocationId}
-          onClick={() => { setError(null); transfer.mutate(); }}
+          onClick={() => {
+            setError(null);
+            transfer.mutate();
+          }}
         >
           Transferir
         </Button>

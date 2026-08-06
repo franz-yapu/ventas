@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Page, PageHeader, SkeletonTiles } from '@/components/ui/page';
 import {
   AvgTicket,
   KpiToday,
@@ -29,7 +30,7 @@ export function ReportsPage() {
   }
 
   // Datos visuales (tendencia, por sucursal, top productos…) — mismo endpoint que el Panel.
-  const { data: dash } = useQuery({
+  const { data: dash, isLoading: cargandoDash } = useQuery({
     queryKey: ['report-dashboard'],
     queryFn: () => api.get<DashboardData>('/reports/dashboard'),
   });
@@ -42,30 +43,54 @@ export function ReportsPage() {
   const totalTodayCount = data?.byLocation.reduce((a, l) => a + l.todayCount, 0) ?? 0;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Reportes</h1>
+    <Page>
+      <PageHeader
+        titulo="Reportes"
+        descripcion="Ventas y ganancia por sucursal. La ganancia usa el costo que tenía el producto el día de la venta."
+      />
 
       {/* Filtro de rango de fechas */}
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-sm text-muted">Desde</label>
-        <Input type="date" filter className="max-w-[10rem]" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+        <Input
+          type="date"
+          filter
+          className="max-w-[10rem]"
+          value={from}
+          max={to || undefined}
+          onChange={(e) => setFrom(e.target.value)}
+        />
         <label className="text-sm text-muted">Hasta</label>
-        <Input type="date" filter className="max-w-[10rem]" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+        <Input
+          type="date"
+          filter
+          className="max-w-[10rem]"
+          value={to}
+          min={from || undefined}
+          onChange={(e) => setTo(e.target.value)}
+        />
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {dash && <KpiToday data={dash} />}
-        {dash && <MonthTotal data={dash} />}
-        {dash && <AvgTicket data={dash} />}
-        {dash && <Projection data={dash} />}
-      </div>
+      {/* KPIs. Mientras cargan, esqueletos del mismo alto: así la página no da el
+          salto que hace pulsar el botón equivocado. */}
+      {cargandoDash ? (
+        <SkeletonTiles n={4} />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {dash && <KpiToday data={dash} />}
+          {dash && <MonthTotal data={dash} />}
+          {dash && <AvgTicket data={dash} />}
+          {dash && <Projection data={dash} />}
+        </div>
+      )}
 
       {/* Tarjeta destacada del rango elegido */}
       {showRange && (
         <Card className="border-primary">
           <CardHeader>
-            <span className="text-sm text-muted">En el rango seleccionado ({data?.rangeCount ?? 0} ventas)</span>
+            <span className="text-sm text-muted">
+              En el rango seleccionado ({data?.rangeCount ?? 0} ventas)
+            </span>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-x-8 gap-y-1">
             <div>
@@ -74,7 +99,9 @@ export function ReportsPage() {
             </div>
             <div>
               <div className="text-sm text-muted">Ganancia</div>
-              <div className="text-3xl font-bold text-green-600">{money(data?.profit.range ?? '0')}</div>
+              <div className="text-3xl font-bold text-green-600">
+                {money(data?.profit.range ?? '0')}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -122,7 +149,9 @@ export function ReportsPage() {
                   <td className="p-3 text-right">{money(l.month)}</td>
                   <td className="p-3 text-right text-green-600">{money(l.profitMonth)}</td>
                   {showRange && <td className="p-3 text-right">{money(l.rangeTotal)}</td>}
-                  {showRange && <td className="p-3 text-right text-green-600">{money(l.rangeProfit)}</td>}
+                  {showRange && (
+                    <td className="p-3 text-right text-green-600">{money(l.rangeProfit)}</td>
+                  )}
                   {showRange && <td className="p-3 text-right">{l.rangeCount}</td>}
                 </tr>
               ))}
@@ -137,7 +166,9 @@ export function ReportsPage() {
                   <td className="p-3 text-right">{money(data.totals.month)}</td>
                   <td className="p-3 text-right text-green-600">{money(data.profit.month)}</td>
                   {showRange && <td className="p-3 text-right">{money(data.totals.range)}</td>}
-                  {showRange && <td className="p-3 text-right text-green-600">{money(data.profit.range)}</td>}
+                  {showRange && (
+                    <td className="p-3 text-right text-green-600">{money(data.profit.range)}</td>
+                  )}
                   {showRange && <td className="p-3 text-right">{data.rangeCount}</td>}
                 </tr>
               </tfoot>
@@ -148,7 +179,10 @@ export function ReportsPage() {
         {/* Móvil: tarjetas apiladas con rejilla de cifras en vez de tabla ancha. */}
         <div className="flex flex-col gap-2.5 p-3 md:hidden">
           {data?.byLocation.map((l) => (
-            <div key={l.locationId} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
+            <div
+              key={l.locationId}
+              className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card"
+            >
               <div className="mb-2 text-[14px] font-semibold">{l.locationName}</div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <Stat label="Vendido hoy" value={money(l.today)} />
@@ -172,14 +206,16 @@ export function ReportsPage() {
                 <Stat label="Vendido mes" value={money(data.totals.month)} />
                 <Stat label="Ganancia mes" value={money(data.profit.month)} green />
                 {showRange && <Stat label="Vendido (rango)" value={money(data.totals.range)} />}
-                {showRange && <Stat label="Ganancia (rango)" value={money(data.profit.range)} green />}
+                {showRange && (
+                  <Stat label="Ganancia (rango)" value={money(data.profit.range)} green />
+                )}
                 {showRange && <Stat label="# (rango)" value={String(data.rangeCount)} />}
               </div>
             </div>
           )}
         </div>
       </Card>
-    </div>
+    </Page>
   );
 }
 

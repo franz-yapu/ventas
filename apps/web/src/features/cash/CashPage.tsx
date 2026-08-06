@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Page, PageHeader } from '@/components/ui/page';
 import { Select } from '@/components/ui/select';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api, ApiError } from '@/lib/api';
@@ -47,17 +48,20 @@ export function CashPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Caja</h1>
-        {user?.role === 'admin' && (
-          <Link to="/caja/z">
-            <Button variant="outline">
-              <FileText size={16} /> Lectura Z
-            </Button>
-          </Link>
-        )}
-      </div>
+    <Page>
+      <PageHeader
+        titulo="Caja"
+        descripcion="Apertura, movimientos y arqueo del turno. El descuadre se calcula contra lo que se cobró en efectivo."
+        acciones={
+          user?.role === 'admin' && (
+            <Link to="/caja/z">
+              <Button variant="outline">
+                <FileText size={16} /> Lectura Z
+              </Button>
+            </Link>
+          )
+        }
+      />
 
       {isLoading && <div className="text-muted">Cargando…</div>}
 
@@ -87,9 +91,7 @@ export function CashPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-lg font-medium">Turno abierto</h2>
-                  <p className="text-[13px] text-muted">
-                    Desde {dateTime(caja.register.openedAt)}
-                  </p>
+                  <p className="text-[13px] text-muted">Desde {dateTime(caja.register.openedAt)}</p>
                 </div>
                 <Badge tone="success">Abierta</Badge>
               </div>
@@ -123,7 +125,10 @@ export function CashPage() {
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
                 {caja.breakdown.byPaymentMethod.map((r) => (
-                  <div key={r.paymentMethod} className="flex items-baseline justify-between text-sm">
+                  <div
+                    key={r.paymentMethod}
+                    className="flex items-baseline justify-between text-sm"
+                  >
                     <span>
                       {PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod}
                       <span className="ml-2 text-[13px] text-muted">
@@ -157,7 +162,9 @@ export function CashPage() {
                       </div>
                     </div>
                     <span
-                      className={m.type === 'in' ? 'font-semibold text-success' : 'font-semibold text-danger'}
+                      className={
+                        m.type === 'in' ? 'font-semibold text-success' : 'font-semibold text-danger'
+                      }
                     >
                       {m.type === 'in' ? '+' : '−'} {money(m.amount)}
                     </span>
@@ -204,7 +211,7 @@ export function CashPage() {
         />
       )}
       {movimiento && <ModalMovimiento onClose={() => setMovimiento(false)} onOk={refrescar} />}
-    </div>
+    </Page>
   );
 }
 
@@ -306,7 +313,10 @@ function ModalCerrar({
 
   const cerrar = useMutation({
     mutationFn: () =>
-      api.post('/cash/close', { countedAmount: Number(contado).toFixed(2), notes: notas || undefined }),
+      api.post('/cash/close', {
+        countedAmount: Number(contado).toFixed(2),
+        notes: notas || undefined,
+      }),
     onSuccess: () => {
       onOk();
       onClose();

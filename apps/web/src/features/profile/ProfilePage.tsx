@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Page, PageHeader } from '@/components/ui/page';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ApiError } from '@/lib/api';
@@ -53,7 +54,8 @@ export function ProfilePage() {
   const [confirmarTodos, setConfirmarTodos] = useState(false);
 
   const roleLabel = user?.role === 'admin' ? 'Administrador' : 'Vendedor';
-  const wantsPasswordChange = newPassword.length > 0 || confirmPassword.length > 0 || currentPassword.length > 0;
+  const wantsPasswordChange =
+    newPassword.length > 0 || confirmPassword.length > 0 || currentPassword.length > 0;
   const nameChanged = name.trim() !== '' && name.trim() !== (user?.name ?? '');
   const emailChanged = email.trim().toLowerCase() !== (user?.email ?? '').toLowerCase();
 
@@ -62,7 +64,8 @@ export function ProfilePage() {
     setOk(false);
 
     if (wantsPasswordChange) {
-      if (newPassword.length < 6) return setError('La nueva contraseña debe tener al menos 6 caracteres');
+      if (newPassword.length < 6)
+        return setError('La nueva contraseña debe tener al menos 6 caracteres');
       if (newPassword !== confirmPassword) return setError('Las contraseñas nuevas no coinciden');
       if (!currentPassword) return setError('Ingresa tu contraseña actual');
     }
@@ -106,8 +109,11 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Mi perfil</h1>
+    <Page className="mx-auto w-full max-w-lg">
+      <PageHeader
+        titulo="Mi perfil"
+        descripcion="Tus datos, tu contraseña y las sesiones que tienes abiertas."
+      />
 
       <Card>
         <CardHeader>
@@ -148,9 +154,21 @@ export function ProfilePage() {
             <p className="mb-2 text-sm font-semibold">Cambiar contraseña</p>
             <p className="mb-3 text-xs text-muted">Déjalo en blanco si no quieres cambiarla.</p>
             <div className="flex flex-col gap-2">
-              <PasswordField value={currentPassword} onChange={setCurrentPassword} placeholder="Contraseña actual" />
-              <PasswordField value={newPassword} onChange={setNewPassword} placeholder="Nueva contraseña (mín. 6)" />
-              <PasswordField value={confirmPassword} onChange={setConfirmPassword} placeholder="Repetir nueva contraseña" />
+              <PasswordField
+                value={currentPassword}
+                onChange={setCurrentPassword}
+                placeholder="Contraseña actual"
+              />
+              <PasswordField
+                value={newPassword}
+                onChange={setNewPassword}
+                placeholder="Nueva contraseña (mín. 6)"
+              />
+              <PasswordField
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                placeholder="Repetir nueva contraseña"
+              />
             </div>
           </div>
 
@@ -171,15 +189,17 @@ export function ProfilePage() {
         <CardContent className="flex flex-col gap-2 p-4">
           <p className="text-sm font-semibold">Sesiones en otros dispositivos</p>
           <p className="text-xs text-muted">
-            Si crees que alguien más entró con tu cuenta, ciérralas todas. Tendrás que
-            volver a entrar aquí también.
+            Si crees que alguien más entró con tu cuenta, ciérralas todas. Tendrás que volver a
+            entrar aquí también.
           </p>
           <Button variant="outline" onClick={onLogoutEverywhere}>
             <ShieldOff size={16} />
-            {confirmarTodos ? 'Confirmar: cerrar en todos' : 'Cerrar sesión en todos los dispositivos'}
+            {confirmarTodos
+              ? 'Confirmar: cerrar en todos'
+              : 'Cerrar sesión en todos los dispositivos'}
           </Button>
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Eye } from 'lucide-react';
+import { Eye, History } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { api } from '@/lib/api';
 import { currentWeek, dateTime } from '@/lib/format';
 import type { AppUserRow, AuditRow } from '@/lib/types';
 import { useInfiniteList } from '@/lib/useInfinite';
+import { EmptyState, Page, PageHeader, SkeletonRows } from '@/components/ui/page';
 
 const ACTION_LABELS: Record<string, string> = {
   login: 'Inicio de sesión',
@@ -53,7 +54,10 @@ export function AuditPage() {
   const [to, setTo] = useState(() => currentWeek().to);
   const [detail, setDetail] = useState<AuditRow | null>(null);
 
-  const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get<AppUserRow[]>('/users') });
+  const { data: users } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.get<AppUserRow[]>('/users'),
+  });
 
   const params = new URLSearchParams();
   if (action) params.set('action', action);
@@ -63,17 +67,26 @@ export function AuditPage() {
   if (from) params.set('from', new Date(`${from}T00:00:00`).toISOString());
   if (to) params.set('to', new Date(`${to}T23:59:59.999`).toISOString());
 
-  const { items, total, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteList<AuditRow>(
-    ['audit', action, entity, userId, from, to],
-    `/audit?${params.toString()}`,
-  );
+  const { items, total, hasNextPage, fetchNextPage, isFetchingNextPage, isLoading } =
+    useInfiniteList<AuditRow>(
+      ['audit', action, entity, userId, from, to],
+      `/audit?${params.toString()}`,
+    );
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Registro de actividad</h1>
+    <Page>
+      <PageHeader
+        titulo="Registro de actividad"
+        descripcion="Quién cambió qué y cuándo. Se escribe solo y no se puede editar."
+      />
 
       <div className="flex flex-wrap gap-2">
-        <Select filter className="max-w-[12rem]" value={action} onChange={(e) => setAction(e.target.value)}>
+        <Select
+          filter
+          className="max-w-[12rem]"
+          value={action}
+          onChange={(e) => setAction(e.target.value)}
+        >
           <option value="">Toda acción</option>
           {Object.entries(ACTION_LABELS).map(([k, v]) => (
             <option key={k} value={k}>
@@ -81,7 +94,12 @@ export function AuditPage() {
             </option>
           ))}
         </Select>
-        <Select filter className="max-w-[12rem]" value={entity} onChange={(e) => setEntity(e.target.value)}>
+        <Select
+          filter
+          className="max-w-[12rem]"
+          value={entity}
+          onChange={(e) => setEntity(e.target.value)}
+        >
           <option value="">Toda entidad</option>
           {Object.entries(ENTITY_LABELS).map(([k, v]) => (
             <option key={k} value={k}>
@@ -89,7 +107,12 @@ export function AuditPage() {
             </option>
           ))}
         </Select>
-        <Select filter className="max-w-[12rem]" value={userId} onChange={(e) => setUserId(e.target.value)}>
+        <Select
+          filter
+          className="max-w-[12rem]"
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+        >
           <option value="">Todo usuario</option>
           {users?.map((u) => (
             <option key={u.id} value={u.id}>
@@ -99,9 +122,23 @@ export function AuditPage() {
         </Select>
         <div className="flex items-center gap-1">
           <label className="text-sm text-muted">Desde</label>
-          <Input type="date" filter className="max-w-[10rem]" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+          <Input
+            type="date"
+            filter
+            className="max-w-[10rem]"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => setFrom(e.target.value)}
+          />
           <label className="text-sm text-muted">Hasta</label>
-          <Input type="date" filter className="max-w-[10rem]" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+          <Input
+            type="date"
+            filter
+            className="max-w-[10rem]"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(e.target.value)}
+          />
         </div>
       </div>
 
@@ -132,7 +169,11 @@ export function AuditPage() {
                   <td className="p-3 text-muted">{a.locationName ?? '—'}</td>
                   <td className="p-3 text-right">
                     {(a.before || a.after) && (
-                      <button onClick={() => setDetail(a)} className="text-muted hover:text-primary" title="Ver detalle">
+                      <button
+                        onClick={() => setDetail(a)}
+                        className="text-muted hover:text-primary"
+                        title="Ver detalle"
+                      >
                         <Eye size={16} />
                       </button>
                     )}
@@ -141,45 +182,78 @@ export function AuditPage() {
               ))}
             </tbody>
           </table>
-          {items.length === 0 && <p className="py-8 text-center text-muted">Sin actividad</p>}
+          {isLoading && <SkeletonRows filas={6} />}
+          {!isLoading && items.length === 0 && (
+            <EmptyState
+              icono={History}
+              titulo="Sin actividad en este filtro"
+              descripcion="Prueba con otra acción o rango de fechas. Aquí sólo entra lo que cambia datos: ventas canceladas, precios, usuarios, configuración."
+            />
+          )}
         </CardContent>
       </Card>
 
       {/* Móvil: tarjetas apiladas en vez de tabla. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {items.map((a) => (
-          <div key={a.id} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
+          <div
+            key={a.id}
+            className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card"
+          >
             <div className="flex items-center justify-between gap-3">
-              <Badge tone={ACTION_TONE[a.action] ?? 'neutral'}>{ACTION_LABELS[a.action] ?? a.action}</Badge>
+              <Badge tone={ACTION_TONE[a.action] ?? 'neutral'}>
+                {ACTION_LABELS[a.action] ?? a.action}
+              </Badge>
               <span className="text-[12px] text-muted">{dateTime(a.createdAt)}</span>
             </div>
             <div className="mt-2 flex items-baseline justify-between gap-3">
               <div className="text-[12px] leading-[1.5] text-muted">
-                <span className="font-medium text-fg">{a.userName ?? '—'}</span> · {ENTITY_LABELS[a.entity] ?? a.entity}
+                <span className="font-medium text-fg">{a.userName ?? '—'}</span> ·{' '}
+                {ENTITY_LABELS[a.entity] ?? a.entity}
                 <br />
                 {a.locationName ?? '—'}
               </div>
               {(a.before || a.after) && (
-                <button onClick={() => setDetail(a)} className="shrink-0 text-muted hover:text-primary" title="Ver detalle">
+                <button
+                  onClick={() => setDetail(a)}
+                  className="shrink-0 text-muted hover:text-primary"
+                  title="Ver detalle"
+                >
                   <Eye size={18} />
                 </button>
               )}
             </div>
           </div>
         ))}
-        {items.length === 0 && <p className="py-8 text-center text-muted">Sin actividad</p>}
+        {!isLoading && items.length === 0 && (
+          <EmptyState
+            icono={History}
+            titulo="Sin actividad en este filtro"
+            descripcion="Prueba con otra acción o rango de fechas."
+          />
+        )}
       </div>
 
       {hasNextPage && (
-        <Button variant="outline" className="self-center" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
+        <Button
+          variant="outline"
+          className="self-center"
+          disabled={isFetchingNextPage}
+          onClick={() => fetchNextPage()}
+        >
           {isFetchingNextPage ? 'Cargando…' : `Cargar más (${items.length}/${total})`}
         </Button>
       )}
 
-      <Modal open={!!detail} onClose={() => setDetail(null)} title="Detalle del cambio" className="max-w-lg">
+      <Modal
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        title="Detalle del cambio"
+        className="max-w-lg"
+      >
         {detail && <Diff before={detail.before} after={detail.after} />}
       </Modal>
-    </div>
+    </Page>
   );
 }
 

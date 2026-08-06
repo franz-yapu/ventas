@@ -3,6 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -38,13 +39,18 @@ function KpiCard({
   delta?: ReactNode;
   tone?: 'up' | 'down' | 'muted';
 }) {
-  const deltaColor = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-muted';
+  const deltaColor =
+    tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-muted';
   return (
     <Card>
       <CardContent className="p-[18px]">
         <div className="text-xs font-semibold text-muted">{label}</div>
-        <div className="mt-1.5 text-[27px] font-extrabold leading-none tracking-[-0.03em]">{value}</div>
-        {delta != null && <div className={`mt-1.5 text-xs font-semibold ${deltaColor}`}>{delta}</div>}
+        <div className="mt-1.5 text-[27px] font-extrabold leading-none tracking-[-0.03em]">
+          {value}
+        </div>
+        {delta != null && (
+          <div className={`mt-1.5 text-xs font-semibold ${deltaColor}`}>{delta}</div>
+        )}
       </CardContent>
     </Card>
   );
@@ -60,7 +66,9 @@ export function KpiToday({ data }: { data: DashboardData }) {
       label="Ventas de hoy"
       value={money(data.kpi.todayTotal)}
       tone={pct == null ? 'muted' : pct >= 0 ? 'up' : 'down'}
-      delta={pct == null ? `${data.kpi.todayCount} ventas` : `${pct >= 0 ? '+' : ''}${pct}% vs ayer`}
+      delta={
+        pct == null ? `${data.kpi.todayCount} ventas` : `${pct >= 0 ? '+' : ''}${pct}% vs ayer`
+      }
     />
   );
 }
@@ -68,11 +76,23 @@ export function KpiToday({ data }: { data: DashboardData }) {
 export function MonthTotal({ data }: { data: DashboardData }) {
   const total = data.byLocation.reduce((a, l) => a + Number(l.total), 0);
   const count = data.byLocation.reduce((a, l) => a + l.count, 0);
-  return <KpiCard label="Ventas del mes" value={money(total)} delta={`${count} venta${count === 1 ? '' : 's'}`} />;
+  return (
+    <KpiCard
+      label="Ventas del mes"
+      value={money(total)}
+      delta={`${count} venta${count === 1 ? '' : 's'}`}
+    />
+  );
 }
 
 export function AvgTicket({ data }: { data: DashboardData }) {
-  return <KpiCard label="Ticket promedio (mes)" value={money(data.kpi.avgTicket)} delta={`${data.kpi.todayCount} ventas hoy`} />;
+  return (
+    <KpiCard
+      label="Ticket promedio (mes)"
+      value={money(data.kpi.avgTicket)}
+      delta={`${data.kpi.todayCount} ventas hoy`}
+    />
+  );
 }
 
 export function Projection({ data }: { data: DashboardData }) {
@@ -86,8 +106,23 @@ export function Projection({ data }: { data: DashboardData }) {
   );
 }
 
+/**
+ * Tendencia de 30 días, con los 30 anteriores detrás para comparar.
+ *
+ * Una línea sola sube y baja pero no dice si eso es bueno: hay que recordar cómo fue el
+ * mes pasado. Con la serie anterior en gris punteado, la respuesta está en el mismo
+ * gráfico. Se alinean por POSICIÓN (día 1 con día 1, no por fecha), que es como se
+ * compara un periodo con el anterior.
+ */
 export function Trend30({ data }: { data: DashboardData }) {
-  const chart = data.trend.map((t) => ({ ...t, label: t.date.slice(5) }));
+  const prev = data.trendPrev ?? [];
+  const chart = data.trend.map((t, i) => ({
+    ...t,
+    label: t.date.slice(5),
+    anterior: prev[i]?.total ?? null,
+  }));
+  const hayComparativa = prev.length > 0;
+
   return (
     <WidgetCard title="Tendencia 30 días">
       <ResponsiveContainer width="100%" height={180}>
@@ -96,9 +131,47 @@ export function Trend30({ data }: { data: DashboardData }) {
           <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={5} />
           <YAxis tick={{ fontSize: 10 }} />
           <Tooltip formatter={(v: number) => money(v)} />
-          <Line type="monotone" dataKey="total" stroke="var(--color-primary)" strokeWidth={2} dot={false} />
+          {/* El periodo anterior va primero para que quede DEBAJO: es el telón de
+              fondo, no el dato que se viene a mirar. */}
+          {hayComparativa && (
+            <Line
+              type="monotone"
+              dataKey="anterior"
+              name="30 días antes"
+              stroke="var(--color-secondary)"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              dot={false}
+              connectNulls
+            />
+          )}
+          <Line
+            type="monotone"
+            dataKey="total"
+            name="Estos 30 días"
+            stroke="var(--color-primary)"
+            strokeWidth={2}
+            dot={false}
+          />
         </LineChart>
       </ResponsiveContainer>
+      {hayComparativa && (
+        <div className="mt-1 flex items-center justify-end gap-4 text-[11px] text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-[2px] w-4 bg-primary" /> Estos 30 días
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-[2px] w-4"
+              style={{
+                backgroundImage:
+                  'repeating-linear-gradient(90deg, var(--color-secondary) 0 4px, transparent 4px 7px)',
+              }}
+            />
+            30 días antes
+          </span>
+        </div>
+      )}
     </WidgetCard>
   );
 }
@@ -113,7 +186,17 @@ export function SalesByLocation({ data }: { data: DashboardData }) {
           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 10 }} />
           <Tooltip formatter={(v: number) => money(v)} />
-          <Bar dataKey="total" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+          {/* La que más vende va en el primario y el resto en el acento: con todas del
+              mismo color hay que leer el eje para saber cuál gana. Vienen ordenadas por
+              total de mayor a menor desde el API, así que la primera ES la mayor. */}
+          <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+            {chart.map((l, i) => (
+              <Cell
+                key={l.name}
+                fill={i === 0 ? 'var(--color-primary)' : 'var(--color-secondary)'}
+              />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </WidgetCard>

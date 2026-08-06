@@ -1,8 +1,8 @@
-import { MailCheck } from 'lucide-react';
+import { ArrowLeft, MailCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { AuthShell } from '@/components/AuthShell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { slugDesdeHostname } from '@/features/auth/AuthProvider';
 import { api } from '@/lib/api';
@@ -37,60 +37,67 @@ export function ForgotPasswordPage() {
     }
   }
 
+  const volver = (
+    <Link
+      to="/login"
+      className="inline-flex items-center gap-1.5 font-semibold text-fg hover:underline"
+    >
+      <ArrowLeft size={14} /> Volver a entrar
+    </Link>
+  );
+
   if (enviado) {
     return (
-      <div className="flex min-h-full items-center justify-center p-4">
-        <Card className="w-full max-w-sm">
-          <CardContent className="p-6 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <MailCheck size={24} />
-            </div>
-            <h1 className="text-lg font-bold">Revisa tu correo</h1>
-            <p className="mt-2 text-sm text-muted">
-              Si {email.trim()} tiene una cuenta, te enviamos un enlace para poner una
-              contraseña nueva. Vale una hora.
-            </p>
-            <Link to="/login">
-              <Button variant="outline" className="mt-4 w-full">
-                Volver a entrar
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthShell titulo="Revisa tu correo" descripcion="Te enviamos un enlace" pie={volver}>
+        <div className="flex flex-col items-center gap-3 py-2 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success-bg text-success">
+            <MailCheck size={26} />
+          </div>
+          <h2 className="text-[17px] font-bold tracking-[-0.01em]">Revisa tu correo</h2>
+          <p className="text-[13px] leading-relaxed text-muted">
+            Si <span className="font-semibold text-fg">{email.trim()}</span> tiene una cuenta, te
+            enviamos un enlace para poner una contraseña nueva.
+          </p>
+          <p className="rounded-theme bg-muted/10 px-3 py-1.5 text-[12px] text-muted">
+            El enlace vale una hora
+          </p>
+        </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <h1 className="text-lg font-bold">¿Olvidaste tu contraseña?</h1>
-          <p className="mt-1 text-sm text-muted">
-            Escribe tu correo y te enviamos un enlace para cambiarla.
+    <AuthShell
+      titulo="Recuperar contraseña"
+      descripcion="Recupera el acceso a tu cuenta"
+      pie={volver}
+    >
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <div>
+          <label htmlFor="correo" className="mb-1.5 block text-[13px] font-semibold">
+            Tu correo
+          </label>
+          <Input
+            id="correo"
+            type="email"
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="tu@correo.com"
+            required
+          />
+          <p className="mt-1.5 text-[12px] text-muted">
+            Te enviamos un enlace para cambiarla. Si no tienes correo registrado, pídele a un
+            administrador de tu negocio que te dé una contraseña nueva.
           </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="flex flex-col gap-3">
-            <Input
-              type="email"
-              autoFocus
-              autoCapitalize="none"
-              autoCorrect="off"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@correo.com"
-              required
-            />
-            <Button type="submit" size="lg" disabled={enviando}>
-              {enviando ? 'Enviando…' : 'Enviar enlace'}
-            </Button>
-            <Link to="/login" className="text-center text-[13px] text-muted hover:text-fg">
-              Volver a entrar
-            </Link>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <Button type="submit" size="lg" disabled={enviando}>
+          {enviando ? 'Enviando…' : 'Enviar enlace'}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

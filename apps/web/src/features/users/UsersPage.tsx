@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Pencil, Plus } from 'lucide-react';
+import { Check, Copy, Pencil, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { EmptyState, Page, PageHeader, SkeletonRows } from '@/components/ui/page';
 import { Select } from '@/components/ui/select';
 import { api, ApiError } from '@/lib/api';
 import type { AppUserRow, Location } from '@/lib/types';
@@ -22,21 +23,55 @@ export function UsersPage() {
   // la copie y se la envíe al usuario.
   const [credentials, setCredentials] = useState<Credentials | null>(null);
 
-  const { data: users } = useQuery({ queryKey: ['users'], queryFn: () => api.get<AppUserRow[]>('/users') });
-  const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: () => api.get<Location[]>('/locations') });
+  const { data: users, isLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.get<AppUserRow[]>('/users'),
+  });
+  const { data: locations } = useQuery({
+    queryKey: ['locations'],
+    queryFn: () => api.get<Location[]>('/locations'),
+  });
 
   const locName = (id: string | null) => locations?.find((l) => l.id === id)?.name ?? '—';
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Usuarios</h1>
-        <Button onClick={() => setEditing('new')}>
-          <Plus size={18} /> Nuevo
-        </Button>
-      </div>
+    <Page>
+      <PageHeader
+        titulo="Usuarios"
+        descripcion="Quién puede entrar y con qué permisos. Un vendedor sólo ve su sucursal."
+        acciones={
+          <Button onClick={() => setEditing('new')}>
+            <Plus size={18} /> Nuevo
+          </Button>
+        }
+      />
 
-      <Card className="hidden md:block">
+      {isLoading && (
+        <Card>
+          <CardContent className="p-0">
+            <SkeletonRows filas={4} />
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && users?.length === 0 && (
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icono={Users}
+              titulo="Sólo estás tú"
+              descripcion="Da de alta a quien atienda el mostrador. Un vendedor no ve costos ni ganancias, y sólo trabaja sobre el stock de su sucursal."
+              accion={
+                <Button onClick={() => setEditing('new')}>
+                  <Plus size={18} /> Nuevo usuario
+                </Button>
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className={users?.length ? 'hidden md:block' : 'hidden'}>
         <CardContent className="p-0">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">
@@ -57,11 +92,17 @@ export function UsersPage() {
                   <td className="p-3">{u.role === 'admin' ? 'Administrador' : 'Vendedor'}</td>
                   <td className="p-3 text-muted">{locName(u.locationId)}</td>
                   <td className="p-3">
-                    <Badge tone={u.isActive ? 'success' : 'neutral'}>{u.isActive ? 'Activo' : 'Inactivo'}</Badge>
+                    <Badge tone={u.isActive ? 'success' : 'neutral'}>
+                      {u.isActive ? 'Activo' : 'Inactivo'}
+                    </Badge>
                   </td>
                   <td className="p-3">
                     <div className="flex justify-end">
-                      <button onClick={() => setEditing(u)} className="text-muted hover:text-primary" title="Editar">
+                      <button
+                        onClick={() => setEditing(u)}
+                        className="text-muted hover:text-primary"
+                        title="Editar"
+                      >
                         <Pencil size={16} />
                       </button>
                     </div>
@@ -76,13 +117,19 @@ export function UsersPage() {
       {/* Móvil: tarjetas apiladas en vez de tabla. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {users?.map((u) => (
-          <div key={u.id} className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card">
+          <div
+            key={u.id}
+            className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card"
+          >
             <div className="flex items-center justify-between gap-3">
               <span className="text-[14px] font-semibold">{u.name}</span>
-              <Badge tone={u.isActive ? 'success' : 'neutral'}>{u.isActive ? 'Activo' : 'Inactivo'}</Badge>
+              <Badge tone={u.isActive ? 'success' : 'neutral'}>
+                {u.isActive ? 'Activo' : 'Inactivo'}
+              </Badge>
             </div>
             <div className="mt-1 text-[12px] leading-[1.5] text-muted">
-              <span className="font-mono">{u.username}</span> · {u.role === 'admin' ? 'Administrador' : 'Vendedor'}
+              <span className="font-mono">{u.username}</span> ·{' '}
+              {u.role === 'admin' ? 'Administrador' : 'Vendedor'}
               <br />
               {locName(u.locationId)}
             </div>
@@ -110,7 +157,7 @@ export function UsersPage() {
       )}
 
       {credentials && <CredentialsModal creds={credentials} onClose={() => setCredentials(null)} />}
-    </div>
+    </Page>
   );
 }
 
@@ -157,7 +204,8 @@ function UserForm({
       return api.patch(`/users/${user!.id}`, patch);
     },
     // Si se asignó una contraseña, la devolvemos para mostrar el modal de "copiar y enviar".
-    onSuccess: () => onSaved(form.password ? { username: form.username, password: form.password } : null),
+    onSuccess: () =>
+      onSaved(form.password ? { username: form.username, password: form.password } : null),
     onError: (e) => setError(e instanceof ApiError ? e.message : 'Error al guardar'),
   });
 
@@ -181,7 +229,9 @@ function UserForm({
           disabled={!isNew}
           onChange={(e) => setForm({ ...form, username: e.target.value })}
         />
-        {!isNew && <p className="-mt-2 text-xs text-muted">El nombre de usuario no se puede cambiar.</p>}
+        {!isNew && (
+          <p className="-mt-2 text-xs text-muted">El nombre de usuario no se puede cambiar.</p>
+        )}
 
         <label className="text-sm text-muted">
           {isNew ? 'Contraseña' : 'Nueva contraseña (opcional)'}
@@ -201,7 +251,10 @@ function UserForm({
         )}
 
         <label className="text-sm text-muted">Rol</label>
-        <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'seller' })}>
+        <Select
+          value={form.role}
+          onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'seller' })}
+        >
           <option value="seller">Vendedor</option>
           <option value="admin">Administrador</option>
         </Select>
@@ -240,7 +293,13 @@ function UserForm({
         )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button disabled={!canSave} onClick={() => { setError(null); save.mutate(); }}>
+        <Button
+          disabled={!canSave}
+          onClick={() => {
+            setError(null);
+            save.mutate();
+          }}
+        >
           Guardar
         </Button>
       </div>
@@ -265,8 +324,9 @@ function CredentialsModal({ creds, onClose }: { creds: Credentials; onClose: () 
     <Modal open onClose={onClose} title="Contraseña asignada">
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted">
-          Copia esta contraseña y envíala al usuario <span className="font-semibold text-fg">{creds.username}</span>.
-          Podrá iniciar sesión con ella y luego cambiarla desde <span className="font-semibold text-fg">Mi perfil</span>.
+          Copia esta contraseña y envíala al usuario{' '}
+          <span className="font-semibold text-fg">{creds.username}</span>. Podrá iniciar sesión con
+          ella y luego cambiarla desde <span className="font-semibold text-fg">Mi perfil</span>.
         </p>
         <div className="flex items-center gap-2 rounded-theme border border-border bg-muted/10 p-3">
           <div className="min-w-0 flex-1">

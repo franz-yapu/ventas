@@ -2,6 +2,7 @@ import { LIMIT_LABELS, limitLabel, type LimitKey } from '@ventafacil/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Page, PageHeader } from '@/components/ui/page';
 import type { PlanInfo } from '@/features/subscription/SubscriptionProvider';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { api } from '@/lib/api';
@@ -62,8 +63,11 @@ export function SubscriptionPage() {
   if (loading) return <div className="p-6 text-muted">Cargando…</div>;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Mi plan</h1>
+    <Page>
+      <PageHeader
+        titulo="Mi plan"
+        descripcion="Tu suscripción y cuánto llevas usado de cada cupo."
+      />
 
       <Card>
         <CardContent className="p-4">
@@ -90,7 +94,12 @@ export function SubscriptionPage() {
 
               <div className="mt-5 space-y-3">
                 {(Object.keys(sub.usage) as LimitKey[]).map((k) => (
-                  <Cupo key={k} nombre={LIMIT_LABELS[k]} used={sub.usage[k].used} limit={sub.usage[k].limit} />
+                  <Cupo
+                    key={k}
+                    nombre={LIMIT_LABELS[k]}
+                    used={sub.usage[k].used}
+                    limit={sub.usage[k].limit}
+                  />
                 ))}
               </div>
             </>
@@ -135,6 +144,6 @@ export function SubscriptionPage() {
           </p>
         </>
       )}
-    </div>
+    </Page>
   );
 }

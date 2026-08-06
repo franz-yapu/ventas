@@ -1,8 +1,8 @@
 import { Check, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { AuthShell } from '@/components/AuthShell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { Aviso } from '@/features/auth/Aviso';
 import { api, ApiError } from '@/lib/api';
@@ -47,32 +47,35 @@ export function VerifyEmailPage() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardContent className="p-6 text-center">
-          {estado === 'cargando' ? (
-            <>
-              <Loader2 size={24} className="mx-auto animate-spin text-muted" />
-              <p className="mt-3 text-sm text-muted">Confirmando tu correo…</p>
-            </>
-          ) : (
-            <>
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-success-bg text-success">
-                <Check size={24} />
-              </div>
-              <h1 className="text-lg font-bold">Correo confirmado</h1>
-              <p className="mt-2 text-sm text-muted">
-                Si algún día olvidas la contraseña, podrás recuperarla tú mismo.
-              </p>
-              <Link to="/">
-                <Button className="mt-4 w-full" size="lg">
-                  Ir al punto de venta
-                </Button>
-              </Link>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <AuthShell
+      titulo="Confirmar correo"
+      descripcion={estado === 'cargando' ? 'Un momento…' : 'Correo confirmado'}
+    >
+      <div className="flex flex-col items-center gap-3 py-2 text-center">
+        {estado === 'cargando' ? (
+          <>
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted/10">
+              <Loader2 size={24} className="animate-spin text-muted" />
+            </div>
+            <p className="text-[13px] text-muted">Confirmando tu correo…</p>
+          </>
+        ) : (
+          <>
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success-bg text-success">
+              <Check size={26} />
+            </div>
+            <h2 className="text-[17px] font-bold tracking-[-0.01em]">Correo confirmado</h2>
+            <p className="text-[13px] leading-relaxed text-muted">
+              Si algún día olvidas la contraseña, podrás recuperarla tú mismo.
+            </p>
+            <Link to="/" className="w-full">
+              <Button className="mt-1 w-full" size="lg">
+                Ir al punto de venta
+              </Button>
+            </Link>
+          </>
+        )}
+      </div>
+    </AuthShell>
   );
 }

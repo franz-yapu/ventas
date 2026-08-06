@@ -34,6 +34,51 @@ const updateBusinessSchema = z.object({
 });
 
 export async function businessRoutes(app: FastifyInstance) {
+  /**
+   * GET /public/business/:slug — la MARCA de un negocio, sin sesión.
+   *
+   * Existe para las pantallas que se ven ANTES de entrar: login, recuperar contraseña,
+   * verificar el correo. Sin esto, el cliente que abre `su-negocio.dominio.com` ve una
+   * pantalla genérica con la marca del proveedor, y la promesa del white-label se rompe
+   * justo en la primera pantalla que mira.
+   *
+   * Devuelve sólo lo que de todos modos va a ver al entrar: nombre, logo, colores y el
+   * rótulo de la app. NADA de moneda, impuesto, esquema de productos ni tope de
+   * descuento — eso es configuración interna del negocio y no pinta en un login.
+   *
+   * Que confirme si un subdominio existe no es una fuga: el propio DNS ya lo hace, y
+   * `GET /register/slug` lo dice a propósito para el formulario de alta.
+   */
+  app.get('/public/business/:slug', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const [biz] = await db
+      .select({
+        name: schema.business.name,
+        logoUrl: schema.business.logoUrl,
+        theme: schema.business.themeJson,
+        texts: schema.business.textsJson,
+      })
+      .from(schema.business)
+      .where(eq(schema.business.slug, slug.toLowerCase().trim()))
+      .limit(1);
+
+    // 404 y no un error: para el frontend "este subdominio no es de nadie" es una
+    // respuesta válida, y cae a la marca genérica sin romper la pantalla.
+    if (!biz) return reply.code(404).send({ data: null, error: 'Negocio no encontrado' });
+
+    const texts = (biz.texts ?? {}) as Record<string, string>;
+    return reply.send({
+      data: {
+        name: biz.name,
+        logoUrl: biz.logoUrl,
+        theme: biz.theme,
+        // Único texto que se expone: el rótulo de la app, que es parte de la marca.
+        appName: texts.app_name ?? biz.name,
+      },
+      error: null,
+    });
+  });
+
   // GET /business/me -> config white-label del negocio del token (tema, textos, rubro).
   app.get('/business/me', { preHandler: app.requireAuth }, async (req, reply) => {
     const [biz] = await db
@@ -46,10 +91,12 @@ export async function businessRoutes(app: FastifyInstance) {
     return reply.send({ data: biz, error: null });
   });
 
-  // PATCH /business (admin) -> configuración white-label. Auditado (incluye cambio de tema).
+  // PATCH /business -> configuración white-label. Auditado (incluye cambio de tema).
+  // Sólo la central: el nombre, el logo, el impuesto y el tope de descuento son del
+  // NEGOCIO, no de una sucursal, y los cambia quien responde por el negocio entero.
   app.patch(
     '/business',
-    { preHandler: [app.requireAuth, app.requireAdmin] },
+    { preHandler: [app.requireAuth, app.requireCentralAdmin] },
     async (req, reply) => {
       const parsed = updateBusinessSchema.safeParse(req.body);
       if (!parsed.success) {
