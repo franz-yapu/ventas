@@ -3,8 +3,9 @@ import { cancelSaleSchema, createSaleSchema, syncSalesSchema } from '@ventafacil
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { sinCostosLista } from '../lib/costos.js';
 import { persistSale } from '../lib/sales-service.js';
-import { canCancelSale, viewScope } from '../lib/scope.js';
+import { canCancelSale, filtroDeUbicacion, viewScope } from '../lib/scope.js';
 
 const historyQuery = z.object({
   from: z.string().datetime().optional(),
@@ -15,6 +16,37 @@ const historyQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+/**
+ * Traduce los motivos por los que `persistSale` rechaza una venta.
+ *
+ * Estaba escrito sólo dentro de `POST /sales`, así que el camino del sync —el que usa el
+ * POS cuando vuelve la conexión— serializaba la excepción tal cual y devolvía cosas como
+ * `"Error: LOCATION_SCOPE"` al navegador: sin mensaje que enseñarle al cajero, y con el
+ * riesgo de filtrar nombres de constraint o de columna si el fallo venía de Postgres.
+ *
+ * Devuelve `null` cuando el error no es uno de los previstos: eso no se traduce, se deja
+ * estallar (o se registra), porque inventarle un mensaje bonito a un fallo desconocido es
+ * la forma de que nadie se entere de que existe.
+ */
+function errorDeVenta(e: unknown): { status: number; error: string; code?: string } | null {
+  const s = String(e);
+  if (s.includes('LOCATION_SCOPE')) {
+    return { status: 403, error: 'Sólo puedes vender en tu propia ubicación' };
+  }
+  const tope = /DISCOUNT_LIMIT:(\d+)/.exec(s);
+  if (tope) {
+    return {
+      status: 403,
+      error: `Como vendedor puedes descontar hasta el ${tope[1]}%. Pide a un administrador que lo autorice.`,
+      code: 'discount_limit',
+    };
+  }
+  if (s.includes('PRODUCT_SCOPE')) {
+    return { status: 400, error: 'Algún producto de la venta no es de este negocio' };
+  }
+  return null;
+}
 
 export async function saleRoutes(app: FastifyInstance) {
   // POST /sales — venta online (misma logica que usara el sync offline en Fase 2).
@@ -31,25 +63,10 @@ export async function saleRoutes(app: FastifyInstance) {
         persistSale(tx, { businessId, userId, locationId, isCentral, role }, parsed.data),
       );
     } catch (e) {
-      if (String(e).includes('LOCATION_SCOPE')) {
-        return reply
-          .code(403)
-          .send({ data: null, error: 'Sólo puedes vender en tu propia ubicación' });
-      }
-      const tope = /DISCOUNT_LIMIT:(\d+)/.exec(String(e));
-      if (tope) {
-        return reply.code(403).send({
-          data: null,
-          error: `Como vendedor puedes descontar hasta el ${tope[1]}%. Pide a un administrador que lo autorice.`,
-          code: 'discount_limit',
-        });
-      }
-      if (String(e).includes('PRODUCT_SCOPE')) {
-        return reply
-          .code(400)
-          .send({ data: null, error: 'Algún producto de la venta no es de este negocio' });
-      }
-      throw e;
+      const conocido = errorDeVenta(e);
+      if (!conocido) throw e;
+      const { status, ...cuerpo } = conocido;
+      return reply.code(status).send({ data: null, ...cuerpo });
     }
 
     if (!result.duplicated) {
@@ -93,7 +110,15 @@ export async function saleRoutes(app: FastifyInstance) {
         });
       } catch (e) {
         req.log.error(e, 'error sincronizando venta');
-        results.push({ id: sale.id, status: 'error', error: String(e) });
+        const conocido = errorDeVenta(e);
+        results.push({
+          id: sale.id,
+          status: 'error',
+          // Lo inesperado va al log del servidor, no al navegador: ahí es donde puede
+          // mirarlo quien sabe qué hacer con ello.
+          error: conocido?.error ?? 'No se pudo sincronizar esta venta',
+          ...(conocido?.code ? { code: conocido.code } : {}),
+        });
       }
     }
     return reply.send({ data: { results }, error: null });
@@ -171,8 +196,7 @@ export async function saleRoutes(app: FastifyInstance) {
   app.get('/sales/:id', { preHandler: app.requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const businessId = req.authUser!.businessId;
-    // Alcance: la sucursal sólo puede leer el detalle de ventas de su ubicación.
-    const scope = viewScope(req.authUser!);
+    // Alcance: la sucursal sólo puede leer el detalle de su ubicación.
 
     const detalle = await withTenant(businessId, async (tx) => {
       const [sale] = await tx
@@ -197,13 +221,27 @@ export async function saleRoutes(app: FastifyInstance) {
           and(
             eq(schema.sale.id, id),
             eq(schema.sale.businessId, businessId),
-            scope !== undefined ? eq(schema.sale.locationId, scope) : undefined,
+            filtroDeUbicacion(req.authUser!, schema.sale.locationId),
           ),
         )
         .limit(1);
       if (!sale) return null;
-      const items = await tx.select().from(schema.saleItem).where(eq(schema.saleItem.saleId, id));
-      return { ...sale, items };
+      // Columnas explícitas, no `select()`: con el asterisco viajaba `unitCostSnapshot`,
+      // y el recibo de una venta lo abre cualquiera. Un vendedor recorriendo su propio
+      // historial reconstruía la lista de costos entera del catálogo.
+      const items = await tx
+        .select({
+          id: schema.saleItem.id,
+          productId: schema.saleItem.productId,
+          productNameSnapshot: schema.saleItem.productNameSnapshot,
+          unitPriceSnapshot: schema.saleItem.unitPriceSnapshot,
+          unitCostSnapshot: schema.saleItem.unitCostSnapshot,
+          quantity: schema.saleItem.quantity,
+          lineTotal: schema.saleItem.lineTotal,
+        })
+        .from(schema.saleItem)
+        .where(eq(schema.saleItem.saleId, id));
+      return { ...sale, items: sinCostosLista(items, req.authUser!) };
     });
 
     if (!detalle) return reply.code(404).send({ data: null, error: 'Venta no encontrada' });

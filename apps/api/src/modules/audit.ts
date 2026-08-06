@@ -2,7 +2,7 @@ import { schema, withTenant } from '@ventafacil/db';
 import { and, desc, eq, gte, ilike, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
-import { viewScope } from '../lib/scope.js';
+import { filtroDeUbicacion } from '../lib/scope.js';
 
 const listQuery = z.object({
   action: z.string().optional(),
@@ -30,8 +30,8 @@ export async function auditRoutes(app: FastifyInstance) {
 
     const filters = [eq(schema.auditLog.businessId, businessId)];
     // Alcance: un admin de sucursal sólo ve la actividad de su ubicación; la central, toda.
-    const scope = viewScope(req.authUser!);
-    if (scope !== undefined) filters.push(eq(schema.auditLog.locationId, scope));
+    const alcance = filtroDeUbicacion(req.authUser!, schema.auditLog.locationId);
+    if (alcance) filters.push(alcance);
     if (q.action) filters.push(eq(schema.auditLog.action, q.action));
     if (q.entity) filters.push(eq(schema.auditLog.entity, q.entity));
     if (q.userId) filters.push(eq(schema.auditLog.userId, q.userId));

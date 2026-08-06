@@ -2,7 +2,7 @@ import { schema, withTenant } from '@ventafacil/db';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
-import { canAdjustInventory, viewScope } from '../lib/scope.js';
+import { canAdjustInventory, filtroDeUbicacion } from '../lib/scope.js';
 
 export async function inventoryRoutes(app: FastifyInstance) {
   // GET /inventory — stock por producto y ubicación (alcance por ubicación visible).
@@ -13,8 +13,9 @@ export async function inventoryRoutes(app: FastifyInstance) {
     const businessId = user.businessId;
 
     const filters = [eq(schema.inventory.businessId, businessId)];
-    const scope = viewScope(user);
-    if (scope !== undefined) filters.push(eq(schema.inventory.locationId, scope));
+    // La sucursal queda fijada a la suya; la central sí puede elegir una por parámetro.
+    const alcance = filtroDeUbicacion(user, schema.inventory.locationId);
+    if (alcance) filters.push(alcance);
     else if (q.data.locationId) filters.push(eq(schema.inventory.locationId, q.data.locationId));
 
     const rows = await withTenant(businessId, (tx) =>

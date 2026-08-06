@@ -4,8 +4,7 @@ import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { computeProjection, type TrendPoint } from '../lib/projection.js';
 import { viewScope } from '../lib/scope.js';
-
-const TZ = 'America/La_Paz';
+import { TZ } from '../lib/zona.js';
 
 /** Resta días a una fecha 'YYYY-MM-DD' y devuelve otra igual. Sin husos de por medio. */
 function restarDias(fecha: string, dias: number): string {

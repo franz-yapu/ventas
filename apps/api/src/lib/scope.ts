@@ -1,3 +1,5 @@
+import { eq, type SQL } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { AuthUser } from '../types.js';
 
 /**
@@ -25,6 +27,21 @@ export const NINGUNA_UBICACION = '00000000-0000-0000-0000-000000000000';
 export function viewScope(user: AuthUser): string | undefined {
   if (user.role === 'admin' && user.isCentral) return undefined; // ve todo
   return user.locationId ?? NINGUNA_UBICACION;
+}
+
+/**
+ * El filtro de alcance ya montado sobre una columna de ubicación.
+ *
+ * Es `viewScope` más el `eq` que venía detrás. La cuenta no es difícil —por eso estaba
+ * copiada literal en siete módulos—, y precisamente por eso se olvidaba: las tres fugas de
+ * costo que hubo que cerrar eran tres sitios donde alguien no repitió el patrón. Un
+ * `undefined` significa lo mismo que en Drizzle: no filtres.
+ *
+ * Sirve tanto dentro de un `and(...)` como empujado a una lista de filtros.
+ */
+export function filtroDeUbicacion(user: AuthUser, columna: PgColumn): SQL | undefined {
+  const scope = viewScope(user);
+  return scope === undefined ? undefined : eq(columna, scope);
 }
 
 /**

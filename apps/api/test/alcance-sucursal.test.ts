@@ -1,5 +1,6 @@
 import { db, schema } from '@ventafacil/db';
 import argon2 from 'argon2';
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { clearAccessCache } from '../src/lib/subscription.js';
@@ -286,23 +287,109 @@ describe('el encargado sólo administra a la gente de su sucursal', () => {
   });
 
   it('la central sí puede mover gente entre sucursales', async () => {
+    // Se mueve a `vendedor.nuevo` —creado por el test de más arriba y que no usa nadie—
+    // y no a `vendedor.central`, como se hacía antes. Mover a alguien ahora le cierra la
+    // sesión, así que hacerlo sobre un usuario del fixture dejaba sin token a media suite.
     const todos = await app.inject({
       method: 'GET',
       url: '/api/v1/users',
       headers: auth(t.adminToken),
     });
     const vendedor = (todos.json().data as Array<{ id: string; username: string }>).find(
-      (u) => u.username === 'vendedor.central',
+      (u) => u.username === 'vendedor.nuevo',
     )!;
 
     const res = await app.inject({
       method: 'PATCH',
       url: `/api/v1/users/${vendedor.id}`,
       headers: auth(t.adminToken),
-      payload: { locationId: norteId },
+      payload: { locationId: t.locationId },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.locationId).toBe(norteId);
+    expect(res.json().data.locationId).toBe(t.locationId);
+  });
+
+  /**
+   * Y el cambio tiene que surtir efecto YA, no cuando caduque el refresco.
+   *
+   * `/auth/refresh` copia el rol, la ubicación y `isCentral` del propio token de refresco
+   * sin releer la base, y ese token vive 30 días: bajar a un admin a vendedor no le quitaba
+   * nada durante un mes. El test se hace sobre un usuario de usar y tirar para no dejar sin
+   * sesión al resto del archivo.
+   */
+  it('bajarle el rango a alguien le cierra la sesión en el momento', async () => {
+    const alta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(t.adminToken),
+      payload: {
+        name: 'Admin Efímero',
+        username: 'admin.efimero',
+        password: 'secreto123',
+        role: 'admin',
+        locationId: t.locationId,
+      },
+    });
+    expect(alta.statusCode).toBe(201);
+    const suToken = await entrar('admin.efimero');
+
+    // Con su token todavía en la mano, funciona.
+    const antes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users',
+      headers: auth(suToken),
+    });
+    expect(antes.statusCode).toBe(200);
+
+    const baja = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${alta.json().data.id}`,
+      headers: auth(t.adminToken),
+      payload: { role: 'seller' },
+    });
+    expect(baja.statusCode).toBe(200);
+
+    const despues = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users',
+      headers: auth(suToken),
+    });
+    expect(despues.statusCode).toBe(401);
+  });
+
+  /**
+   * La ubicación tiene que ser DE ESTE NEGOCIO.
+   *
+   * `puedeAdministrarA` comparaba ubicaciones sin mirar de quién son, y para la central
+   * devolvía `true` sin más: mandando el `locationId` de otro negocio se creaba un usuario
+   * con el `business_id` de uno y la ubicación de otro, que al entrar recibía un token con
+   * `isCentral: true` heredado de una sucursal ajena.
+   */
+  it('no se puede crear un usuario en la sucursal de otro negocio', async () => {
+    const otro = await createTenant(app, 'negocio-ajeno');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(t.adminToken),
+      payload: {
+        name: 'Cruzado',
+        username: 'cruzado',
+        password: 'secreto123',
+        role: 'seller',
+        locationId: otro.locationId,
+      },
+    });
+    expect(res.statusCode).toBe(400);
+
+    // Ni moviendo a uno que ya existe.
+    const mover = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${t.adminId}`,
+      headers: auth(t.adminToken),
+      payload: { locationId: otro.locationId },
+    });
+    expect(mover.statusCode).toBe(400);
   });
 });
 
@@ -422,19 +509,6 @@ describe('ver todas las sucursales es cosa de administrar, no de estar en la cen
 });
 
 describe('la caja se abre donde está el dinero', () => {
-  it('un vendedor de la central no puede operar la caja de otra sucursal', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: `/api/v1/cash/current?locationId=${norteId}`,
-      headers: auth(vendedorCentral),
-    });
-    expect(res.statusCode).toBe(200);
-    // Se le devuelve la suya, no la que pidió: la petición no falla, simplemente su
-    // alcance no se mueve.
-    const caja = res.json().data;
-    if (caja) expect(caja.locationId).not.toBe(norteId);
-  });
-
   it('abrir caja ignora la ubicación que venga en el cuerpo', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -444,6 +518,42 @@ describe('la caja se abre donde está el dinero', () => {
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().data.locationId).toBe(norteId);
+  });
+
+  it('un vendedor de la central que pide la de Norte NO recibe la de Norte', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cash/current?locationId=${norteId}`,
+      headers: auth(vendedorCentral),
+    });
+    // No falla: simplemente su alcance no se mueve. Como en la central no hay ninguna
+    // caja abierta, lo que recibe es "no hay", nunca la del otro local.
+    expect(res.statusCode).toBe(200);
+    const caja = res.json().data;
+    expect(caja?.register?.locationId ?? null).not.toBe(norteId);
+  });
+
+  it('el encargado de Norte sí recibe la suya', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/current',
+      headers: auth(adminNorte),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.register.locationId).toBe(norteId);
+  });
+
+  it('y el admin de la CENTRAL sí puede pedir la de Norte', async () => {
+    // El camino positivo que el cambio conserva a propósito —el dueño supervisa el
+    // negocio entero— y que no verificaba nadie: si `viewScope` empezara a devolver una
+    // ubicación también para la central, sólo fallarían los 403 y esto seguiría verde.
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cash/current?locationId=${norteId}`,
+      headers: auth(t.adminToken),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.register.locationId).toBe(norteId);
   });
 });
 
@@ -533,5 +643,312 @@ describe('mirar el trabajo de otro es supervisar', () => {
       headers: auth(vendedorCentral),
     });
     expect(mios.json().data.length).toBe(1);
+  });
+});
+
+/**
+ * Las otras tres puertas del costo.
+ *
+ * El arreglo original cerró la lista de productos y dio el asunto por terminado, pero el
+ * mismo dato salía por el detalle de una venta, por el historial de un producto y por la
+ * exportación del negocio. Ocho puertas cerradas y una abierta dan el mismo resultado que
+ * ninguna cerrada, así que cada una tiene aquí su test.
+ */
+describe('el costo tampoco sale por las otras puertas', () => {
+  it('el detalle de una venta: el admin ve el costo congelado, el vendedor no', async () => {
+    const delAdmin = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sales/${t.saleId}`,
+      headers: auth(t.adminToken),
+    });
+    expect(delAdmin.statusCode).toBe(200);
+    expect(delAdmin.json().data.items[0]).toHaveProperty('unitCostSnapshot', '50.00');
+
+    const delVendedor = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sales/${t.saleId}`,
+      headers: auth(vendedorCentral),
+    });
+    // Puede abrir el recibo —es una venta de su ubicación— pero sin el margen.
+    expect(delVendedor.statusCode).toBe(200);
+    for (const it of delVendedor.json().data.items) {
+      expect(it).not.toHaveProperty('unitCostSnapshot');
+    }
+    expect(delVendedor.body).not.toContain('"unitCostSnapshot"');
+    expect(delVendedor.body).not.toContain('50.00');
+  });
+
+  it('el historial de un producto: el costo viaja dentro del `after` de la auditoría', async () => {
+    // Una edición deja en `audit_log` las dos versiones ENTERAS de la fila, costo incluido.
+    const editar = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/products/${t.productId}`,
+      headers: auth(t.adminToken),
+      payload: { name: 'Producto secreto de dos-sucursales', price: '110.00' },
+    });
+    expect(editar.statusCode).toBe(200);
+
+    const delAdmin = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${t.productId}/history`,
+      headers: auth(t.adminToken),
+    });
+    expect(delAdmin.statusCode).toBe(200);
+    // Se comprueba que la fuga EXISTE para el admin: si no, el test del vendedor
+    // pasaría por no haber nada que esconder y no probaría nada.
+    expect(delAdmin.body).toContain('"cost"');
+
+    const delVendedor = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${t.productId}/history`,
+      headers: auth(vendedorCentral),
+    });
+    expect(delVendedor.statusCode).toBe(200);
+    expect(delVendedor.body).not.toContain('"cost"');
+    expect(delVendedor.body).not.toContain('"costWholesale"');
+    for (const e of delVendedor.json().data) {
+      if (e.before) expect(e.before).not.toHaveProperty('cost');
+      if (e.after) expect(e.after).not.toHaveProperty('cost');
+    }
+  });
+
+  it('la exportación del negocio es de la central, no del encargado de sucursal', async () => {
+    // Con `requireAdmin` a secas, `admin.norte` se descargaba en un JSON las ventas de la
+    // central, sus usuarios y los productos con costo: la exportación anulaba de un golpe
+    // todos los filtros de alcance que este archivo comprueba uno por uno.
+    const suSucursal = await app.inject({
+      method: 'GET',
+      url: '/api/v1/business/export',
+      headers: auth(adminNorte),
+    });
+    expect(suSucursal.statusCode).toBe(403);
+
+    const central = await app.inject({
+      method: 'GET',
+      url: '/api/v1/business/export',
+      headers: auth(t.adminToken),
+    });
+    expect(central.statusCode).toBe(200);
+
+    const vendedor = await app.inject({
+      method: 'GET',
+      url: '/api/v1/business/export',
+      headers: auth(vendedorCentral),
+    });
+    expect(vendedor.statusCode).toBe(403);
+  });
+});
+
+/**
+ * El reverso del mismo cambio: esconderle el costo al vendedor no puede dejar sin costo a
+ * la venta.
+ *
+ * El POS arma la línea con lo que tiene en su catálogo. Como al vendedor ya no le llega el
+ * costo, su venta llegaba sin él y se guardaba en NULL; los reportes cuentan
+ * `COALESCE(costo, 0)`, así que cada venta suya declaraba como ganancia el precio entero.
+ * No fallaba nada: sólo salía mal el número con el que el dueño decide. Y no se arregla
+ * después, porque `unit_cost_snapshot` es histórico.
+ */
+describe('el costo de la venta lo pone el servidor', () => {
+  /** La línea tal como la manda el POS de un vendedor: sin costo, porque no lo tiene. */
+  function venta(extra: Record<string, unknown> = {}) {
+    return {
+      id: crypto.randomUUID(),
+      locationId: t.locationId,
+      status: 'completed' as const,
+      subtotal: '110.00',
+      discount: '0',
+      total: '110.00',
+      paymentMethod: 'cash' as const,
+      clientCreatedAt: new Date().toISOString(),
+      items: [
+        {
+          productId: t.productId,
+          productNameSnapshot: 'Producto secreto de dos-sucursales',
+          unitPriceSnapshot: '110.00',
+          quantity: 1,
+          lineTotal: '110.00',
+          ...extra,
+        },
+      ],
+    };
+  }
+
+  async function costoGuardado(saleId: string) {
+    const filas = await db
+      .select({ costo: schema.saleItem.unitCostSnapshot })
+      .from(schema.saleItem)
+      .where(eq(schema.saleItem.saleId, saleId));
+    return filas[0]?.costo ?? null;
+  }
+
+  it('la venta de un vendedor guarda el costo del producto, no NULL', async () => {
+    const payload = venta();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(vendedorCentral),
+      payload,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(await costoGuardado(payload.id)).toBe('50.00');
+  });
+
+  it('y no se cree el costo que le mande un vendedor: no tiene de dónde sacarlo', async () => {
+    const payload = venta({ unitCostSnapshot: '1.00' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(vendedorCentral),
+      payload,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(await costoGuardado(payload.id)).toBe('50.00');
+  });
+
+  it('al admin sí se le respeta el suyo: su copia offline es del momento de la venta', async () => {
+    const payload = venta({ unitCostSnapshot: '42.00' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(t.adminToken),
+      payload,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(await costoGuardado(payload.id)).toBe('42.00');
+  });
+});
+
+/**
+ * Los turnos son de quien los trabaja, no sólo de quien los abrió.
+ *
+ * El cajón es de la UBICACIÓN y los turnos se relevan: si Ana abre y Beto cierra, es Beto
+ * quien cuenta los billetes y quien firma el descuadre. Filtrando sólo por `user_id` —quien
+ * abrió— ese turno no le aparecía a Beto ni podía abrir su detalle: se le pedía responder
+ * por algo que no podía ni mirar.
+ */
+describe('el turno también es de quien lo cierra', () => {
+  it('el vendedor que releva y cierra ve ese turno en su historial', async () => {
+    // En Norte hay una caja abierta por `adminNorte` (la abrió un test de más arriba), y
+    // `vendedorNorte` no ha abierto ninguna: su historial está vacío.
+    const antes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/registers',
+      headers: auth(vendedorNorte),
+    });
+    expect(antes.json().data).toHaveLength(0);
+
+    // Llega el relevo y cierra el turno que abrió otra persona.
+    const cierre = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cash/close',
+      headers: auth(vendedorNorte),
+      payload: { countedAmount: '100.00' },
+    });
+    expect(cierre.statusCode).toBe(200);
+
+    const despues = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/registers',
+      headers: auth(vendedorNorte),
+    });
+    expect(despues.statusCode).toBe(200);
+    const turnos = despues.json().data as Array<{ id: string }>;
+    expect(turnos).toHaveLength(1);
+
+    // Y puede abrir su detalle, que es donde está el descuadre que firmó.
+    const detalle = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cash/registers/${turnos[0]!.id}`,
+      headers: auth(vendedorNorte),
+    });
+    expect(detalle.statusCode).toBe(200);
+  });
+
+  it('pero el de al lado sigue sin verlo', async () => {
+    // `vendedorCentral` no abrió ni cerró ese turno: para él no existe.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/registers',
+      headers: auth(vendedorCentral),
+    });
+    const suyos = res.json().data as Array<{ locationId: string }>;
+    expect(suyos.every((c) => c.locationId !== norteId)).toBe(true);
+  });
+});
+
+/**
+ * La pantalla de login es pública y pide la marca del negocio por el subdominio.
+ *
+ * Lo que sale por ahí lo puede leer cualquiera sin estar autenticado, así que el endpoint
+ * devuelve marca y nada más. El comentario del código lo prometía; no había nada que lo
+ * comprobara.
+ */
+describe('el endpoint público de marca sólo da marca', () => {
+  it('con un slug que no existe, 404 y sin pistas', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/public/business/no-existe-jamas' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('con uno válido, nombre y tema — pero nada del interior del negocio', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/v1/public/business/${t.slug}` });
+    expect(res.statusCode).toBe(200);
+    const d = res.json().data;
+    expect(d.name).toBeTruthy();
+    for (const filtracion of [
+      'currency',
+      'taxRate',
+      'maxSellerDiscountPct',
+      'textsJson',
+      'attributeSchema',
+    ]) {
+      expect(d, filtracion).not.toHaveProperty(filtracion);
+    }
+  });
+});
+
+/**
+ * El sync offline tiene que responder como responde la venta online.
+ *
+ * Serializaba la excepción tal cual —`"Error: LOCATION_SCOPE"`—, así que el POS no tenía
+ * mensaje que enseñar y se filtraban nombres internos al navegador.
+ */
+describe('el sync traduce sus errores', () => {
+  it('una venta en la ubicación de otro vuelve con un motivo legible', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales/sync',
+      headers: auth(vendedorCentral),
+      payload: {
+        sales: [
+          {
+            id: crypto.randomUUID(),
+            locationId: norteId,
+            status: 'completed',
+            subtotal: '100.00',
+            discount: '0',
+            total: '100.00',
+            paymentMethod: 'cash',
+            clientCreatedAt: new Date().toISOString(),
+            items: [
+              {
+                productId: t.productId,
+                productNameSnapshot: 'Producto',
+                unitPriceSnapshot: '100.00',
+                quantity: 1,
+                lineTotal: '100.00',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const [r] = res.json().data.results as Array<{ status: string; error: string }>;
+    expect(r!.status).toBe('error');
+    expect(r!.error).toBe('Sólo puedes vender en tu propia ubicación');
+    // Y nada de tripas del servidor.
+    expect(res.body).not.toContain('LOCATION_SCOPE');
+    expect(res.body).not.toContain('Error:');
   });
 });

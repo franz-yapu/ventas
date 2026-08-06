@@ -1,9 +1,10 @@
 import { schema, withTenant, type TenantTx } from '@ventafacil/db';
 import { cashMovementSchema, closeCashSchema, openCashSchema } from '@ventafacil/shared';
-import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { viewScope } from '../lib/scope.js';
+import { filtroDeUbicacion, viewScope } from '../lib/scope.js';
+import { TZ } from '../lib/zona.js';
 import type { AuthUser } from '../types.js';
 
 /**
@@ -401,7 +402,15 @@ export async function cashRoutes(app: FastifyInstance) {
      * supervisar, y supervisar es del administrador. Los suyos sí los ve: "¿cómo cerré
      * ayer?" es parte de su trabajo.
      */
-    const soloLosMios = user.role !== 'admin' ? eq(schema.cashRegister.userId, user.sub) : undefined;
+    const soloLosMios =
+      user.role !== 'admin'
+        ? // Suyo es el turno que abrió O el que cerró. El cajón es de la ubicación, no de
+          // una persona: si Ana abre y Beto releva, es Beto quien cuenta los billetes y
+          // quien firma el descuadre. Filtrando sólo por quien abrió, ese turno no le
+          // aparecía a Beto ni podía revisarlo — se le pedía responder por algo que no
+          // podía ni mirar.
+          or(eq(schema.cashRegister.userId, user.sub), eq(schema.cashRegister.closedBy, user.sub))
+        : undefined;
 
     const rows = await withTenant(user.businessId, (tx) => {
       const abridor = schema.appUser;
@@ -426,10 +435,14 @@ export async function cashRoutes(app: FastifyInstance) {
             eq(schema.cashRegister.businessId, user.businessId),
             soloLosMios,
             effLocation ? eq(schema.cashRegister.locationId, effLocation) : undefined,
-            q.data.from ? gte(schema.cashRegister.openedAt, new Date(q.data.from)) : undefined,
+            // Las fechas se interpretan en la zona del NEGOCIO, no en UTC. Con `Z` fijo,
+            // "hasta hoy" cortaba a las 19:59 locales y se comía los turnos de la noche.
+            q.data.from
+              ? sql`timezone(${TZ}, ${schema.cashRegister.openedAt}) >= ${q.data.from}::date`
+              : undefined,
             // `to` es un día inclusive: se compara con el día siguiente a las 00:00.
             q.data.to
-              ? lt(schema.cashRegister.openedAt, new Date(`${q.data.to}T23:59:59.999Z`))
+              ? sql`timezone(${TZ}, ${schema.cashRegister.openedAt}) < (${q.data.to}::date + interval '1 day')`
               : undefined,
           ),
         )
@@ -453,7 +466,6 @@ export async function cashRoutes(app: FastifyInstance) {
   app.get('/cash/registers/:id', { preHandler: app.requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const user = req.authUser!;
-    const scope = viewScope(user);
 
     const data = await withTenant(user.businessId, async (tx) => {
       const [caja] = await tx
@@ -463,10 +475,16 @@ export async function cashRoutes(app: FastifyInstance) {
           and(
             eq(schema.cashRegister.id, id),
             eq(schema.cashRegister.businessId, user.businessId),
-            scope !== undefined ? eq(schema.cashRegister.locationId, scope) : undefined,
-            // Mismo criterio que el listado: el vendedor abre el detalle de SUS turnos.
-            // Sin esto, bastaba con tener el id de un turno ajeno para leer su descuadre.
-            user.role !== 'admin' ? eq(schema.cashRegister.userId, user.sub) : undefined,
+            filtroDeUbicacion(user, schema.cashRegister.locationId),
+            // Mismo criterio que el listado: el vendedor abre el detalle de los turnos que
+            // abrió o cerró él. Sin esto, bastaba con tener el id de un turno ajeno para
+            // leer su descuadre.
+            user.role !== 'admin'
+              ? or(
+                  eq(schema.cashRegister.userId, user.sub),
+                  eq(schema.cashRegister.closedBy, user.sub),
+                )
+              : undefined,
           ),
         )
         .limit(1);

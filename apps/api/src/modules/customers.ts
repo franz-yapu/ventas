@@ -47,7 +47,22 @@ export async function customerRoutes(app: FastifyInstance) {
     return reply.code(201).send({ data: row, error: null });
   });
 
-  // GET /customers/:id — detalle: datos + saldo + ventas a crédito + abonos.
+  /**
+   * GET /customers/:id — detalle: datos + saldo + ventas a crédito + abonos.
+   *
+   * EXCEPCIÓN DELIBERADA al alcance por sucursal: aquí no se filtra por ubicación, y un
+   * vendedor ve las ventas a crédito del cliente aunque sean de otro local.
+   *
+   * No es un olvido de los arreglos de alcance. Lo que se fía se le fía AL NEGOCIO, no a
+   * una sucursal: si cada local viera sólo su parte, un cliente que debe Bs. 3.000
+   * repartidos entre tres locales parecería deber Bs. 1.000 en cada uno, y en los tres le
+   * seguirían fiando. Y quien cobra un abono necesita ver qué recibos quedan abiertos para
+   * saber contra cuál lo aplica.
+   *
+   * El límite se mantiene donde importa: quien no es administrador no ve el costo de nada
+   * (`sinCostos`), ni el historial de ventas de otra sucursal, ni sus arqueos. Lo que se ve
+   * aquí es una deuda del cliente, no el trabajo de un compañero.
+   */
   app.get('/customers/:id', { preHandler: app.requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const businessId = req.authUser!.businessId;
