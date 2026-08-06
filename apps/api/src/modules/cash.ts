@@ -110,9 +110,15 @@ async function calcularDesglose(
   };
 }
 
-/** Ubicación sobre la que opera este usuario. La central puede indicar otra. */
+/**
+ * Ubicación sobre la que opera este usuario.
+ *
+ * Mirar la caja de otra sucursal es supervisar, así que sólo un ADMIN de la central
+ * puede pedir otra. Antes bastaba con `isCentral` sin mirar el rol, y un vendedor
+ * asignado a la sucursal central podía operar sobre la caja de otro local.
+ */
 function ubicacionDeTrabajo(user: AuthUser, pedida?: string): string | null {
-  if (user.isCentral && pedida) return pedida;
+  if (pedida && user.isCentral && user.role === 'admin') return pedida;
   return user.locationId;
 }
 
@@ -169,7 +175,10 @@ export async function cashRoutes(app: FastifyInstance) {
         .send({ data: null, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' });
     }
     const user = req.authUser!;
-    const locationId = ubicacionDeTrabajo(user, parsed.data.locationId);
+    // A propósito NO se acepta la ubicación del cuerpo: una caja se abre donde está la
+    // persona que tiene el dinero delante, igual que una venta se registra donde ocurre.
+    // Abrir la caja de otro local desde aquí deja un turno abierto que nadie cuadra.
+    const locationId = ubicacionDeTrabajo(user, undefined);
     if (!locationId) {
       return reply.code(400).send({ data: null, error: 'Tu usuario no tiene ubicación asignada' });
     }

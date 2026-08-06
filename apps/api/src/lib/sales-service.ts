@@ -41,9 +41,19 @@ export async function persistSale(
   },
   input: CreateSaleInput,
 ): Promise<PersistSaleResult> {
-  // Alcance de escritura: un usuario de sucursal sólo puede vender en SU ubicación.
-  // La central puede registrar ventas en cualquier ubicación del negocio.
-  if (!ctx.isCentral && input.locationId !== ctx.locationId) {
+  /**
+   * Una venta se registra DONDE OCURRE. Sin excepción, tampoco para la central.
+   *
+   * Antes la central podía grabar una venta en cualquier sucursal, y eso rompía el
+   * arqueo del otro local: si desde la central se registra una venta en efectivo de
+   * Bs. 500 en Norte, el sistema espera esos Bs. 500 en la caja de Norte, donde nadie
+   * los recibió. Al cerrar el turno, al cajero de Norte le falta dinero que nunca tuvo
+   * — un faltante que no cometió y que no puede explicar.
+   *
+   * El dinero está donde está la persona que lo cobró, y ahí es donde tiene que constar
+   * la venta.
+   */
+  if (input.locationId !== ctx.locationId) {
     throw new Error('LOCATION_SCOPE');
   }
 

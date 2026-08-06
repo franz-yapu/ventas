@@ -87,8 +87,18 @@ export function PosPage() {
     enabled: navigator.onLine,
   });
 
-  const [locationId, setLocationId] = useState('');
-  const activeLocation = locationId || user?.locationId || locations[0]?.id || '';
+  /**
+   * Dónde se registra la venta: siempre la ubicación del usuario.
+   *
+   * Antes el carrito traía un desplegable para que un admin eligiera otra sucursal. El
+   * API ya no lo acepta, y con razón: una venta cobrada aquí que se anota en Norte deja
+   * a la caja de Norte esperando un dinero que nadie le entregó, y al cerrar el turno el
+   * cajero de allá arrastra un faltante que no cometió.
+   *
+   * Se conserva la caída a `locations[0]` para el caso raro del usuario sin ubicación:
+   * el API lo rechaza igual, pero así la pantalla no se queda sin nada que enviar.
+   */
+  const activeLocation = user?.locationId || locations[0]?.id || '';
 
   const subtotal = useMemo(
     () => cart.reduce((sum, l) => sum + Number(l.product.price) * l.quantity, 0),
@@ -327,16 +337,6 @@ export function PosPage() {
           </button>
         </div>
         <CardContent className="flex max-h-[70vh] flex-col gap-3 pt-4">
-          {user?.role === 'admin' && locations.length > 0 && (
-            <Select value={activeLocation} onChange={(e) => setLocationId(e.target.value)}>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </Select>
-          )}
-
           <div className="flex-1 overflow-y-auto">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-12 text-center text-muted">

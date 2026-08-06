@@ -388,14 +388,21 @@ describe('historial y aislamiento', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('abrir caja en la ubicación de OTRO negocio se rechaza', async () => {
+  it('la ubicación que venga en el cuerpo se IGNORA: la caja se abre donde está uno', async () => {
+    // Antes esto se rechazaba con un 400 comprobando que la ubicación fuera del negocio.
+    // Ahora el cuerpo ni se mira: una caja se abre donde está la persona que tiene el
+    // dinero delante, igual que una venta se registra donde ocurre. La garantía es más
+    // fuerte que antes — no depende de acordarse de validar — y de paso cierra el caso
+    // de abrirle un turno a otra sucursal del propio negocio, que sí se podía.
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/cash/open',
       headers: auth(t.adminToken),
       payload: { openingAmount: '10.00', locationId: otro.locationId },
     });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data.locationId).toBe(t.locationId);
+    // Lo que de verdad importaba: el otro negocio sigue sin ninguna caja abierta.
     expect(await actual(otro.adminToken)).toBeNull();
   });
 

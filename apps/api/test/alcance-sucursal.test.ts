@@ -305,3 +305,144 @@ describe('el encargado sólo administra a la gente de su sucursal', () => {
     expect(res.json().data.locationId).toBe(norteId);
   });
 });
+
+describe('una venta se registra donde ocurre', () => {
+  /** Cuerpo válido de venta; sólo cambia la ubicación en cada caso. */
+  function venta(locationId: string, productId = t.productId) {
+    return {
+      id: crypto.randomUUID(),
+      locationId,
+      subtotal: '100.00',
+      discount: '0',
+      total: '100.00',
+      paymentMethod: 'cash',
+      status: 'completed',
+      clientCreatedAt: new Date().toISOString(),
+      items: [
+        {
+          productId,
+          productNameSnapshot: 'Producto',
+          unitPriceSnapshot: '50.00',
+          quantity: 2,
+          lineTotal: '100.00',
+        },
+      ],
+    };
+  }
+
+  it('la central NO puede grabar una venta en otra sucursal', async () => {
+    // El daño concreto: la caja de Norte quedaría esperando un dinero que nadie le
+    // entregó, y al cerrar el turno el cajero de allá arrastra un faltante que no
+    // cometió.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(t.adminToken),
+      payload: venta(norteId),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('sí puede vender en la suya', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(t.adminToken),
+      payload: venta(t.locationId),
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('un vendedor de sucursal tampoco puede vender en otra', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(vendedorNorte),
+      payload: venta(t.locationId),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe('ver todas las sucursales es cosa de administrar, no de estar en la central', () => {
+  it('el vendedor de la central NO ve las ventas de las otras sucursales', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/sales',
+      headers: auth(vendedorCentral),
+    });
+    expect(res.statusCode).toBe(200);
+    const ventas = res.json().data.items as Array<{ locationId: string }>;
+    expect(ventas.every((v) => v.locationId !== norteId)).toBe(true);
+  });
+
+  it('tampoco los productos ni el stock de las otras', async () => {
+    for (const url of ['/api/v1/products', '/api/v1/inventory']) {
+      const res = await app.inject({ method: 'GET', url, headers: auth(vendedorCentral) });
+      expect(res.statusCode, url).toBe(200);
+      const cuerpo = res.json().data;
+      const filas = (Array.isArray(cuerpo) ? cuerpo : cuerpo.items) as Array<{
+        locationId?: string;
+      }>;
+      expect(
+        filas.every((f) => !f.locationId || f.locationId !== norteId),
+        url,
+      ).toBe(true);
+    }
+  });
+
+  it('el admin de la central sí las ve todas', async () => {
+    // Se siembra stock en Norte: el helper sólo crea inventario en la central, así que
+    // sin esto la comprobación pasaría por falta de datos y no por el alcance.
+    await db.insert(schema.inventory).values({
+      businessId: t.businessId,
+      productId: t.productId,
+      locationId: norteId,
+      quantity: 7,
+      minStock: 1,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/inventory',
+      headers: auth(t.adminToken),
+    });
+    const filas = res.json().data as Array<{ locationId: string }>;
+    expect(filas.some((f) => f.locationId === norteId)).toBe(true);
+
+    // Y el vendedor de la central, con ese stock ya existiendo, sigue sin verlo.
+    const delVendedor = await app.inject({
+      method: 'GET',
+      url: '/api/v1/inventory',
+      headers: auth(vendedorCentral),
+    });
+    const suyas = delVendedor.json().data as Array<{ locationId: string }>;
+    expect(suyas.some((f) => f.locationId === norteId)).toBe(false);
+  });
+});
+
+describe('la caja se abre donde está el dinero', () => {
+  it('un vendedor de la central no puede operar la caja de otra sucursal', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cash/current?locationId=${norteId}`,
+      headers: auth(vendedorCentral),
+    });
+    expect(res.statusCode).toBe(200);
+    // Se le devuelve la suya, no la que pidió: la petición no falla, simplemente su
+    // alcance no se mueve.
+    const caja = res.json().data;
+    if (caja) expect(caja.locationId).not.toBe(norteId);
+  });
+
+  it('abrir caja ignora la ubicación que venga en el cuerpo', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cash/open',
+      headers: auth(adminNorte),
+      payload: { openingAmount: '100.00', locationId: t.locationId },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data.locationId).toBe(norteId);
+  });
+});

@@ -12,14 +12,18 @@ import type { AuthUser } from '../types.js';
 export const NINGUNA_UBICACION = '00000000-0000-0000-0000-000000000000';
 
 /**
- * Ubicación por la que se filtra la VISTA. `undefined` = ve todas (usuario de la central).
- * Un usuario de sucursal ve sólo su ubicación.
+ * Ubicación por la que se filtra la VISTA. `undefined` = ve todas las sucursales.
+ *
+ * Ver el negocio entero es cosa de ADMINISTRAR, no de estar en la central. Antes
+ * bastaba con `isCentral`, así que un vendedor asignado a la sucursal central veía el
+ * historial de ventas de todas las demás: podía auditar el turno de otro local desde su
+ * caja. Un vendedor vende donde está; no supervisa a nadie.
  *
  * Un usuario sin ubicación no debería existir (ver `users.ts`), pero si aparece uno
  * —creado antes de esa validación, o por CLI— ve una lista vacía y no un error.
  */
 export function viewScope(user: AuthUser): string | undefined {
-  if (user.isCentral) return undefined; // ve todo
+  if (user.role === 'admin' && user.isCentral) return undefined; // ve todo
   return user.locationId ?? NINGUNA_UBICACION;
 }
 
