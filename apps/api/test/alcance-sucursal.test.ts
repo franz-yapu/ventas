@@ -446,3 +446,92 @@ describe('la caja se abre donde está el dinero', () => {
     expect(res.json().data.locationId).toBe(norteId);
   });
 });
+
+describe('mirar el trabajo de otro es supervisar', () => {
+  it('la lectura Z es del administrador, no del vendedor', async () => {
+    const delVendedor = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/cash-z',
+      headers: auth(vendedorNorte),
+    });
+    expect(delVendedor.statusCode).toBe(403);
+
+    const delAdmin = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/cash-z',
+      headers: auth(t.adminToken),
+    });
+    expect(delAdmin.statusCode).toBe(200);
+  });
+
+  it('el panel tampoco: trae cuánto vendió cada vendedor', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/dashboard',
+      headers: auth(vendedorCentral),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('el vendedor ve SUS cierres de caja, no los de sus compañeros', async () => {
+    // adminNorte abrió y cerró un turno en Norte más arriba; vendedorNorte no.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/registers',
+      headers: auth(vendedorNorte),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toHaveLength(0);
+  });
+
+  it('el admin sí ve los turnos de su sucursal', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/registers',
+      headers: auth(adminNorte),
+    });
+    expect(res.json().data.length).toBeGreaterThan(0);
+  });
+
+  it('con el id de un turno ajeno en la mano, el vendedor tampoco lo abre', async () => {
+    const delAdmin = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/registers',
+      headers: auth(adminNorte),
+    });
+    const turnoAjeno = delAdmin.json().data[0].id;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cash/registers/${turnoAjeno}`,
+      headers: auth(vendedorNorte),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('su propia caja abierta la sigue viendo entera', async () => {
+    const abre = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cash/open',
+      headers: auth(vendedorCentral),
+      payload: { openingAmount: '50.00' },
+    });
+    expect(abre.statusCode).toBe(201);
+
+    const suya = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/current',
+      headers: auth(vendedorCentral),
+    });
+    expect(suya.statusCode).toBe(200);
+    expect(suya.json().data.register.openingAmount).toBe('50.00');
+
+    // Y su propio cierre aparece en su historial.
+    const mios = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cash/registers',
+      headers: auth(vendedorCentral),
+    });
+    expect(mios.json().data.length).toBe(1);
+  });
+});

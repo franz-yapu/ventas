@@ -393,6 +393,15 @@ export async function cashRoutes(app: FastifyInstance) {
     // La sucursal ve sólo la suya; la central puede filtrar por una o verlas todas.
     const scope = viewScope(user);
     const effLocation = scope !== undefined ? scope : q.data.locationId;
+    /**
+     * Un VENDEDOR ve sus propios cierres, no los de sus compañeros.
+     *
+     * Este historial trae el descuadre de cada turno: cuánto se esperaba y cuánto se
+     * contó. Saber que a la persona del otro turno le faltaron Bs. 80 el jueves es
+     * supervisar, y supervisar es del administrador. Los suyos sí los ve: "¿cómo cerré
+     * ayer?" es parte de su trabajo.
+     */
+    const soloLosMios = user.role !== 'admin' ? eq(schema.cashRegister.userId, user.sub) : undefined;
 
     const rows = await withTenant(user.businessId, (tx) => {
       const abridor = schema.appUser;
@@ -415,6 +424,7 @@ export async function cashRoutes(app: FastifyInstance) {
         .where(
           and(
             eq(schema.cashRegister.businessId, user.businessId),
+            soloLosMios,
             effLocation ? eq(schema.cashRegister.locationId, effLocation) : undefined,
             q.data.from ? gte(schema.cashRegister.openedAt, new Date(q.data.from)) : undefined,
             // `to` es un día inclusive: se compara con el día siguiente a las 00:00.
@@ -454,6 +464,9 @@ export async function cashRoutes(app: FastifyInstance) {
             eq(schema.cashRegister.id, id),
             eq(schema.cashRegister.businessId, user.businessId),
             scope !== undefined ? eq(schema.cashRegister.locationId, scope) : undefined,
+            // Mismo criterio que el listado: el vendedor abre el detalle de SUS turnos.
+            // Sin esto, bastaba con tener el id de un turno ajeno para leer su descuadre.
+            user.role !== 'admin' ? eq(schema.cashRegister.userId, user.sub) : undefined,
           ),
         )
         .limit(1);

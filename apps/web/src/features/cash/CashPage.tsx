@@ -178,7 +178,11 @@ export function CashPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-medium">Cierres anteriores</h2>
+          {/* El API devuelve los turnos del vendedor y los de la sucursal al admin, así
+              que el título dice cuál de las dos cosas se está mirando. */}
+          <h2 className="text-lg font-medium">
+            {user?.role === 'admin' ? 'Cierres anteriores' : 'Mis cierres anteriores'}
+          </h2>
         </CardHeader>
         <CardContent className="p-0">
           {!historial?.length && <div className="p-4 text-muted">Todavía no hay cierres.</div>}

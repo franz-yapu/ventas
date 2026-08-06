@@ -18,7 +18,13 @@ export async function analyticsRoutes(app: FastifyInstance) {
   // GET /reports/dashboard — datos de todos los widgets en una sola llamada (eficiente en KVM1).
   // El panel de análisis es de plan Pro en adelante. La lectura Z de más abajo NO se
   // limita: es el cierre de caja, parte del POS, y ningún plan puede quedarse sin él.
-  const soloConAnalitica = [app.requireAuth, app.requireFeature('reportes_avanzados')];
+  // Admin, además del plan: el panel trae cuánto vendió CADA vendedor y los ingresos
+  // del negocio. Que no saliera en el menú de un vendedor no cerraba nada.
+  const soloConAnalitica = [
+    app.requireAuth,
+    app.requireAdmin,
+    app.requireFeature('reportes_avanzados'),
+  ];
 
   app.get('/reports/dashboard', { preHandler: soloConAnalitica }, async (req, reply) => {
     const businessId = req.authUser!.businessId;
@@ -161,8 +167,17 @@ export async function analyticsRoutes(app: FastifyInstance) {
     });
   });
 
-  // GET /reports/cash-z — lectura Z: totales por método de pago por vendedor (día dado).
-  app.get('/reports/cash-z', { preHandler: app.requireAuth }, async (req, reply) => {
+  /**
+   * GET /reports/cash-z — lectura Z: totales por método de pago y POR VENDEDOR.
+   *
+   * Sólo admin. Es el papel con el que el dueño repasa el día de cada cajero; que un
+   * vendedor viera cuánto hizo el compañero del otro turno es supervisar, no vender. Su
+   * propio turno lo sigue teniendo entero en Caja.
+   *
+   * NO depende del plan, a diferencia del panel: es el cierre de caja, parte del POS, y
+   * ningún plan puede quedarse sin él.
+   */
+  app.get('/reports/cash-z', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
     const q = z
       .object({ date: z.string().optional(), locationId: z.string().uuid().optional() })
       .safeParse(req.query);
