@@ -19,9 +19,23 @@ export const moneyConSigno = z
   .regex(/^-?\d+(\.\d{1,2})?$/, 'Monto invalido (usa hasta 2 decimales)');
 
 // ── White-label / negocio ──────────────────────────────────────
+/**
+ * Color hexadecimal de verdad: #abc o #aabbcc.
+ *
+ * Era `z.string()` a secas, así que se guardaba cualquier cosa. Y no se queda en un color
+ * feo: una variable CSS inválida invalida también los `color-mix()` que la usan, de modo
+ * que un valor mal escrito se llevaba por delante los tintes de marca de toda la app
+ * —incluida la pantalla de login, que ve cualquiera— hasta que alguien volviera a
+ * escribirlo bien. `lib/color.ts` ya se defiende al LEER; esto es no escribir lo que no se
+ * entiende.
+ */
+const colorHex = z
+  .string()
+  .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Usa un color hexadecimal, como #2f68d8');
+
 export const themeSchema = z.object({
-  primary: z.string().default('#1e40af'),
-  secondary: z.string().default('#f59e0b'),
+  primary: colorHex.default('#1e40af'),
+  secondary: colorHex.default('#f59e0b'),
   radius: z.string().default('0.5rem'),
 });
 

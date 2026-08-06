@@ -106,6 +106,20 @@
       "when": 1785959626775,
       "tag": "0014_outgoing_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785959626776,
+      "tag": "0015_owner_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785959626777,
+      "tag": "0016_cash_register_por_persona",
+      "breakpoints": true
     }
   ]
 }

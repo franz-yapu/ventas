@@ -533,6 +533,11 @@ export const cashRegister = pgTable(
   (t) => [
     index('cash_register_business_idx').on(t.businessId),
     index('cash_register_location_idx').on(t.locationId, t.openedAt),
+    // El vendedor ve los turnos que abrió O que cerró, y ese filtro va en cada carga de
+    // su historial. Sin índice, a la larga es un recorrido de la tabla entera por
+    // pantalla.
+    index('cash_register_user_idx').on(t.userId),
+    index('cash_register_closed_by_idx').on(t.closedBy),
     // UNA sola caja abierta por ubicación. Es un cajón físico: dos turnos abiertos a la
     // vez sobre el mismo cajón harían que ninguno de los dos arqueos signifique nada.
     // Índice PARCIAL: sólo restringe las filas sin cerrar.
