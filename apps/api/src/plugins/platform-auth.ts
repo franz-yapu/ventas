@@ -1,4 +1,6 @@
 import fastifyJwt from '@fastify/jwt';
+import { db, schema } from '@ventafacil/db';
+import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { env } from '../env.js';
@@ -41,6 +43,26 @@ export const platformAuthPlugin = fp(async (app) => {
       // Cinturón además de los tirantes: la llave ya es distinta, pero el claim se
       // comprueba igual por si algún día ambos secretos se unificaran por error.
       if (payload.typ !== 'platform') throw new Error('no es un token de plataforma');
+
+      /**
+       * Y se comprueba contra la BASE que el operador siga existiendo y activo.
+       *
+       * Sólo lo hacían `/platform/me` y las rutas de administrar operadores, así que dar
+       * de baja a alguien no le quitaba nada durante las 8 horas que dura su token: seguía
+       * viendo la cartera de clientes, cambiándoles el plan y —lo peor— generando
+       * contraseñas temporales de cualquier negocio. Es decir, se construyó la puerta para
+       * CREAR operadores desde el panel sin construir la de revocarlos.
+       *
+       * Es una consulta por petición, y aquí sí se paga con gusto: el panel lo usan unas
+       * pocas personas, y lo que está al otro lado es la cartera entera de clientes.
+       */
+      const [operador] = await db
+        .select({ isActive: schema.platformAdmin.isActive })
+        .from(schema.platformAdmin)
+        .where(eq(schema.platformAdmin.id, payload.sub))
+        .limit(1);
+      if (!operador || !operador.isActive) throw new Error('operador dado de baja');
+
       req.platformUser = { sub: payload.sub, email: payload.email, name: payload.name };
     } catch {
       return reply.code(401).send({ data: null, error: 'No autorizado' });

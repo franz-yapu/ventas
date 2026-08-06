@@ -470,6 +470,81 @@ describe('operadores del panel', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  /**
+   * Suspender a un negocio no es dar soporte.
+   *
+   * El rescate de contraseña sigue abierto a cualquier operador, porque atender el
+   * teléfono lo exige. Cambiarle el plan a un cliente —o suspenderlo, que es cortarle la
+   * venta— es una decisión comercial, y quien responde por ella es el principal.
+   */
+  it('un operador normal no le cambia el plan a un cliente', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${a.businessId}/subscription`,
+      headers: auth(token2),
+      payload: { planCode: 'basico' },
+    });
+    expect(res.statusCode).toBe(403);
+
+    const delPrincipal = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${a.businessId}/subscription`,
+      headers: auth(token()),
+      payload: { planCode: 'basico' },
+    });
+    expect(delPrincipal.statusCode).toBe(200);
+  });
+
+  /**
+   * Y al que se da de baja se le cierra la puerta EN EL MOMENTO.
+   *
+   * `requirePlatform` sólo verificaba la firma, así que un operador dado de baja seguía
+   * ocho horas con la cartera de clientes en la mano: podía verlos, cambiarles el plan y
+   * generar contraseñas temporales de cualquier negocio. Se había construido la puerta
+   * para crear operadores desde el panel sin construir la de revocarlos.
+   *
+   * El test se deja el mundo como lo encontró: da de alta otra vez al operador y renueva
+   * su token, porque los casos siguientes cuentan con él.
+   */
+  it('al operador dado de baja se le cae el token vivo, no a las 8 horas', async () => {
+    const antes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/platform/tenants',
+      headers: auth(token2),
+    });
+    expect(antes.statusCode).toBe(200);
+
+    const baja = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/admins/${id2}`,
+      headers: auth(token()),
+      payload: { isActive: false },
+    });
+    expect(baja.statusCode).toBe(200);
+
+    // Con el MISMO token de antes: ya no vale para nada del panel.
+    for (const [method, url] of [
+      ['GET', '/api/v1/platform/tenants'],
+      ['GET', '/api/v1/platform/metrics'],
+      ['GET', '/api/v1/platform/audit'],
+      ['POST', `/api/v1/platform/tenants/${a.businessId}/users/${a.adminId}/password`],
+    ] as const) {
+      const res = await app.inject({ method, url, headers: auth(token2) });
+      expect(res.statusCode, url).toBe(401);
+    }
+
+    // Y de vuelta: el token viejo sigue muerto aunque se le reactive (se firmó antes),
+    // así que se pide uno nuevo para los casos que vienen detrás.
+    const alta = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/admins/${id2}`,
+      headers: auth(token()),
+      payload: { isActive: true },
+    });
+    expect(alta.statusCode).toBe(200);
+    token2 = (await entrar(EMAIL2, CLAVE2)).json().data.accessToken;
+  });
+
   it('no se puede repetir el correo de otro operador', async () => {
     const res = await app.inject({
       method: 'POST',

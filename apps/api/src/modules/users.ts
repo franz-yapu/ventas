@@ -24,6 +24,29 @@ function puedeAdministrarA(
   return !!locationId && locationId === admin.locationId;
 }
 
+/**
+ * ¿Esa ubicación es de ESTE negocio?
+ *
+ * `puedeAdministrarA` compara ubicaciones, pero nunca comprobó de quién son, y para un
+ * admin de la central devuelve `true` sin mirar: bastaba con mandar el `locationId` de
+ * OTRO negocio para que se aceptara. El usuario quedaba con el `business_id` de uno y la
+ * ubicación de otro, y al entrar recibía un token con `isCentral: true` heredado de una
+ * sucursal ajena.
+ *
+ * `products.ts` ya comprobaba la tenencia antes de guardar; aquí faltaba. Es la misma
+ * pregunta y merece la misma respuesta.
+ */
+async function esUbicacionDelNegocio(businessId: string, locationId: string): Promise<boolean> {
+  const [loc] = await withTenant(businessId, (tx) =>
+    tx
+      .select({ id: schema.location.id })
+      .from(schema.location)
+      .where(and(eq(schema.location.id, locationId), eq(schema.location.businessId, businessId)))
+      .limit(1),
+  );
+  return !!loc;
+}
+
 export async function userRoutes(app: FastifyInstance) {
   // Lista usuarios (sin exponer el hash de contraseña). La sucursal ve sólo los suyos.
   app.get('/users', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
@@ -76,6 +99,14 @@ export async function userRoutes(app: FastifyInstance) {
     }
 
     const businessId = req.authUser!.businessId;
+    if (
+      parsed.data.locationId &&
+      !(await esUbicacionDelNegocio(businessId, parsed.data.locationId))
+    ) {
+      return reply
+        .code(400)
+        .send({ data: null, error: 'Esa ubicación no es de este negocio' });
+    }
     if (!(await permiteCrear(businessId, 'users', reply))) return reply;
     const passwordHash = await argon2.hash(parsed.data.password);
     try {
@@ -157,6 +188,16 @@ export async function userRoutes(app: FastifyInstance) {
         });
       }
 
+      // Y que exista dentro de este negocio (ver `esUbicacionDelNegocio`).
+      if (
+        parsed.data.locationId &&
+        !(await esUbicacionDelNegocio(req.authUser!.businessId, parsed.data.locationId))
+      ) {
+        return reply
+          .code(400)
+          .send({ data: null, error: 'Esa ubicación no es de este negocio' });
+      }
+
       // Mismo motivo que al crear: dejar a un vendedor sin ubicación lo deja sin app.
       if (parsed.data.locationId === null) {
         const rolFinal = parsed.data.role ?? actual.role;
@@ -191,10 +232,24 @@ export async function userRoutes(app: FastifyInstance) {
       );
       if (!row) return reply.code(404).send({ data: null, error: 'Usuario no encontrado' });
 
-      // Dar de baja a alguien, o cambiarle la contraseña desde aquí, tiene que echarlo
-      // de donde esté. Antes seguía trabajando hasta que caducara su token, y renovando
-      // sesión durante 30 días.
-      if (parsed.data.isActive === false || parsed.data.password) {
+      /**
+       * Dar de baja a alguien, cambiarle la contraseña, BAJARLE EL RANGO o MOVERLO de
+       * sucursal tiene que echarlo de donde esté.
+       *
+       * Las dos primeras ya lo hacían; las dos últimas no, y ahí estaba el agujero:
+       * `/auth/refresh` copia el rol, la ubicación y `isCentral` del propio token de
+       * refresco sin releer la base, y ese token vive 30 días. Así que bajar a un admin a
+       * vendedor —o sacarlo de la central— no le quitaba nada: seguía renovando accesos de
+       * administrador durante un mes. Es la misma escalada que se cerró por la puerta del
+       * alcance, entrando por la puerta del tiempo.
+       *
+       * Se compara contra lo que era, no contra lo que se mandó: reenviar el mismo rol no
+       * es un cambio y no tiene por qué cerrarle la sesión a nadie.
+       */
+      const bajaDeRango = parsed.data.role !== undefined && parsed.data.role !== actual.role;
+      const cambioDeSucursal =
+        parsed.data.locationId !== undefined && parsed.data.locationId !== actual.locationId;
+      if (parsed.data.isActive === false || parsed.data.password || bajaDeRango || cambioDeSucursal) {
         await revocarTodo(req.authUser!.businessId, id);
       }
 

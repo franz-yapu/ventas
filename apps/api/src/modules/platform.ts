@@ -670,15 +670,32 @@ export async function platformRoutes(app: FastifyInstance) {
       return reply.code(400).send({ data: null, error: 'No hay nada que cambiar' });
     }
 
-    const [after] = await db
-      .update(schema.business)
-      .set(patch)
-      .where(eq(schema.business.id, id))
-      .returning({
-        id: schema.business.id,
-        name: schema.business.name,
-        slug: schema.business.slug,
-      });
+    /**
+     * El `slugDisponible()` de arriba y este UPDATE no son un solo acto.
+     *
+     * Entre la comprobación y la escritura cabe otro operador guardando el mismo slug, y
+     * entonces esto reventaba con la violación de unicidad: un 500 en vez del 409 que ya
+     * está previsto tres líneas más arriba. La comprobación previa se queda porque da el
+     * mensaje bueno en el caso normal; esto es la red por debajo, que es la que de verdad
+     * garantiza que no haya dos direcciones iguales.
+     */
+    let after;
+    try {
+      [after] = await db
+        .update(schema.business)
+        .set(patch)
+        .where(eq(schema.business.id, id))
+        .returning({
+          id: schema.business.id,
+          name: schema.business.name,
+          slug: schema.business.slug,
+        });
+    } catch (e) {
+      if (String(e).includes('business_slug')) {
+        return reply.code(409).send({ data: null, error: 'Esa dirección ya está ocupada' });
+      }
+      throw e;
+    }
 
     await registrar(req, {
       action: 'tenant_update',
@@ -841,9 +858,18 @@ export async function platformRoutes(app: FastifyInstance) {
    * reactivación) es inmediato en vez de tardar hasta un minuto. Importa: cuando
    * reactivas a alguien que acaba de pagar, está mirando la pantalla.
    */
+  /**
+   * Y es del operador PRINCIPAL, no de cualquiera.
+   *
+   * Aquí se separan dos trabajos que compartían puerta. Dar soporte es ayudar a un cliente
+   * a entrar, y para eso está el rescate de contraseña —que sigue abierto a cualquier
+   * operador, porque atender el teléfono lo exige—. Suspender a un negocio o cambiarle el
+   * plan no es ayudarle: es cortarle la venta o tocarle lo que paga. Eso es una decisión
+   * comercial, y quien responde por ella es el principal.
+   */
   app.patch(
     '/platform/tenants/:id/subscription',
-    { preHandler: app.requirePlatform },
+    { preHandler: [app.requirePlatform, soloPrincipal] },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const parsed = updateSubBody.safeParse(req.body);
