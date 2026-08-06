@@ -85,7 +85,19 @@ export function EmptyState({
  * es la diferencia entre pulsar el botón que se quería y pulsar el de al lado.
  */
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-[8px] bg-muted/15', className)} aria-hidden />;
+  return (
+    <div
+      className={cn('rounded-theme-sm', className)}
+      // Los dos tonos vienen del tema: en claro son dos cremas y en oscuro dos grafitos.
+      // Con `bg-muted/15` el hueco se veía casi blanco sobre el fondo oscuro, que es
+      // justo lo contrario de "esto todavía no ha llegado".
+      style={{
+        background: 'linear-gradient(90deg, var(--color-skel-a), var(--color-skel-b))',
+        animation: 'vf-shimmer 1.4s ease-in-out infinite',
+      }}
+      aria-hidden
+    />
+  );
 }
 
 /** Varias filas de esqueleto, para tablas y listas. */

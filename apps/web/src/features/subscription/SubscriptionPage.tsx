@@ -39,7 +39,7 @@ function Cupo({ nombre, used, limit }: { nombre: string; used: number; limit: nu
         </span>
       </div>
       {limit !== null && (
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted/15">
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-track">
           <div
             className={cn('h-full rounded-full', apretado ? 'bg-warning' : 'bg-primary')}
             style={{ width: `${pct}%` }}

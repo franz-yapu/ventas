@@ -293,7 +293,7 @@ function Diff({
               <tr key={k} className={changed ? 'bg-amber-50' : ''}>
                 <td className="p-2 font-medium">{k}</td>
                 <td className="p-2 text-muted">{b}</td>
-                <td className={`p-2 ${changed ? 'font-semibold text-green-700' : ''}`}>{a}</td>
+                <td className={`p-2 ${changed ? 'font-semibold text-success' : ''}`}>{a}</td>
               </tr>
             );
           })}

@@ -243,7 +243,7 @@ function UserForm({
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
-        {passwordInvalid && <p className="-mt-2 text-xs text-red-600">Mínimo 6 caracteres.</p>}
+        {passwordInvalid && <p className="-mt-2 text-xs text-danger">Mínimo 6 caracteres.</p>}
         {!isNew && (
           <p className="-mt-1 text-xs text-muted">
             Si la cambias, se te mostrará para que la copies y se la envíes al usuario.
@@ -292,7 +292,7 @@ function UserForm({
           </label>
         )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <Button
           disabled={!canSave}
           onClick={() => {

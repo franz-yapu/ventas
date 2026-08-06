@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
+import { Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -7,10 +7,18 @@ import { Page, PageHeader } from '@/components/ui/page';
 import { Input } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/api';
 import { aplicarColorDeMarca } from '@/lib/color';
+import { cn } from '@/lib/utils';
+import { useModo } from '@/theme/ModoProvider';
 import type { BusinessConfig } from '@/theme/ThemeProvider';
 
 // Tema por defecto = el del diseño (VentaFácil POS). "Restablecer" vuelve aquí.
 const DESIGN_DEFAULTS = { primary: '#2f68d8', secondary: '#f59e0b', radius: '12px' };
+
+const MODOS = [
+  { valor: 'claro' as const, etiqueta: 'Claro', icono: Sun },
+  { valor: 'oscuro' as const, etiqueta: 'Oscuro', icono: Moon },
+  { valor: 'auto' as const, etiqueta: 'Automático', icono: Monitor },
+];
 
 /**
  * Presets rápidos: PAREJA de colores, no sólo el primario.
@@ -61,6 +69,7 @@ function fileToLogo(file: File): Promise<string> {
 
 export function SettingsPage() {
   const qc = useQueryClient();
+  const { modo, oscuro, cambiar: cambiarModo } = useModo();
   const fileRef = useRef<HTMLInputElement>(null);
   const { data } = useQuery({
     queryKey: ['business', 'edit'],
@@ -274,6 +283,32 @@ export function SettingsPage() {
             />
           </div>
 
+          {/* Modo claro / oscuro. Va aquí, con el resto de la apariencia, pero NO se
+              guarda con el negocio: es del dispositivo (ver theme/modo.ts). */}
+          <div className="flex flex-col gap-2 border-t border-border pt-5">
+            <label className="text-sm text-muted">Modo de pantalla</label>
+            <div className="inline-flex w-fit rounded-theme border border-border p-1">
+              {MODOS.map((m) => (
+                <button
+                  key={m.valor}
+                  type="button"
+                  onClick={() => cambiarModo(m.valor)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-theme-sm px-3 py-1.5 text-[13px] font-semibold transition-colors',
+                    modo === m.valor ? 'bg-primary text-primary-fg' : 'text-muted hover:text-fg',
+                  )}
+                >
+                  <m.icono size={15} /> {m.etiqueta}
+                </button>
+              ))}
+            </div>
+            <p className="text-[12px] text-muted">
+              Se guarda en este dispositivo, no en el negocio: la caja de la mañana y la de la noche
+              no tienen la misma luz.
+              {modo === 'auto' && ` Ahora sigue a tu sistema: ${oscuro ? 'oscuro' : 'claro'}.`}
+            </p>
+          </div>
+
           {/* Radio de bordes. */}
           <div className="flex flex-col gap-2">
             <label className="text-sm text-muted">
@@ -350,12 +385,12 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex items-center gap-3">
         <Button disabled={save.isPending} onClick={() => save.mutate()}>
           {save.isPending ? 'Guardando…' : 'Guardar cambios'}
         </Button>
-        {saved && <span className="text-sm text-green-600">✓ Guardado</span>}
+        {saved && <span className="text-sm text-success">✓ Guardado</span>}
       </div>
     </Page>
   );

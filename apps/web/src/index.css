@@ -11,9 +11,9 @@
     font-size: 13px;
   }
   .ds-table thead tr {
-    background: #faf9f7;
+    background: var(--color-table-head);
     text-align: left;
-    color: #96958f;
+    color: var(--color-muted);
     border: 0;
   }
   .ds-table th {
@@ -26,17 +26,19 @@
     padding: 12px 14px;
   }
   .ds-table tbody tr {
-    border-top: 1px solid #f1f0ec;
+    border-top: 1px solid var(--color-border);
     border-bottom: 0;
   }
+  /* El realce de fila se deriva del texto y no es un gris fijo: en claro oscurece un
+     punto y en oscuro aclara un punto, que es lo que se espera en cada caso. */
   .ds-table tbody tr:hover {
-    background: #fbfbf9;
+    background: color-mix(in srgb, var(--color-fg) 4%, transparent);
   }
   /* Tarjeta contenedora de tabla: radio 14px, sin sombra, overflow oculto. */
   .ds-table-card {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 14px;
+    border-radius: var(--radius);
     overflow: hidden;
   }
   /* Etiquetas de formulario dentro de modales (labelStyle del prototipo:
@@ -44,13 +46,26 @@
   .ds-modal label {
     font-size: 13px;
     font-weight: 600;
-    color: #5c5c56;
+    color: color-mix(in srgb, var(--color-fg) 78%, transparent);
   }
   /* Item activo del sidebar: tinte suave del color primario (no relleno sólido),
      derivado del tema con color-mix para respetar el white-label. */
   .ds-nav-tint {
-    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    background: var(--color-primary-soft);
     color: var(--color-primary);
+  }
+}
+
+/* Latido del esqueleto de carga: opacidad, no color, para que sirva en los dos modos. */
+@keyframes vf-shimmer {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
   }
 }
 
@@ -98,31 +113,104 @@
 }
 
 /* Sistema de diseño "VentaFácil POS" (Claude Design).
-   Paleta cálida + Onest/IBM Plex Mono. ThemeProvider sobreescribe
-   --color-primary/--color-secondary/--radius con theme_json del negocio. */
+   Paleta cálida + Onest/IBM Plex Mono.
+   ThemeProvider sobreescribe primario/secundario/radio con theme_json del negocio, y
+   la paleta entera de neutros según el modo claro/oscuro (ver theme/modo.ts). */
 :root {
+  /* Marca: los elige el negocio. El texto encima se CALCULA (lib/color.ts). */
   --color-primary: #2f68d8;
   --color-primary-fg: #ffffff;
   --color-primary-700: #234f9e;
   --color-secondary: #f59e0b;
-  --color-secondary-fg: #1f2937;
-  /* Neutros cálidos del diseño (no los toca ThemeProvider). */
+  --color-secondary-fg: #17171a;
+
+  /* Neutros cálidos. Los reescribe el modo oscuro. */
   --color-bg: #f6f5f3;
   --color-surface: #ffffff;
   --color-border: #ecebe6;
   --color-muted: #8c8a83;
   --color-fg: #17171a;
-  --radius: 12px;
-  /* Tokens semánticos. */
+
+  /* Tokens semánticos. También cambian en oscuro: el mismo verde sobre un fondo
+     oscuro se ve apagado y deja de leerse como "bien". */
   --color-success: #2f8f5b;
   --color-success-bg: #eef6f1;
   --color-danger: #b8402f;
   --color-danger-bg: #fbeeec;
   --color-warning: #8a6d18;
   --color-warning-bg: #fbf4e6;
+  --color-info: #2a5f8a;
+  --color-info-bg: #eef3f8;
+
+  /**
+   * Superficies teñidas con el color de marca.
+   *
+   * `--color-soft-base` es el fondo con el que se mezcla el primario, y es lo que hace
+   * que estos tres funcionen igual en claro y en oscuro: en claro mezcla contra blanco
+   * y sale un tinte suave; en oscuro mezcla contra la superficie oscura y sale un tinte
+   * oscuro del mismo color. Un `primary/10` fijo no puede hacer eso.
+   */
+  --color-soft-base: #ffffff;
+  --color-primary-soft: color-mix(in oklab, var(--color-primary) 10%, var(--color-soft-base));
+  --color-primary-line: color-mix(in oklab, var(--color-primary) 26%, var(--color-soft-base));
+  --color-secondary-soft: color-mix(in oklab, var(--color-secondary) 14%, var(--color-soft-base));
+
+  /* Superficies de apoyo: cabecera de tabla, riel de barras, esqueletos, iconos
+     apagados. Antes iban a mano en cada sitio y en oscuro se quedaban blancos. */
+  --color-table-head: #fbfaf8;
+  --color-track: #f1efec;
+  --color-skel-a: #eeece8;
+  --color-skel-b: #f4f2ef;
+  --color-icon-dim: #b3b0a8;
+
+  /* Radio: el negocio elige el base y los otros dos se derivan, para que subir el
+     radio no descuadre las proporciones entre una hoja y un chip. */
+  --radius: 12px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-lg: calc(var(--radius) * 1.4);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+
   /* Tipografía. */
   --font-sans: 'Onest', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  color-scheme: light;
+}
+
+/**
+ * Modo oscuro. Sólo neutros y semánticos: el primario y el secundario son del negocio
+ * y no se tocan — su marca es su marca a cualquier hora.
+ *
+ * Se aplica por atributo y no por `prefers-color-scheme` a secas porque el modo es una
+ * preferencia de la PERSONA que además se guarda: quien atiende de noche lo quiere
+ * oscuro aunque su sistema esté en claro. El automático se resuelve en JS (theme/modo.ts)
+ * y termina poniendo este mismo atributo.
+ */
+:root[data-modo='oscuro'] {
+  --color-bg: #121211;
+  --color-surface: #1b1b19;
+  --color-border: #2d2c29;
+  --color-fg: #f2f0ec;
+  --color-muted: #9a978e;
+
+  --color-success: #5fbf87;
+  --color-success-bg: #16271e;
+  --color-danger: #e08072;
+  --color-danger-bg: #2b1a17;
+  --color-warning: #d3ae4e;
+  --color-warning-bg: #2a2314;
+  --color-info: #7fb0d6;
+  --color-info-bg: #16232c;
+
+  --color-soft-base: #1b1b19;
+  --color-table-head: #201f1d;
+  --color-track: #2a2926;
+  --color-skel-a: #26251f;
+  --color-skel-b: #201f1c;
+  --color-icon-dim: #5d5b55;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
 }
 
 html,
@@ -147,7 +235,7 @@ body {
   height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #dedcd7;
+  background: var(--color-track);
   border-radius: 8px;
   border: 3px solid transparent;
   background-clip: padding-box;
@@ -176,4 +264,3 @@ body {
     background: #fff;
   }
 }
-

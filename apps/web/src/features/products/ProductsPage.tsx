@@ -161,7 +161,7 @@ export function ProductsPage() {
                   {isAdmin && (
                     <td className="p-3 text-right">
                       {p.cost ? (
-                        <span className="text-green-600">
+                        <span className="text-success">
                           {money(Number(p.price) - Number(p.cost))}
                         </span>
                       ) : (
@@ -438,7 +438,7 @@ function ProductForm({
         {Number(form.cost) > 0 && (
           <div className="rounded-theme bg-muted/10 p-2 text-sm">
             Ganancia por unidad:{' '}
-            <span className="font-semibold text-green-600">
+            <span className="font-semibold text-success">
               {money(margin)} ({marginPct.toFixed(0)}%)
             </span>
           </div>
@@ -477,7 +477,7 @@ function ProductForm({
             </div>
           </div>
         )}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <Button onClick={() => save.mutate()} disabled={save.isPending}>
           Guardar
         </Button>

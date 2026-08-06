@@ -106,8 +106,10 @@ export function InventoryPage() {
             <tbody>
               {rows?.map((r) => {
                 const low = r.minStock != null && r.quantity <= r.minStock;
+                // Fondo de aviso por token: el rosa quemado se veía como un parche
+                // blanco en modo oscuro.
                 return (
-                  <tr key={r.id} style={low ? { background: '#fdf5f3' } : undefined}>
+                  <tr key={r.id} className={low ? 'bg-danger-bg' : undefined}>
                     <td className="p-3">
                       <span className="font-medium">{r.productName}</span>{' '}
                       <span className="font-mono text-xs text-muted">{r.sku}</span>
@@ -115,7 +117,7 @@ export function InventoryPage() {
                     <td className="p-3 text-muted">{r.locationName}</td>
                     <td
                       className="p-3 text-right font-bold"
-                      style={{ color: low ? '#b8402f' : '#17171a' }}
+                      style={{ color: low ? 'var(--color-danger)' : 'var(--color-fg)' }}
                     >
                       {r.quantity}
                     </td>
@@ -161,7 +163,7 @@ export function InventoryPage() {
             <div
               key={r.id}
               className="rounded-[14px] border border-border p-[15px] shadow-card"
-              style={{ background: low ? '#fdf5f3' : 'var(--color-surface)' }}
+              style={{ background: low ? 'var(--color-danger-bg)' : 'var(--color-surface)' }}
             >
               <div className="flex items-baseline justify-between gap-3">
                 <div>
@@ -170,7 +172,7 @@ export function InventoryPage() {
                 </div>
                 <span
                   className="shrink-0 text-[22px] font-extrabold tracking-[-0.02em]"
-                  style={{ color: low ? '#b8402f' : '#17171a' }}
+                  style={{ color: low ? 'var(--color-danger)' : 'var(--color-fg)' }}
                 >
                   {r.quantity}
                 </span>
@@ -283,7 +285,7 @@ function AdjustModal({
           placeholder="Ej. conteo físico, merma, ingreso"
           autoFocus
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <Button
           disabled={reason.trim().length < 3 || save.isPending}
           onClick={() => {
@@ -380,7 +382,7 @@ function TransferModal({
         </div>
         <label className="text-sm text-muted">Cantidad</label>
         <Input value={quantity} inputMode="numeric" onChange={(e) => setQuantity(e.target.value)} />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <Button
           disabled={transfer.isPending || Number(quantity) < 1 || fromLocationId === toLocationId}
           onClick={() => {

@@ -42,7 +42,7 @@ export function BarcodeScanner({ onScan, onClose }: { onScan: (code: string) => 
       <div className="flex flex-col gap-2">
         <div id={READER_ID} className="w-full overflow-hidden rounded-theme" />
         {error ? (
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-danger">{error}</p>
         ) : (
           <p className="text-center text-sm text-muted">Apunta la cámara al código de barras del producto.</p>
         )}

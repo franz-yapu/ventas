@@ -64,14 +64,14 @@ const SECTION_LABEL =
 const sideItem = (isActive: boolean) =>
   cn(
     'flex w-full items-center gap-3 rounded-[10px] px-[11px] py-2.5 text-sm font-semibold transition-colors',
-    isActive ? 'ds-nav-tint' : 'text-[#66655f] hover:bg-black/[0.04]',
+    isActive ? 'ds-nav-tint' : 'text-muted hover:bg-fg/[0.05]',
   );
 
 // Item de la barra inferior móvil: reparto uniforme (flex-1), sin píldora;
 // sólo el ícono y la etiqueta cambian de color (calcado del prototipo).
 const bottomItem = (isActive: boolean) =>
   cn(
-    'flex flex-1 flex-col items-center gap-1 py-1 text-[10px] font-semibold transition-colors',
+    'flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors',
     isActive ? 'text-primary' : 'text-muted',
   );
 
@@ -90,6 +90,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const roleLabel = isAdmin ? 'Administrador' : 'Vendedor';
   const userInitial = (user?.name ?? 'U').charAt(0).toUpperCase();
   // En móvil, cualquier pantalla de administración/análisis marca activa la entrada "Admin".
+  // Cuántos botones tiene la barra inferior: los operativos, y "Admin" si lo es.
+  const destinosMoviles = items.length + (isAdmin ? 1 : 0);
   const adminActive =
     routerLoc.pathname.startsWith('/administracion') ||
     [...ANALYTICS_NAV, ...ADMIN_CHILDREN].some((c) => routerLoc.pathname.startsWith(c.to));
@@ -146,11 +148,11 @@ export function Layout({ children }: { children: ReactNode }) {
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-2.5 rounded-[10px] px-2 py-2 transition-colors',
-                isActive ? 'ds-nav-tint' : 'hover:bg-black/[0.04]',
+                isActive ? 'ds-nav-tint' : 'hover:bg-fg/[0.05]',
               )
             }
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted/15 text-sm font-bold text-muted">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-track text-sm font-bold text-muted">
               {userInitial}
             </div>
             <div className="min-w-0 flex-1">
@@ -167,10 +169,20 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* ===== Barra inferior fija (sólo móvil) ===== */}
+      {/* ===== Barra inferior fija (sólo móvil) =====
+          Rejilla de 5 columnas EXACTAS y no un flex que reparte: con `flex-1` cada
+          destino cambiaba de ancho según lo larga que fuera su palabra, y el dedo
+          aprende dónde está un botón por su posición, no por su etiqueta. Alto de 72px
+          con el área segura debajo, para que no lo tape la barra del teléfono. */}
       <nav
-        className="no-print fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-surface px-1 pt-2 md:hidden"
-        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}
+        className="no-print fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-surface pt-2 md:hidden"
+        style={{
+          // Tantas columnas como destinos haya: un vendedor ve 5 y un admin 6 (con
+          // "Admin"). Fijar 5 partía la barra en dos filas justo para el admin.
+          gridTemplateColumns: `repeat(${destinosMoviles}, minmax(0, 1fr))`,
+          height: 'calc(72px + env(safe-area-inset-bottom))',
+          paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))',
+        }}
       >
         {items.map((n) => (
           <NavLink
@@ -192,7 +204,10 @@ export function Layout({ children }: { children: ReactNode }) {
       </nav>
 
       {/* ===== Contenido ===== */}
-      <main className="order-1 flex-1 pb-24 md:order-2 md:pb-0">
+      {/* El hueco de abajo sale de la barra real (72px) más el área segura, en vez de
+          un pb-24 a ojo que en algunos teléfonos tapaba la última fila. Va como clase y
+          no en línea para que `md:pb-0` pueda ganarle en escritorio. */}
+      <main className="order-1 flex-1 pb-[calc(72px+env(safe-area-inset-bottom)+12px)] md:order-2 md:pb-0">
         <div className="no-print sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-4">
           {/* En móvil no hay barra lateral: la marca vive aquí. */}
           <div className="flex min-w-0 items-center gap-2 md:hidden">

@@ -172,8 +172,8 @@ export function ProfilePage() {
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {ok && <p className="text-sm text-green-600">Cambios guardados.</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
+          {ok && <p className="text-sm text-success">Cambios guardados.</p>}
 
           <Button disabled={busy} onClick={onSave}>
             {busy ? 'Guardando…' : 'Guardar cambios'}

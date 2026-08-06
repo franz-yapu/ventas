@@ -99,7 +99,7 @@ export function ReportsPage() {
             </div>
             <div>
               <div className="text-sm text-muted">Ganancia</div>
-              <div className="text-3xl font-bold text-green-600">
+              <div className="text-3xl font-bold text-success">
                 {money(data?.profit.range ?? '0')}
               </div>
             </div>
@@ -144,13 +144,13 @@ export function ReportsPage() {
                 <tr key={l.locationId} className="border-b border-border last:border-0">
                   <td className="p-3">{l.locationName}</td>
                   <td className="p-3 text-right">{money(l.today)}</td>
-                  <td className="p-3 text-right text-green-600">{money(l.profitToday)}</td>
+                  <td className="p-3 text-right text-success">{money(l.profitToday)}</td>
                   <td className="p-3 text-right">{l.todayCount}</td>
                   <td className="p-3 text-right">{money(l.month)}</td>
-                  <td className="p-3 text-right text-green-600">{money(l.profitMonth)}</td>
+                  <td className="p-3 text-right text-success">{money(l.profitMonth)}</td>
                   {showRange && <td className="p-3 text-right">{money(l.rangeTotal)}</td>}
                   {showRange && (
-                    <td className="p-3 text-right text-green-600">{money(l.rangeProfit)}</td>
+                    <td className="p-3 text-right text-success">{money(l.rangeProfit)}</td>
                   )}
                   {showRange && <td className="p-3 text-right">{l.rangeCount}</td>}
                 </tr>
@@ -161,13 +161,13 @@ export function ReportsPage() {
                 <tr>
                   <td className="p-3">Suma</td>
                   <td className="p-3 text-right">{money(data.totals.today)}</td>
-                  <td className="p-3 text-right text-green-600">{money(data.profit.today)}</td>
+                  <td className="p-3 text-right text-success">{money(data.profit.today)}</td>
                   <td className="p-3 text-right">{totalTodayCount}</td>
                   <td className="p-3 text-right">{money(data.totals.month)}</td>
-                  <td className="p-3 text-right text-green-600">{money(data.profit.month)}</td>
+                  <td className="p-3 text-right text-success">{money(data.profit.month)}</td>
                   {showRange && <td className="p-3 text-right">{money(data.totals.range)}</td>}
                   {showRange && (
-                    <td className="p-3 text-right text-green-600">{money(data.profit.range)}</td>
+                    <td className="p-3 text-right text-success">{money(data.profit.range)}</td>
                   )}
                   {showRange && <td className="p-3 text-right">{data.rangeCount}</td>}
                 </tr>

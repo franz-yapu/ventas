@@ -7,7 +7,14 @@ import { AuthProvider } from '@/features/auth/AuthProvider';
 import { PlatformAuthProvider } from '@/features/platform/PlatformAuthProvider';
 import { SubscriptionProvider } from '@/features/subscription/SubscriptionProvider';
 import { manejarErrorDeConsulta } from '@/lib/errores';
+import { ModoProvider } from '@/theme/ModoProvider';
+import { aplicarModo, leerModo } from '@/theme/modo';
 import './index.css';
+
+// El modo se aplica ANTES de montar React: si esperara al primer render, una app
+// abierta en oscuro daría un fogonazo blanco en cada arranque. En una caja a las once
+// de la noche, eso deslumbra de verdad.
+aplicarModo(leerModo());
 
 // TanStack Query: cache + reintentos, clave para conexiones malas (offline-first).
 //
@@ -27,15 +34,19 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        {/* Dos sesiones sin relación: la del negocio y la del panel de plataforma.
-            Sólo consulta el API si hay un token guardado de cada una. */}
-        <AuthProvider>
-          <SubscriptionProvider>
-            <PlatformAuthProvider>
-              <App />
-            </PlatformAuthProvider>
-          </SubscriptionProvider>
-        </AuthProvider>
+        {/* El modo va por encima de la sesión: el login y la recuperación de
+            contraseña también se miran de noche. */}
+        <ModoProvider>
+          {/* Dos sesiones sin relación: la del negocio y la del panel de plataforma.
+              Sólo consulta el API si hay un token guardado de cada una. */}
+          <AuthProvider>
+            <SubscriptionProvider>
+              <PlatformAuthProvider>
+                <App />
+              </PlatformAuthProvider>
+            </SubscriptionProvider>
+          </AuthProvider>
+        </ModoProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

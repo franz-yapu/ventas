@@ -16,11 +16,11 @@ export function SyncIndicator() {
     Icon = CloudOff;
   } else if (pending > 0) {
     label = `${pending} venta${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''}`;
-    tone = 'bg-blue-100 text-blue-800';
+    tone = 'bg-info-bg text-info';
     Icon = RefreshCw;
   } else {
     label = 'Sincronizado';
-    tone = 'bg-green-100 text-green-800';
+    tone = 'bg-success-bg text-success';
     Icon = Check;
   }
 

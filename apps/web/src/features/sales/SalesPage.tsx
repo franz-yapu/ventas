@@ -179,7 +179,7 @@ export function SalesPage() {
                       {s.status === 'completed' && (
                         <button
                           onClick={() => setCancelId(s.id)}
-                          className="text-muted hover:text-red-600"
+                          className="text-muted hover:text-danger"
                           title="Cancelar"
                         >
                           <Ban size={16} />
@@ -293,7 +293,7 @@ export function SalesPage() {
             onChange={(e) => setReason(e.target.value)}
             placeholder="Ej. producto devuelto"
           />
-          {cancel.isError && <p className="text-sm text-red-600">No se pudo cancelar</p>}
+          {cancel.isError && <p className="text-sm text-danger">No se pudo cancelar</p>}
           {/* Rojo de peligro, no el acento de la marca: anular una venta devuelve
               stock y no se deshace. Que llevara el color del negocio invitaba a
               pulsarlo. */}

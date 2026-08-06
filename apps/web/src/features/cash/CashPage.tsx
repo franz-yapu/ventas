@@ -68,7 +68,7 @@ export function CashPage() {
       {!isLoading && !caja && (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/15 text-muted">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-track text-muted">
               <Lock size={22} />
             </div>
             <div>

@@ -37,7 +37,7 @@ export function Marca({
           t.caja,
           // Fondo blanco y borde: un logo con transparencia o de color claro necesita
           // algo detrás, o desaparece sobre el fondo cálido de la app.
-          'flex shrink-0 items-center justify-center overflow-hidden border border-border bg-white',
+          'flex shrink-0 items-center justify-center overflow-hidden border border-border bg-surface',
           className,
         )}
       >

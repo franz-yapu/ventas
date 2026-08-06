@@ -7,8 +7,8 @@ const TONES = {
   success: 'bg-success-bg text-success',
   danger: 'bg-danger-bg text-danger',
   warning: 'bg-warning-bg text-warning',
-  info: 'bg-primary/10 text-primary',
-  neutral: 'bg-[#f1f0ec] text-muted',
+  info: 'bg-info-bg text-info',
+  neutral: 'bg-track text-muted',
 } as const;
 
 export type BadgeTone = keyof typeof TONES;

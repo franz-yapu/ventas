@@ -272,7 +272,13 @@ export function PosPage() {
             const out = remaining != null && remaining <= 0;
             const low = remaining != null && p.minStock != null && remaining <= p.minStock && !out;
             const textCol = out ? 'text-danger' : low ? 'text-warning' : 'text-success';
-            const dot = out ? '#c25848' : low ? '#c99a1e' : '#4aa06f';
+            // Del token, no del hexadecimal: en oscuro estos tres se aclaran para
+            // seguir leyéndose como agotado / poco / disponible.
+            const dot = out
+              ? 'var(--color-danger)'
+              : low
+                ? 'var(--color-warning)'
+                : 'var(--color-success)';
             const stockLabel = out ? 'Agotado' : low ? `Bajo · ${remaining}` : `Disp. ${remaining}`;
             const cardBorder = out
               ? 'border-danger/40'
@@ -322,7 +328,7 @@ export function PosPage() {
         <div className="flex items-center gap-2 border-b border-border px-4 py-3.5">
           <span className="text-base font-bold">Carrito</span>
           {cart.length > 0 && (
-            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-xs font-bold text-primary">
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-soft px-1.5 text-xs font-bold text-primary">
               {cart.reduce((n, l) => n + l.quantity, 0)}
             </span>
           )}
@@ -384,7 +390,7 @@ export function PosPage() {
                     key={m}
                     onClick={() => setPayment(m)}
                     className={`flex flex-col items-center gap-1 rounded-theme border py-2.5 text-[11px] font-semibold transition active:scale-95 ${
-                      active ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-surface text-muted hover:bg-muted/10'
+                      active ? 'border-primary-line bg-primary-soft text-primary' : 'border-border bg-surface text-muted hover:bg-fg/[0.06]'
                     }`}
                   >
                     <Icon size={18} />

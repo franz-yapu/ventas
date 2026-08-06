@@ -246,7 +246,7 @@ export function LowStock({ data }: { data: DashboardData }) {
             <span className="truncate">
               {s.name} <span className="text-muted">({s.location})</span>
             </span>
-            <span className="shrink-0 font-medium text-red-600">{s.quantity}</span>
+            <span className="shrink-0 font-medium text-danger">{s.quantity}</span>
           </li>
         ))}
         {data.lowStock.length === 0 && <li className="text-muted">Todo con stock suficiente ✓</li>}
