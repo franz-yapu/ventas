@@ -148,7 +148,7 @@ export async function platformRoutes(app: FastifyInstance) {
   // Mismo límite estricto que el login de los negocios: es el endpoint con más que
   // perder de todo el sistema.
   const loginRateLimit = {
-    rateLimit: { max: env.loginRateLimitMax, timeWindow: env.loginRateLimitWindow },
+    rateLimit: { max: app.loginRateLimitMax, timeWindow: env.loginRateLimitWindow },
   };
 
   app.post('/platform/login', { config: loginRateLimit }, async (req, reply) => {

@@ -80,6 +80,17 @@ beforeAll(async () => {
     },
   ]);
 
+  // Stock del producto del negocio EN NORTE. El helper sólo crea inventario en la
+  // central, y sin esto varias comprobaciones pasarían por falta de datos en vez de por
+  // el alcance. Va aquí, y no dentro de un test, porque lo necesitan dos.
+  await db.insert(schema.inventory).values({
+    businessId: t.businessId,
+    productId: t.productId,
+    locationId: norteId,
+    quantity: 7,
+    minStock: 1,
+  });
+
   adminNorte = await entrar('admin.norte');
   vendedorNorte = await entrar('vendedor.norte');
   vendedorCentral = await entrar('vendedor.central');
@@ -88,6 +99,81 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
+});
+
+describe('una sucursal puede vender lo que tiene', () => {
+  /**
+   * El catálogo es del NEGOCIO; la existencia, de cada sucursal.
+   *
+   * Antes `/products` filtraba por la ubicación que había dado de alta el producto, así
+   * que el vendedor de una sucursal no veía nada de lo creado por la central: Sucursal
+   * Norte tenía 57 unidades en 6 productos en su bodega y recibía `items: []`, también
+   * buscando por SKU. No podía cobrar. El multi-sucursal, que es lo que distingue al
+   * producto, no operaba.
+   */
+  it('el vendedor de Norte ve el producto creado por la central', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(vendedorNorte),
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().data.items;
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.map((p: { id: string }) => p.id)).toContain(t.productId);
+  });
+
+  it('y también buscándolo por SKU', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products?search=SKU-dos-sucursales',
+      headers: auth(vendedorNorte),
+    });
+    expect(res.json().data.items.length).toBeGreaterThan(0);
+  });
+
+  it('el stock que ve es el de SU sucursal, no el de la central', async () => {
+    // Lo que hace que el dato sirva para vender: si viera el de la central, prometería
+    // existencias que no están en su bodega. Norte tiene 7, sembrado en beforeAll.
+    const norte = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(vendedorNorte),
+    });
+    const suyo = norte.json().data.items.find((p: { id: string }) => p.id === t.productId);
+    expect(suyo.stock).toBe(7);
+
+    const central = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(vendedorCentral),
+    });
+    const delOtro = central.json().data.items.find((p: { id: string }) => p.id === t.productId);
+    expect(delOtro.stock).not.toBe(7);
+  });
+
+  it('el admin de la central puede mirar el stock de una sucursal', async () => {
+    // Lo que necesita para reponer: ver desde su oficina lo que le falta a Norte.
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products?locationId=${norteId}`,
+      headers: auth(t.adminToken),
+    });
+    const p = res.json().data.items.find((x: { id: string }) => x.id === t.productId);
+    expect(p.stock).toBe(7);
+  });
+
+  it('un vendedor NO puede espiar el stock de otra sucursal con ?locationId', async () => {
+    // El parámetro es para administrar, no para curiosear: a quien tiene alcance de
+    // sucursal se le ignora y sigue viendo el suyo.
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products?locationId=${t.locationId}`,
+      headers: auth(vendedorNorte),
+    });
+    const p = res.json().data.items.find((x: { id: string }) => x.id === t.productId);
+    expect(p.stock).toBe(7);
+  });
 });
 
 describe('el costo no sale del servidor para un vendedor', () => {
@@ -479,16 +565,6 @@ describe('ver todas las sucursales es cosa de administrar, no de estar en la cen
   });
 
   it('el admin de la central sí las ve todas', async () => {
-    // Se siembra stock en Norte: el helper sólo crea inventario en la central, así que
-    // sin esto la comprobación pasaría por falta de datos y no por el alcance.
-    await db.insert(schema.inventory).values({
-      businessId: t.businessId,
-      productId: t.productId,
-      locationId: norteId,
-      quantity: 7,
-      minStock: 1,
-    });
-
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/inventory',
@@ -592,6 +668,53 @@ describe('mirar el trabajo de otro es supervisar', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().data).toHaveLength(0);
+  });
+
+  it('el vendedor no puede pedir las ventas de un compañero con ?userId', async () => {
+    /*
+      El mismo razonamiento de los cierres de caja, que aquí no se había aplicado: el
+      filtro `?userId=` se empujaba a la consulta tal cual, sin mirar quién preguntaba.
+      Bastaba con poner el id del de al lado para sacar sus ventas y su total.
+
+      No responde 403 —pedirlas suele ser una pantalla mal enlazada, no un ataque—: le
+      devuelve las suyas.
+    */
+    const compañero = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users',
+      headers: auth(adminNorte),
+    });
+    const otro = compañero
+      .json()
+      .data.find((u: { username: string }) => u.username === 'admin.norte');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sales?userId=${otro.id}`,
+      headers: auth(vendedorNorte),
+    });
+    expect(res.statusCode).toBe(200);
+    const ventas = res.json().data.items as Array<{ sellerName: string }>;
+    expect(
+      ventas.every((v) => v.sellerName !== 'Admin Norte'),
+      'le llegaron ventas del compañero que pidió',
+    ).toBe(true);
+  });
+
+  it('el admin sí puede filtrar por vendedor: es su trabajo', async () => {
+    const usuarios = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users',
+      headers: auth(t.adminToken),
+    });
+    const alguien = usuarios.json().data[0];
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sales?userId=${alguien.id}`,
+      headers: auth(t.adminToken),
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it('el admin sí ve los turnos de su sucursal', async () => {

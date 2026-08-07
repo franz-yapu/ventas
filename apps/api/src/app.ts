@@ -35,7 +35,9 @@ import './types.js';
  * Construye la app sin escucharla. Separado de index.ts para que los tests puedan
  * levantarla en memoria (app.inject) sin abrir un puerto.
  */
-export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
+export async function buildApp(
+  opts: { logger?: boolean; loginRateLimitMax?: number } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
       opts.logger === false
@@ -44,6 +46,10 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
           ? { transport: { target: 'pino-pretty' } }
           : true,
   });
+
+  // Tope del login de esta instancia. Por defecto el de la configuración; los tests que
+  // prueban el limitador levantan su propia app con el valor real.
+  app.decorate('loginRateLimitMax', opts.loginRateLimitMax ?? env.loginRateLimitMax);
 
   // Cabeceras de seguridad. Se desactiva CSP: este servicio sólo responde JSON, nunca
   // HTML, así que una política de contenido no protege nada y sí puede estorbar.

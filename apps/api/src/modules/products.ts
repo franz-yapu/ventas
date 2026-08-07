@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { sinCostos, sinCostosEnJson } from '../lib/costos.js';
 import { violaUnica } from '../lib/pg-errores.js';
-import { canActOnLocation, viewScope } from '../lib/scope.js';
+import { canActOnLocation, NINGUNA_UBICACION, viewScope } from '../lib/scope.js';
 import { permiteCrear } from '../lib/subscription.js';
 
 const listQuery = z.object({
@@ -31,7 +31,14 @@ const productSelect = {
   imageUrl: schema.product.imageUrl,
   attributes: schema.product.attributes,
   isActive: schema.product.isActive,
-  // Stock del producto en su propia ubicación (para mostrarlo en el POS).
+  /**
+   * Stock **donde mira quien pregunta**, no donde se dio de alta el producto.
+   *
+   * Es la diferencia entera entre que el multi-sucursal funcione o no. Antes el stock
+   * salía de la ubicación DUEÑA del producto, así que el vendedor de una sucursal veía
+   * el stock de la central —o, si el producto era de otra sucursal, no veía el producto
+   * en absoluto—. Una sucursal con 57 unidades en su bodega recibía una lista vacía.
+   */
   stock: schema.inventory.quantity,
   minStock: schema.inventory.minStock,
 };
@@ -84,10 +91,22 @@ export async function productRoutes(app: FastifyInstance) {
     const q = parsedQ.data;
     const user = req.authUser!;
 
+    /*
+      El catálogo es DEL NEGOCIO; el stock es de cada sucursal.
+
+      Antes se filtraba por `product.locationId`, la ubicación que dio de alta el
+      producto, y eso rompía el multi-sucursal de raíz: el vendedor de Sucursal Norte,
+      con 57 unidades en 6 productos en su propia bodega, recibía `items: []` — también
+      buscando por SKU—, porque esos productos los había creado la central. No podía
+      vender.
+
+      La tabla `inventory` ya estaba modelada por ubicación, así que el modelo correcto
+      estaba a medio hacer: un producto es del negocio y su existencia es de cada local.
+      `product.locationId` se queda, pero para lo único que significa de verdad: **quién
+      lo administra** (ver `canManage` más abajo). No para quién lo ve.
+    */
     const filters = [eq(schema.product.businessId, user.businessId)];
     const scope = viewScope(user);
-    if (scope !== undefined) filters.push(eq(schema.product.locationId, scope));
-    else if (q.locationId) filters.push(eq(schema.product.locationId, q.locationId)); // central puede filtrar
     if (q.categoryId) filters.push(eq(schema.product.categoryId, q.categoryId));
     if (q.search) {
       const like = `%${q.search}%`;
@@ -101,17 +120,28 @@ export async function productRoutes(app: FastifyInstance) {
     }
     const where = and(...filters);
 
+    /*
+      ¿El stock de qué ubicación se enseña? La de quien mira.
+
+      - Un vendedor o un encargado de sucursal ven la suya, y no pueden pedir otra.
+      - Un admin de la central ve la suya por defecto, y puede mirar la de cualquier
+        sucursal con `?locationId=`, que es lo que necesita para reponer.
+
+      Sin ubicación asignada se usa `NINGUNA_UBICACION`, que es un uuid válido que no
+      casa con ninguna fila: el `leftJoin` deja el stock en null en vez de reventar.
+    */
+    const ubicacionDeStock = scope ?? q.locationId ?? user.locationId ?? NINGUNA_UBICACION;
+
     const { rows, count } = await withTenant(user.businessId, async (tx) => {
       const rows = await tx
         .select(productSelect)
         .from(schema.product)
         .leftJoin(schema.location, eq(schema.location.id, schema.product.locationId))
-        // Stock en la ubicación dueña del producto: admin ve el de su oficina, vendedor el de su sucursal.
         .leftJoin(
           schema.inventory,
           and(
             eq(schema.inventory.productId, schema.product.id),
-            eq(schema.inventory.locationId, schema.product.locationId),
+            eq(schema.inventory.locationId, ubicacionDeStock),
           ),
         )
         .where(where)
@@ -141,7 +171,15 @@ export async function productRoutes(app: FastifyInstance) {
   app.get('/products/:id/history', { preHandler: app.requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const user = req.authUser!;
-    // Alcance: la sucursal sólo puede ver el historial de productos de su ubicación.
+    /*
+      El producto es del negocio, así que su historial se puede consultar desde
+      cualquier sucursal: quien lo vende necesita saber cuándo cambió de precio.
+
+      Lo que NO se abre es el movimiento de las demás: las ventas que trae este
+      historial siguen filtradas por `scope` más abajo, igual que en `/sales`. Mirar la
+      ficha del producto es trabajo; mirar cuánto vendió el local de al lado es
+      supervisar, y eso es del administrador.
+    */
     const scope = viewScope(user);
     const prod = await withTenant(user.businessId, async (tx) => {
       const [p] = await tx
@@ -152,11 +190,6 @@ export async function productRoutes(app: FastifyInstance) {
       return p ?? null;
     });
     if (!prod) return reply.code(404).send({ data: null, error: 'Producto no encontrado' });
-    if (scope !== undefined && prod.locationId !== scope) {
-      return reply
-        .code(403)
-        .send({ data: null, error: 'No puedes ver el historial de productos de otra ubicación' });
-    }
     // 1) Acciones administrativas (alta, edición, ajuste de stock, transferencia, importación).
     const auditRows = await withTenant(user.businessId, (tx) =>
       tx

@@ -37,6 +37,12 @@ export default defineConfig({
       REGISTER_RATE_LIMIT_MAX: '500',
       // Igual que arriba: el tope real (5/hora) cortaría la suite a mitad.
       EXPORT_RATE_LIMIT_MAX: '500',
+      // El login tiene tope de 20 por IP en 5 minutos, y en los tests todas las
+      // peticiones salen de la misma. La suite de sesiones sola gasta casi veinte, así
+      // que estaba a un test de romperse por agotar la cuota — y se rompió al añadirlo.
+      // El limitador de verdad se prueba en security.test.ts, que levanta su PROPIA app
+      // con `buildApp({ loginRateLimitMax: 20 })` y comprueba el valor real.
+      LOGIN_RATE_LIMIT_MAX: '500',
     },
     // Las suites comparten la misma BD: en serie para que no se pisen.
     fileParallelism: false,

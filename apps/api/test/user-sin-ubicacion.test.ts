@@ -68,16 +68,29 @@ describe('un usuario sin ubicación no rompe la aplicación', () => {
     });
   }
 
-  it('no ve datos de su negocio: sin ubicación, no tiene alcance', async () => {
+  it('ve el catálogo del negocio, pero sin existencias de ninguna sucursal', async () => {
+    /*
+      Esto cambió a propósito cuando el catálogo pasó a ser del negocio.
+
+      Antes este usuario recibía una lista vacía, porque los productos se filtraban por
+      la ubicación que los había dado de alta. Ese filtro era justo el que dejaba a una
+      sucursal entera sin poder vender, así que se quitó: el catálogo es del negocio y
+      la existencia es de cada local.
+
+      Para alguien sin ubicación eso significa ver los productos y **no ver stock de
+      nadie**, que es lo correcto: no está en ningún sitio desde donde vender. Lo que
+      importaba del test original —que no reviente y que no herede existencias ajenas—
+      se sigue comprobando aquí.
+    */
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/products',
       headers: auth(sinUbicacion),
     });
     expect(res.statusCode).toBe(200);
-    // El negocio TIENE un producto; este usuario no debe verlo, pero con una lista
-    // vacía, no con un error.
-    expect(res.json().data.items ?? res.json().data).toHaveLength(0);
+    const items = res.json().data.items;
+    expect(items).toHaveLength(1);
+    expect(items[0].stock).toBeNull();
   });
 });
 

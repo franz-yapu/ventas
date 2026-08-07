@@ -51,7 +51,7 @@ export async function authRoutes(app: FastifyInstance) {
   // Límite propio, mucho más estricto que el global: es el endpoint que se ataca por
   // fuerza bruta. Se cuenta por IP; el tope deja margen de sobra a quien teclea mal.
   const loginRateLimit = {
-    rateLimit: { max: env.loginRateLimitMax, timeWindow: env.loginRateLimitWindow },
+    rateLimit: { max: app.loginRateLimitMax, timeWindow: env.loginRateLimitWindow },
   };
 
   app.post('/auth/login', { config: loginRateLimit }, async (req, reply) => {
@@ -118,12 +118,7 @@ export async function authRoutes(app: FastifyInstance) {
     };
     // El refresh deja de ser autosuficiente: lleva el id de una fila de
     // `refresh_session`, que es lo que permite cortarlo en el acto.
-    const jti = await crearSesion(
-      businessId,
-      user.id,
-      ttlRefreshMs(),
-      req.headers['user-agent'],
-    );
+    const jti = await crearSesion(businessId, user.id, ttlRefreshMs(), req.headers['user-agent']);
     const tv = await versionDeTokens(businessId, user.id);
     const accessToken = app.jwt.sign({ ...claims, typ: 'access', tv });
     const refreshToken = app.jwt.sign(
@@ -153,9 +148,9 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(400).send({ data: null, error: 'Falta refreshToken' });
     }
     try {
-      const payload = app.jwt.verify<
-        AuthUser & { typ?: string; jti?: string; tv?: number }
-      >(body.refreshToken);
+      const payload = app.jwt.verify<AuthUser & { typ?: string; jti?: string; tv?: number }>(
+        body.refreshToken,
+      );
       if (payload.typ !== 'refresh') throw new Error('token no es refresh');
 
       // La firma ya no basta. Tienen que cumplirse las tres cosas:
@@ -308,7 +303,48 @@ export async function authRoutes(app: FastifyInstance) {
         passwordChanged: !!parsed.data.newPassword,
       },
     });
-    return reply.send({ data: row, error: null });
+
+    /*
+      Cambiarse uno la contraseña echa a todos los demás dispositivos.
+
+      Faltaba, y quedaba justo al revés de lo que espera cualquiera: cuando un admin te
+      cambiaba la clave (`users.ts`), o cuando la restablecías por correo (más abajo), sí
+      se echaba a los intrusos; pero cuando te la cambiabas TÚ —que es lo que se hace
+      precisamente al sospechar que alguien entró— su refresh seguía renovando 30 días.
+
+      El detalle que lo hace utilizable: `revocarTodo` sube `token_version`, así que
+      también mataría la sesión de quien está haciendo el cambio. Por eso se emite una
+      pareja nueva y se devuelve: se va todo el mundo menos tú, que es lo que pediste.
+    */
+    let sesion: { accessToken: string; refreshToken: string } | undefined;
+    if (parsed.data.newPassword) {
+      await revocarTodo(req.authUser!.businessId, userId);
+
+      const claims: AuthUser = {
+        sub: userId,
+        businessId: req.authUser!.businessId,
+        locationId: row!.locationId,
+        isCentral: req.authUser!.isCentral,
+        role: row!.role,
+        name: row!.name,
+      };
+      const jti = await crearSesion(
+        req.authUser!.businessId,
+        userId,
+        ttlRefreshMs(),
+        req.headers['user-agent'],
+      );
+      const tv = await versionDeTokens(req.authUser!.businessId, userId);
+      sesion = {
+        accessToken: app.jwt.sign({ ...claims, typ: 'access', tv }),
+        refreshToken: app.jwt.sign(
+          { ...claims, typ: 'refresh', jti, tv },
+          { expiresIn: env.jwtRefreshTtl },
+        ),
+      };
+    }
+
+    return reply.send({ data: { ...row, ...sesion }, error: null });
   });
 
   // ── Recuperación de contraseña ───────────────────────────────
@@ -408,10 +444,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const passwordHash = await argon2.hash(parsed.data.password);
     await withTenant(fila.businessId, (tx) =>
-      tx
-        .update(schema.appUser)
-        .set({ passwordHash })
-        .where(eq(schema.appUser.id, fila.userId)),
+      tx.update(schema.appUser).set({ passwordHash }).where(eq(schema.appUser.id, fila.userId)),
     );
     await marcarUsado(fila.id);
 

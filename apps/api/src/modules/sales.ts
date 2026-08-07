@@ -141,7 +141,25 @@ export async function saleRoutes(app: FastifyInstance) {
     if (q.from) filters.push(gte(schema.sale.clientCreatedAt, new Date(q.from)));
     if (q.to) filters.push(lte(schema.sale.clientCreatedAt, new Date(q.to)));
     if (q.locationId) filters.push(eq(schema.sale.locationId, q.locationId));
-    if (q.userId) filters.push(eq(schema.sale.userId, q.userId));
+    /*
+      Filtrar por vendedor es cosa de administrar.
+
+      `?userId=` se empujaba tal cual, sin mirar quién preguntaba: bastaba con poner el id
+      del compañero para sacar sus ventas y su total. `cash.ts` ya había respondido esta
+      misma pregunta para el historial de turnos —"mirar lo propio es el trabajo, mirar lo
+      de otro es supervisar, y supervisar es del administrador"— y aquí no se aplicó.
+
+      A quien no es admin se le fuerza a sí mismo en vez de responderle 403: pedir "las
+      ventas de Fulano" desde una caja es casi siempre una pantalla mal enlazada, no un
+      ataque, y devolverle las suyas es lo que iba a hacer con ellas.
+
+      Lo que NO se toca es la lista sin filtro: un vendedor sigue viendo las ventas de su
+      ubicación, que es lo que necesita para reimprimir el recibo de un cliente al que
+      atendió el turno anterior. El local es común; el desglose por persona, no.
+    */
+    if (q.userId) {
+      filters.push(eq(schema.sale.userId, user.role === 'admin' ? q.userId : user.sub));
+    }
     if (q.status) filters.push(eq(schema.sale.status, q.status));
     const where = and(...filters);
 

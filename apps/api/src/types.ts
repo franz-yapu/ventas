@@ -31,6 +31,15 @@ declare module 'fastify' {
     platformVerify: <T = unknown>() => Promise<T>;
   }
   interface FastifyInstance {
+    /**
+     * Tope de intentos del login para ESTA instancia.
+     *
+     * Vive en la instancia y no sólo en `env` para que los tests puedan levantar una app
+     * con el tope de verdad (20) mientras el resto de la suite corre con uno alto. Sin
+     * esto, cada test que inicia sesión gastaba cupo del mismo contador global y la suite
+     * se rompía al añadir el test número veintiuno — que es exactamente lo que pasó.
+     */
+    loginRateLimitMax: number;
     requireAuth: import('fastify').preHandlerHookHandler;
     requireAdmin: import('fastify').preHandlerHookHandler;
     /** Admin de la central: acciones que afectan al negocio entero. */

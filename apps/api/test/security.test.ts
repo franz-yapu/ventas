@@ -66,7 +66,7 @@ describe('límite general de peticiones', () => {
 
 describe('límite del login (fuerza bruta)', () => {
   it('corta los intentos repetidos y responde 429', async () => {
-    const solo = await buildApp({ logger: false });
+    const solo = await buildApp({ logger: false, loginRateLimitMax: 20 });
     await solo.ready();
     try {
       const intentar = () =>
@@ -100,7 +100,7 @@ describe('límite del login (fuerza bruta)', () => {
 
   it('agotado el límite, tampoco pasa la contraseña correcta', async () => {
     // Si no fuera así, bastaría con acertar dentro de la ventana ya bloqueada.
-    const solo = await buildApp({ logger: false });
+    const solo = await buildApp({ logger: false, loginRateLimitMax: 20 });
     await solo.ready();
     try {
       for (let i = 0; i < 25; i++) {
@@ -215,7 +215,7 @@ describe('los secretos de firma son obligatorios en producción', () => {
 
 describe('los errores no cuentan de más', () => {
   it('un fallo no controlado NO filtra el mensaje interno', async () => {
-    const solo = await buildApp({ logger: false });
+    const solo = await buildApp({ logger: false, loginRateLimitMax: 20 });
     // Ruta que revienta como reventaría un error de Postgres: con detalles del esquema.
     solo.get('/boom', async () => {
       throw new Error('invalid input syntax for type uuid: "__none__" en app_user.location_id');

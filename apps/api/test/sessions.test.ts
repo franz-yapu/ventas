@@ -94,7 +94,9 @@ describe('el refresh deja de ser autosuficiente', () => {
   it('un refresh con firma válida pero SIN sesión en la base no vale', async () => {
     const s = await entrar();
     // Se borra la fila: el token sigue firmado y sin caducar, pero ya no apunta a nada.
-    await db.delete(schema.refreshSession).where(eq(schema.refreshSession.businessId, t.businessId));
+    await db
+      .delete(schema.refreshSession)
+      .where(eq(schema.refreshSession.businessId, t.businessId));
     expect((await renovar(s.refreshToken)).statusCode).toBe(401);
   });
 
@@ -257,6 +259,75 @@ describe('cerrar en todos los dispositivos', () => {
     const idsEmpleado = res.json().data.map((r: { id: string }) => r.id);
     const idsAdmin = admin.json().data.map((r: { id: string }) => r.id);
     expect(idsEmpleado.some((id: string) => idsAdmin.includes(id))).toBe(false);
+  });
+});
+
+describe('cambiarse uno la contraseña echa a los demás', () => {
+  /**
+   * El hueco que faltaba cerrar, y era el que más se usa.
+   *
+   * Cuando un admin te cambiaba la clave, o cuando la restablecías por correo, sí se
+   * echaba a quien estuviera dentro. Pero cuando te la cambiabas TÚ desde Mi perfil —que
+   * es exactamente lo que hace alguien que sospecha que otro entró con su cuenta— no se
+   * revocaba nada: el refresh del intruso seguía renovando durante 30 días.
+   */
+  it('el refresh de otro dispositivo deja de valer', async () => {
+    const movil = await entrar();
+    const caja = await entrar();
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/auth/me',
+      headers: auth(caja.accessToken),
+      payload: { currentPassword: 'secreto123', newPassword: 'nuevaclave456' },
+    });
+    expect(res.statusCode).toBe(200);
+    clearUserCache();
+
+    // El otro dispositivo se queda fuera, ahora mismo y no en 30 días.
+    expect((await renovar(movil.refreshToken)).statusCode).toBe(401);
+    expect(await usar(movil.accessToken)).toBe(401);
+  });
+
+  it('pero a quien la cambia no lo echa: recibe una sesión nueva', async () => {
+    /*
+      El detalle que hace utilizable el arreglo. `revocarTodo` sube `token_version`, así
+      que también mata la sesión de quien está haciendo el cambio; si no se devolviera
+      una pareja nueva, cambiarse la contraseña te sacaría de la aplicación en mitad de
+      una venta.
+    */
+    const caja = await entrar();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/auth/me',
+      headers: auth(caja.accessToken),
+      payload: { currentPassword: 'secreto123', newPassword: 'nuevaclave456' },
+    });
+    expect(res.statusCode).toBe(200);
+    clearUserCache();
+
+    const d = res.json().data;
+    expect(d.accessToken, 'no devolvió sesión nueva').toBeTruthy();
+    expect(d.refreshToken).toBeTruthy();
+    expect(await usar(d.accessToken)).toBe(200);
+    expect((await renovar(d.refreshToken)).statusCode).toBe(200);
+  });
+
+  it('cambiar sólo el nombre no echa a nadie', async () => {
+    // Que el remedio no se pase de largo: esto no es un cambio de credenciales.
+    const movil = await entrar();
+    const caja = await entrar();
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/auth/me',
+      headers: auth(caja.accessToken),
+      payload: { name: 'Empleado Renombrado' },
+    });
+    expect(res.statusCode).toBe(200);
+    clearUserCache();
+
+    expect((await renovar(movil.refreshToken)).statusCode).toBe(200);
   });
 });
 
