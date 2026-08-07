@@ -67,7 +67,7 @@ export function SalesPage() {
       <PageHeader
         titulo="Ventas"
         descripcion="Historial de recibos. Cancelar una venta devuelve su stock y queda registrado."
-      acciones={<Exportar seccion="ventas" filtros={{ from, to, locationId }} />}
+        acciones={<Exportar seccion="ventas" filtros={{ from, to, locationId }} />}
       />
 
       <div className="flex flex-wrap gap-2">

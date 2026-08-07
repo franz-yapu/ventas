@@ -22,13 +22,7 @@ export function CashZPage() {
     const rows: (string | number)[][] = [['Cierre de caja (lectura Z)', data.date]];
     rows.push([], ['Vendedor', 'Ubicación', 'Método de pago', 'Total', 'Ventas']);
     data.rows.forEach((r) =>
-      rows.push([
-        r.seller,
-        r.location,
-        etiquetaDePago(r.paymentMethod),
-        r.total,
-        r.count,
-      ]),
+      rows.push([r.seller, r.location, etiquetaDePago(r.paymentMethod), r.total, r.count]),
     );
     rows.push([], ['TOTAL GENERAL', data.grandTotal]);
     downloadCsv(`cierre-caja-${data.date}.csv`, rows);
@@ -104,8 +98,8 @@ export function CashZPage() {
                 </span>
               </div>
               <div className="mt-1 text-[12px] leading-[1.5] text-muted">
-                {r.location} · {etiquetaDePago(r.paymentMethod)} · {r.count}{' '}
-                venta{r.count === 1 ? '' : 's'}
+                {r.location} · {etiquetaDePago(r.paymentMethod)} · {r.count} venta
+                {r.count === 1 ? '' : 's'}
               </div>
             </div>
           ))}

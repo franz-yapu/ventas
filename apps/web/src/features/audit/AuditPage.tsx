@@ -73,7 +73,7 @@ export function AuditPage() {
       <PageHeader
         titulo="Registro de actividad"
         descripcion="Quién cambió qué y cuándo. Se escribe solo y no se puede editar."
-      acciones={<Exportar seccion="actividad" filtros={{ from, to }} />}
+        acciones={<Exportar seccion="actividad" filtros={{ from, to }} />}
       />
 
       <div className="flex flex-wrap gap-2">

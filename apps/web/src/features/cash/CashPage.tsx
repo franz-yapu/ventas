@@ -57,11 +57,11 @@ export function CashPage() {
           user?.role === 'admin' && (
             <>
               <Exportar seccion="caja" />
-            <Link to="/caja/z">
-              <Button variant="outline">
-                <FileText size={16} /> Lectura Z
-              </Button>
-            </Link>
+              <Link to="/caja/z">
+                <Button variant="outline">
+                  <FileText size={16} /> Lectura Z
+                </Button>
+              </Link>
             </>
           )
         }

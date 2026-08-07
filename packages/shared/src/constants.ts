@@ -16,7 +16,6 @@ export const CURRENCY_SYMBOL = 'Bs.';
 
 export const API_PREFIX = '/api/v1';
 
-
 /**
  * Cómo se llaman en español las formas de pago y los estados de una venta.
  *
