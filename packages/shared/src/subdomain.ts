@@ -43,12 +43,7 @@ export const SLUG_MAX = 30;
  */
 const FORMATO = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
-export type SlugError =
-  | 'corto'
-  | 'largo'
-  | 'formato'
-  | 'reservado'
-  | 'guiones';
+export type SlugError = 'corto' | 'largo' | 'formato' | 'reservado' | 'guiones';
 
 /** `null` si el slug es válido; si no, el motivo. */
 export function validarSlug(slug: string): SlugError | null {

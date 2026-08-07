@@ -5,7 +5,13 @@ import { Modal } from '@/components/ui/modal';
 const READER_ID = 'barcode-reader';
 
 /** Escáner de código de barras con la cámara del dispositivo (html5-qrcode). */
-export function BarcodeScanner({ onScan, onClose }: { onScan: (code: string) => void; onClose: () => void }) {
+export function BarcodeScanner({
+  onScan,
+  onClose,
+}: {
+  onScan: (code: string) => void;
+  onClose: () => void;
+}) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +50,9 @@ export function BarcodeScanner({ onScan, onClose }: { onScan: (code: string) => 
         {error ? (
           <p className="text-sm text-danger">{error}</p>
         ) : (
-          <p className="text-center text-sm text-muted">Apunta la cámara al código de barras del producto.</p>
+          <p className="text-center text-sm text-muted">
+            Apunta la cámara al código de barras del producto.
+          </p>
         )}
       </div>
     </Modal>

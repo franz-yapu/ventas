@@ -142,11 +142,7 @@ function NuevaClave({ id, onError }: { id: string; onError: (m: string) => void 
 
   if (!abierto) {
     return (
-      <Button
-        variant="outline"
-        className="h-8 px-2 text-[12px]"
-        onClick={() => setAbierto(true)}
-      >
+      <Button variant="outline" className="h-8 px-2 text-[12px]" onClick={() => setAbierto(true)}>
         <KeyRound size={12} /> {listo ? 'Clave cambiada' : 'Nueva clave'}
       </Button>
     );
@@ -172,13 +168,7 @@ function NuevaClave({ id, onError }: { id: string; onError: (m: string) => void 
   );
 }
 
-function FormularioAlta({
-  onListo,
-  onCancelar,
-}: {
-  onListo: () => void;
-  onCancelar: () => void;
-}) {
+function FormularioAlta({ onListo, onCancelar }: { onListo: () => void; onCancelar: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -220,8 +210,8 @@ function FormularioAlta({
         Principal — podrá crear y desactivar operadores
       </label>
       <p className="text-[12px] text-muted">
-        Pásale la contraseña por un canal aparte. Los operadores no tienen recuperación
-        por correo: si la pierde, se la cambias tú desde aquí.
+        Pásale la contraseña por un canal aparte. Los operadores no tienen recuperación por correo:
+        si la pierde, se la cambias tú desde aquí.
       </p>
       {error && <p className="text-[13px] text-danger">{error}</p>}
       <div className="flex gap-2">

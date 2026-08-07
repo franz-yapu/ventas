@@ -5,7 +5,9 @@ export default defineConfig({
   out: './migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgres://ventafacil:cambia_esto_en_produccion@localhost:5432/ventafacil',
+    url:
+      process.env.DATABASE_URL ??
+      'postgres://ventafacil:cambia_esto_en_produccion@localhost:5432/ventafacil',
   },
   casing: 'snake_case',
 });

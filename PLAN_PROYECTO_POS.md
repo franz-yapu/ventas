@@ -21,22 +21,22 @@
 
 ## 2. Stack tecnológico (decisión final)
 
-| Capa | Tecnología | Justificación |
-|---|---|---|
-| Monorepo | pnpm workspaces + Turborepo | Estándar, simple, builds incrementales |
-| Frontend | React 18 + Vite + TypeScript | Rápido, PWA fácil con vite-plugin-pwa |
-| UI | TailwindCSS + shadcn/ui | Theming con variables CSS (clave para white-label) |
-| Estado servidor | TanStack Query | Cache, reintentos, ideal para conexiones malas |
-| Offline | Dexie.js (IndexedDB) + cola de sincronización propia | Ventas offline con UUID generado en cliente |
-| Backend | Node.js + Fastify + TypeScript | Ligero y rápido |
-| ORM | Drizzle ORM | Type-safe, migraciones SQL claras |
-| Base de datos | PostgreSQL 16 | Reportes, JSON para auditoría, robustez |
-| Auth | JWT (access + refresh) con roles | Simple, sin dependencias externas |
-| Validación | Zod (compartido front/back en packages/config) | Una sola fuente de verdad |
-| Gráficos | Recharts | Dashboard y widgets |
-| PDF/Recibos | HTML + CSS @media print (térmica) y pdfmake (PDF) | Sin hardware especial en fase 1 |
-| Tests | Vitest + Playwright (e2e del flujo de venta) | El flujo de venta es crítico |
-| Deploy | Docker Compose (API + Postgres) en VPS; frontend en Cloudflare Pages | Barato, simple |
+| Capa            | Tecnología                                                           | Justificación                                      |
+| --------------- | -------------------------------------------------------------------- | -------------------------------------------------- |
+| Monorepo        | pnpm workspaces + Turborepo                                          | Estándar, simple, builds incrementales             |
+| Frontend        | React 18 + Vite + TypeScript                                         | Rápido, PWA fácil con vite-plugin-pwa              |
+| UI              | TailwindCSS + shadcn/ui                                              | Theming con variables CSS (clave para white-label) |
+| Estado servidor | TanStack Query                                                       | Cache, reintentos, ideal para conexiones malas     |
+| Offline         | Dexie.js (IndexedDB) + cola de sincronización propia                 | Ventas offline con UUID generado en cliente        |
+| Backend         | Node.js + Fastify + TypeScript                                       | Ligero y rápido                                    |
+| ORM             | Drizzle ORM                                                          | Type-safe, migraciones SQL claras                  |
+| Base de datos   | PostgreSQL 16                                                        | Reportes, JSON para auditoría, robustez            |
+| Auth            | JWT (access + refresh) con roles                                     | Simple, sin dependencias externas                  |
+| Validación      | Zod (compartido front/back en packages/config)                       | Una sola fuente de verdad                          |
+| Gráficos        | Recharts                                                             | Dashboard y widgets                                |
+| PDF/Recibos     | HTML + CSS @media print (térmica) y pdfmake (PDF)                    | Sin hardware especial en fase 1                    |
+| Tests           | Vitest + Playwright (e2e del flujo de venta)                         | El flujo de venta es crítico                       |
+| Deploy          | Docker Compose (API + Postgres) en VPS; frontend en Cloudflare Pages | Barato, simple                                     |
 
 ## 3. Estructura del monorepo
 
@@ -103,6 +103,7 @@ cash_register   (id, business_id, location_id, user_id, opened_at, closed_at nul
 ```
 
 **Decisiones clave:**
+
 - `sale.id` es UUID **generado en el dispositivo** → las ventas offline nunca colisionan al sincronizar (idempotencia: si el UUID ya existe, el servidor responde 200 sin duplicar).
 - `sale_item` guarda **snapshot** de nombre y precio → los reportes históricos no cambian si el admin edita el producto.
 - Las ventas **nunca se borran**: cancelar = `status='cancelled'` + registro en `audit_log`.
@@ -121,6 +122,7 @@ cash_register   (id, business_id, location_id, user_id, opened_at, closed_at nul
 ## 6. Fases de implementación
 
 ### Fase 0 — Fundaciones (setup)
+
 - [ ] Inicializar monorepo (pnpm + turbo), TypeScript estricto, ESLint, Prettier.
 - [ ] Docker Compose con PostgreSQL.
 - [ ] `packages/db`: esquema Drizzle completo (sección 4) + migración inicial + seed (1 negocio demo, 2 ubicaciones, admin, vendedor, 20 productos de llantas).
@@ -130,6 +132,7 @@ cash_register   (id, business_id, location_id, user_id, opened_at, closed_at nul
 - **Criterio de aceptación:** login funciona, tema se aplica desde BD, seed carga.
 
 ### Fase 1 — MVP online (núcleo de valor)
+
 - [ ] CRUD de productos con búsqueda, categorías e imagen opcional. Importación CSV simple.
 - [ ] CRUD de ubicaciones y usuarios (solo admin).
 - [ ] **Pantalla POS** (la más importante — máxima simpleza):
@@ -142,6 +145,7 @@ cash_register   (id, business_id, location_id, user_id, opened_at, closed_at nul
 - **Criterio de aceptación:** flujo completo venta→recibo→reporte funciona; test e2e Playwright del flujo de venta pasa.
 
 ### Fase 2 — Offline y PWA
+
 - [ ] vite-plugin-pwa: instalable, precache de la app.
 - [ ] Dexie: catálogo local + cola de ventas pendientes.
 - [ ] Worker de sincronización con reintentos e idempotencia por UUID.
@@ -150,17 +154,20 @@ cash_register   (id, business_id, location_id, user_id, opened_at, closed_at nul
 - **Criterio de aceptación:** simular offline en DevTools → registrar 3 ventas → imprimir recibos → reconectar → las 3 aparecen en el servidor sin duplicados.
 
 ### Fase 3 — Auditoría completa
+
 - [ ] Auditar: crear/editar/eliminar producto, cambio de precio (before/after), venta, cancelación, login, cambio de usuario, cambio de tema.
 - [ ] Pantalla "Registro de actividad" para admin: filtros por usuario, acción, fecha, ubicación; detalle con diff before/after.
 - **Criterio de aceptación:** cambiar un precio y verlo en el log con valor anterior y nuevo.
 
 ### Fase 4 — White-label (customización)
+
 - [ ] Pantalla de configuración (admin): subir logo, elegir colores (primario/secundario), editar textos (nombre de app, pie de recibo, moneda, tasa de impuesto).
 - [ ] El recibo usa logo y textos del negocio.
 - [ ] Script CLI `pnpm new-tenant` que crea un negocio nuevo con su admin (para onboarding de nuevos clientes en minutos).
 - **Criterio de aceptación:** crear un segundo negocio "Ferretería Demo" con otros colores/logo y verificar aislamiento total de datos.
 
 ### Fase 5 — Reportes avanzados y dashboard con widgets
+
 - [ ] **Dashboard modular por widgets** (arquitectura de crecimiento a la derecha):
   - Cada widget es un componente autocontenido registrado en un `widgetRegistry` (id, título, componente, endpoint, tamaño).
   - El admin activa/desactiva y reordena widgets; layout persistido por usuario en BD (`user_dashboard_config`).
@@ -171,6 +178,7 @@ cash_register   (id, business_id, location_id, user_id, opened_at, closed_at nul
 - **Criterio de aceptación:** agregar un widget nuevo requiere solo crear el componente y registrarlo (sin tocar el layout).
 
 ### Fase 6 — Extras según demanda (backlog)
+
 - Control de stock con descuento automático al vender + alertas de stock mínimo + transferencias entre ubicaciones.
 - Escáner de código de barras (cámara del celular con `html5-qrcode`).
 - Descuentos y promociones.

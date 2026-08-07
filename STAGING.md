@@ -5,13 +5,13 @@ restauraciones de backup **sin acercarse a producción**. Todo corre en la máqu
 
 Aparece en Portainer como el stack **`ventafacil-staging`**.
 
-| | Desarrollo (`pnpm dev`) | Staging (Docker) | Producción (VPS) |
-|---|---|---|---|
-| API | `localhost:3000` | `localhost:3100` | `vertexweb.lat` |
-| Postgres | `localhost:5434` | `localhost:5435` | interno |
-| `NODE_ENV` | development | **production** | production |
-| RLS | apagado | **activo** | pendiente |
-| Usuario del API | `ventafacil` (superusuario) | **`ventafacil_app`** (sin privilegios) | pendiente |
+|                 | Desarrollo (`pnpm dev`)     | Staging (Docker)                       | Producción (VPS) |
+| --------------- | --------------------------- | -------------------------------------- | ---------------- |
+| API             | `localhost:3000`            | `localhost:3100`                       | `vertexweb.lat`  |
+| Postgres        | `localhost:5434`            | `localhost:5435`                       | interno          |
+| `NODE_ENV`      | development                 | **production**                         | production       |
+| RLS             | apagado                     | **activo**                             | pendiente        |
+| Usuario del API | `ventafacil` (superusuario) | **`ventafacil_app`** (sin privilegios) | pendiente        |
 
 Los puertos son distintos a los de desarrollo a propósito: los dos stacks conviven sin
 pisarse.
@@ -38,7 +38,7 @@ Es la pieza central, y la razón de que este entorno exista:
 - **`ventafacil_app`** (sin privilegios) — con este corre el API.
 
 **Postgres ignora RLS para superusuarios y para el dueño de las tablas.** Si el API se
-conectara con el dueño, las políticas quedarían de adorno y todo *parecería* correcto.
+conectara con el dueño, las políticas quedarían de adorno y todo _parecería_ correcto.
 Por eso `DATABASE_URL` apunta al rol de aplicación y `OWNER_DATABASE_URL` al dueño.
 
 Comprobado en este entorno: el rol de la app no puede escribir sin fijar el negocio.
@@ -53,10 +53,10 @@ ERROR:  new row violates row-level security policy for table "location"
 Cada negocio entra por **su propia dirección** y nunca ve que la plataforma es
 compartida — nada de pedirle un "código de negocio" al iniciar sesión.
 
-| Negocio | En staging | En producción |
-|---|---|---|
+| Negocio           | En staging                         | En producción                     |
+| ----------------- | ---------------------------------- | --------------------------------- |
 | Llantas El Rapido | `llantas-el-rapido.localhost:5174` | `llantas-el-rapido.vertexweb.lat` |
-| Ferretería | `ferre-dos.localhost:5175` | `ferre-dos.vertexweb.lat` |
+| Ferretería        | `ferre-dos.localhost:5175`         | `ferre-dos.vertexweb.lat`         |
 
 `*.localhost` resuelve solo en los navegadores modernos, así que en local se prueba
 igual que en producción, sin tocar `/etc/hosts`.

@@ -11,7 +11,9 @@ export function useInfiniteList<T>(key: unknown[], path: string, limit = 30) {
     queryKey: [...key, 'infinite'],
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
-      api.get<Paginated<T>>(`${path}${path.includes('?') ? '&' : '?'}page=${pageParam}&limit=${limit}`),
+      api.get<Paginated<T>>(
+        `${path}${path.includes('?') ? '&' : '?'}page=${pageParam}&limit=${limit}`,
+      ),
     getNextPageParam: (last) => (last.page * last.limit < last.total ? last.page + 1 : undefined),
   });
 

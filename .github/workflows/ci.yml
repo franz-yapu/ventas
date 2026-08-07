@@ -8,12 +8,13 @@
 # se pueden simular con un doble— así que se levanta uno como servicio. El global-setup
 # de los tests crea y borra la base `ventafacil_test` en cada corrida.
 #
-# NO hay comprobación de formato: hoy 88 archivos no pasan `prettier --check`, y añadir
-# un paso que falla desde el primer día sólo enseña a ignorar el CI. Formatear el repo
-# entero es una limpieza aparte —un commit grande que no debe mezclarse con cambios de
-# verdad—; cuando se haga, este paso son dos líneas:
-#   - name: Formato
-#     run: pnpm exec prettier --check "**/*.{ts,tsx}"
+# El paso de formato SÍ está, desde el 7 de agosto de 2026.
+#
+# Durante meses no estuvo, y por un buen motivo: 88 archivos no pasaban
+# `prettier --check`, y un paso que falla desde el primer día sólo enseña a ignorar el CI.
+# La condición para activarlo era formatear el repo entero en un commit aparte, sin
+# mezclarlo con cambios de verdad. Eso ya se hizo, así que la razón para no tenerlo
+# desapareció.
 name: CI
 
 on:
@@ -83,6 +84,10 @@ jobs:
       # puede accionar sólo enseña a saltarse el paso.
       - name: Dependencias vulnerables
         run: pnpm audit --prod --audit-level high
+
+      # Barato y sin criterio: nadie discute una coma con el CI.
+      - name: Formato
+        run: pnpm exec prettier --check "apps/**/*.{ts,tsx}" "packages/**/*.ts" "*.{json,md}" "docs/*.md"
 
       - name: Tipos
         run: pnpm typecheck

@@ -176,25 +176,28 @@ export async function analyticsRoutes(app: FastifyInstance) {
    * NO depende del plan, a diferencia del panel: es el cierre de caja, parte del POS, y
    * ningún plan puede quedarse sin él.
    */
-  app.get('/reports/cash-z', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
-    const q = z
-      .object({ date: z.string().optional(), locationId: z.string().uuid().optional() })
-      .safeParse(req.query);
-    if (!q.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
-    const businessId = req.authUser!.businessId;
-    const date = q.data.date ?? new Date().toISOString().slice(0, 10);
-    // La sucursal queda fijada a su ubicación; la central puede filtrar por una (o ver todas).
-    const scope = viewScope(req.authUser!);
-    const effLocation = scope !== undefined ? scope : q.data.locationId;
+  app.get(
+    '/reports/cash-z',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const q = z
+        .object({ date: z.string().optional(), locationId: z.string().uuid().optional() })
+        .safeParse(req.query);
+      if (!q.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
+      const businessId = req.authUser!.businessId;
+      const date = q.data.date ?? new Date().toISOString().slice(0, 10);
+      // La sucursal queda fijada a su ubicación; la central puede filtrar por una (o ver todas).
+      const scope = viewScope(req.authUser!);
+      const effLocation = scope !== undefined ? scope : q.data.locationId;
 
-    const rows = await withTenant(businessId, (tx) =>
-      tx.execute<{
-        seller: string;
-        location: string;
-        payment_method: string;
-        total: string;
-        count: number;
-      }>(sql`
+      const rows = await withTenant(businessId, (tx) =>
+        tx.execute<{
+          seller: string;
+          location: string;
+          payment_method: string;
+          total: string;
+          count: number;
+        }>(sql`
       SELECT u.name AS seller, l.name AS location, s.payment_method, SUM(s.total) AS total, COUNT(*)::int AS count
       FROM sale s JOIN app_user u ON u.id = s.user_id JOIN location l ON l.id = s.location_id
       WHERE s.business_id = ${businessId} AND s.status = 'completed'
@@ -203,22 +206,23 @@ export async function analyticsRoutes(app: FastifyInstance) {
       GROUP BY u.name, l.name, s.payment_method
       ORDER BY u.name, l.name, s.payment_method
     `),
-    );
+      );
 
-    const grand = rows.reduce((a, r) => a + Number(r.total), 0);
-    return reply.send({
-      data: {
-        date,
-        rows: rows.map((r) => ({
-          seller: r.seller,
-          location: r.location,
-          paymentMethod: r.payment_method,
-          total: String(r.total),
-          count: Number(r.count),
-        })),
-        grandTotal: grand.toFixed(2),
-      },
-      error: null,
-    });
-  });
+      const grand = rows.reduce((a, r) => a + Number(r.total), 0);
+      return reply.send({
+        data: {
+          date,
+          rows: rows.map((r) => ({
+            seller: r.seller,
+            location: r.location,
+            paymentMethod: r.payment_method,
+            total: String(r.total),
+            count: Number(r.count),
+          })),
+          grandTotal: grand.toFixed(2),
+        },
+        error: null,
+      });
+    },
+  );
 }

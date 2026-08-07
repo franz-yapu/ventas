@@ -88,7 +88,7 @@ confirmarlo antes de tocar nada.
 - [ ] **1.2 ⏳ Comprobar las filas de inventario huérfanas EN PRODUCCIÓN.** En local ya están
       a 0, comprobado al cerrar la sesión. Falta mirarlo en el VPS antes de dar el arreglo
       por cerrado del todo: `select … from inventory i left join location l on l.id = i.location_id
-    where l.business_id is distinct from i.business_id`.
+where l.business_id is distinct from i.business_id`.
 
 ---
 
@@ -177,7 +177,7 @@ confirmarlo antes de tocar nada.
 - [ ] **4.1 ✓ Arreglar `scripts/gen-api-docs.mjs`: pierde 9 de las 74 rutas reales.**
       `docs/API.md` documenta 65 y **regenerarlo no produce ninguna diferencia**, así que nada
       lo delata. Faltan casi todas las de administración de operadores: `GET`/`POST
-    /platform/admins`, `PATCH /platform/admins/:id`, `PATCH /platform/me`,
+/platform/admins`, `PATCH /platform/admins/:id`, `PATCH /platform/me`,
       `/platform/me/password`, `/platform/tenants/:id/users`, el rescate de contraseña y
       `PATCH /platform/tenants/:id`. Se pierden al aplanar el árbol radix de Fastify
       (`aplanar()`, la reconstrucción por niveles).

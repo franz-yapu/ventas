@@ -55,10 +55,7 @@ async function leerVigencia(businessId: string, userId: string): Promise<Vigenci
   return { existe: true, isActive: row.isActive, tokenVersion: row.tokenVersion };
 }
 
-export async function vigenciaDelUsuario(
-  businessId: string,
-  userId: string,
-): Promise<Vigencia> {
+export async function vigenciaDelUsuario(businessId: string, userId: string): Promise<Vigencia> {
   const hit = cache.get(userId);
   if (hit && hit.expiresAt > Date.now()) return hit.value;
   const value = await leerVigencia(businessId, userId);
@@ -139,9 +136,7 @@ export async function revocarSesion(businessId: string, jti: string) {
     tx
       .update(schema.refreshSession)
       .set({ revokedAt: new Date() })
-      .where(
-        and(eq(schema.refreshSession.id, jti), isNull(schema.refreshSession.revokedAt)),
-      ),
+      .where(and(eq(schema.refreshSession.id, jti), isNull(schema.refreshSession.revokedAt))),
   );
 }
 
@@ -158,10 +153,7 @@ export async function revocarTodo(businessId: string, userId: string) {
       .update(schema.refreshSession)
       .set({ revokedAt: new Date() })
       .where(
-        and(
-          eq(schema.refreshSession.userId, userId),
-          isNull(schema.refreshSession.revokedAt),
-        ),
+        and(eq(schema.refreshSession.userId, userId), isNull(schema.refreshSession.revokedAt)),
       );
     await tx
       .update(schema.appUser)
@@ -184,10 +176,7 @@ export async function sesionesDe(businessId: string, userId: string) {
       })
       .from(schema.refreshSession)
       .where(
-        and(
-          eq(schema.refreshSession.userId, userId),
-          isNull(schema.refreshSession.revokedAt),
-        ),
+        and(eq(schema.refreshSession.userId, userId), isNull(schema.refreshSession.revokedAt)),
       ),
   );
 }

@@ -73,10 +73,7 @@ export interface TokenValido {
  * `null` para los tres casos, porque distinguirlos por fuera no ayuda a nadie salvo a
  * quien esté probando tokens.
  */
-export async function buscarToken(
-  token: string,
-  purpose: Purpose,
-): Promise<TokenValido | null> {
+export async function buscarToken(token: string, purpose: Purpose): Promise<TokenValido | null> {
   const [fila] = await db
     .select({
       id: schema.authToken.id,
@@ -98,10 +95,7 @@ export async function buscarToken(
 
 /** Marca el token como gastado. Se llama DENTRO de la operación que lo consume. */
 export async function marcarUsado(id: string): Promise<void> {
-  await db
-    .update(schema.authToken)
-    .set({ usedAt: new Date() })
-    .where(eq(schema.authToken.id, id));
+  await db.update(schema.authToken).set({ usedAt: new Date() }).where(eq(schema.authToken.id, id));
 }
 
 /**
@@ -115,7 +109,10 @@ export async function limpiarTokensViejos(): Promise<void> {
     .where(
       or(
         lt(schema.authToken.expiresAt, hace30dias),
-        and(eq(schema.authToken.purpose, 'password_reset'), lt(schema.authToken.createdAt, hace30dias)),
+        and(
+          eq(schema.authToken.purpose, 'password_reset'),
+          lt(schema.authToken.createdAt, hace30dias),
+        ),
       ),
     );
 }

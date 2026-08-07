@@ -2,14 +2,14 @@
 
 Sistema de **punto de venta multi-tenant, multi-sucursal, offline-first y white-label**.
 
-| Capa | Tecnología |
-|------|-----------|
-| Frontend | React 18 + Vite + TanStack Query + TailwindCSS (PWA) |
-| Offline | Dexie.js (IndexedDB) + cola de sync propia |
-| Backend | Node.js + Fastify + TypeScript |
-| ORM / BD | Drizzle ORM + PostgreSQL 16 |
-| Auth | JWT (access + refresh) con argon2 |
-| Validación | Zod compartido front/back (`packages/shared`) |
+| Capa       | Tecnología                                           |
+| ---------- | ---------------------------------------------------- |
+| Frontend   | React 18 + Vite + TanStack Query + TailwindCSS (PWA) |
+| Offline    | Dexie.js (IndexedDB) + cola de sync propia           |
+| Backend    | Node.js + Fastify + TypeScript                       |
+| ORM / BD   | Drizzle ORM + PostgreSQL 16                          |
+| Auth       | JWT (access + refresh) con argon2                    |
+| Validación | Zod compartido front/back (`packages/shared`)        |
 
 Todas las respuestas de la API usan el formato `{ data, error }` bajo el prefijo `/api/v1`.
 
@@ -19,10 +19,10 @@ Todas las respuestas de la API usan el formato `{ data, error }` bajo el prefijo
 
 Solo existen **dos roles** (`packages/shared/src/constants.ts`):
 
-| Rol | Quién es | Qué puede hacer |
-|-----|----------|-----------------|
-| **`admin`** | El dueño | Todo: crear/editar/cancelar (productos, categorías, ubicaciones, usuarios, inventario), cancelar ventas, editar el negocio, ver reportes/panel/caja/auditoría. |
-| **`seller`** (vendedor) | Trabajador de mostrador | Solo operar: registrar ventas, ver productos/inventario, gestionar clientes/abonos, configurar su propio dashboard. |
+| Rol                     | Quién es                | Qué puede hacer                                                                                                                                                |
+| ----------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`admin`**             | El dueño                | Todo: crear/editar/cancelar (productos, categorías, ubicaciones, usuarios, inventario), cancelar ventas, editar el negocio, ver reportes/panel/caja/auditoría. |
+| **`seller`** (vendedor) | Trabajador de mostrador | Solo operar: registrar ventas, ver productos/inventario, gestionar clientes/abonos, configurar su propio dashboard.                                            |
 
 **Dimensión ortogonal de ubicación** (viaja en el JWT como `isCentral`):
 
@@ -32,6 +32,7 @@ Solo existen **dos roles** (`packages/shared/src/constants.ts`):
 → 4 combinaciones efectivas: admin-central, admin-sucursal, seller-central, seller-sucursal.
 
 **Dos capas de permisos:**
+
 - **Rol** → guards `requireAuth` / `requireAdmin` (backend) + rutas `adminOnly` y menús (frontend).
 - **Ubicación** → funciones "scope" (`lib/scope.ts`): `viewScope` (qué ve), `canActOnLocation` (dónde escribe), `canAdjustInventory`. El backend devuelve flags por fila (`canManage`, `canAdjust`) para que la UI muestre solo los botones permitidos.
 
@@ -40,6 +41,7 @@ Solo existen **dos roles** (`packages/shared/src/constants.ts`):
 ## 2. Autenticación
 
 **Flujo:**
+
 1. `POST /auth/login` (usuario + contraseña) → verifica con **argon2** → emite **access token (15 min)** + **refresh token (30 días)**. Rol y ubicación salen del token, nunca del formulario. Audita `login`.
 2. Front guarda tokens en `localStorage` (`vf_access`/`vf_refresh`) y rehidrata con `GET /auth/me`.
 3. **Refresh automático**: ante `401`, la capa HTTP llama `POST /auth/refresh` una vez y reintenta.
@@ -49,17 +51,17 @@ Solo existen **dos roles** (`packages/shared/src/constants.ts`):
 
 **Campos del usuario** (tabla `app_user`):
 
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| `id` | uuid | PK |
-| `businessId` | uuid | tenant |
-| `locationId` | uuid? | ubicación asignada (null = sin ubicación) |
-| `name` | text | nombre visible |
-| `username` | text | único por negocio |
-| `passwordHash` | text | argon2 (nunca se expone) |
-| `role` | enum | `admin` \| `seller` (default `seller`) |
-| `isActive` | bool | default true |
-| `createdAt` | timestamp | |
+| Campo          | Tipo      | Notas                                     |
+| -------------- | --------- | ----------------------------------------- |
+| `id`           | uuid      | PK                                        |
+| `businessId`   | uuid      | tenant                                    |
+| `locationId`   | uuid?     | ubicación asignada (null = sin ubicación) |
+| `name`         | text      | nombre visible                            |
+| `username`     | text      | único por negocio                         |
+| `passwordHash` | text      | argon2 (nunca se expone)                  |
+| `role`         | enum      | `admin` \| `seller` (default `seller`)    |
+| `isActive`     | bool      | default true                              |
+| `createdAt`    | timestamp |                                           |
 
 **Claims del JWT:** `sub` (userId), `businessId`, `locationId`, `isCentral`, `role`, `name`, `typ` (`access`/`refresh`).
 
@@ -71,19 +73,19 @@ Solo existen **dos roles** (`packages/shared/src/constants.ts`):
 
 Menú/protección en `Layout.tsx` / `App.tsx`. Desktop: nav lateral; móvil: nav inferior.
 
-| Sección | Ruta | Vendedor | Admin |
-|---------|------|:---:|:---:|
-| Vender (POS) | `/` | ✅ | ✅ |
-| Ventas (historial) | `/ventas` | ✅ | ✅ |
-| Productos | `/productos` | ✅ solo ver | ✅ CRUD |
-| Inventario | `/inventario` | ✅ solo ver | ✅ ajustar/transferir |
-| Panel (dashboard) | `/panel` | ❌ | ✅ |
-| Reportes | `/reportes` | ❌ | ✅ |
-| Caja (corte Z) | `/caja` | ❌ | ✅ |
-| Ubicaciones | `/ubicaciones` | ❌ | ✅ |
-| Usuarios | `/usuarios` | ❌ | ✅ |
-| Actividad (auditoría) | `/actividad` | ❌ | ✅ |
-| Configuración | `/configuracion` | ❌ | ✅ |
+| Sección               | Ruta             |  Vendedor   |         Admin         |
+| --------------------- | ---------------- | :---------: | :-------------------: |
+| Vender (POS)          | `/`              |     ✅      |          ✅           |
+| Ventas (historial)    | `/ventas`        |     ✅      |          ✅           |
+| Productos             | `/productos`     | ✅ solo ver |        ✅ CRUD        |
+| Inventario            | `/inventario`    | ✅ solo ver | ✅ ajustar/transferir |
+| Panel (dashboard)     | `/panel`         |     ❌      |          ✅           |
+| Reportes              | `/reportes`      |     ❌      |          ✅           |
+| Caja (corte Z)        | `/caja`          |     ❌      |          ✅           |
+| Ubicaciones           | `/ubicaciones`   |     ❌      |          ✅           |
+| Usuarios              | `/usuarios`      |     ❌      |          ✅           |
+| Actividad (auditoría) | `/actividad`     |     ❌      |          ✅           |
+| Configuración         | `/configuracion` |     ❌      |          ✅           |
 
 ---
 
@@ -92,10 +94,11 @@ Menú/protección en `Layout.tsx` / `App.tsx`. Desktop: nav lateral; móvil: nav
 Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB) a la izquierda, carrito a la derecha.
 
 **Flujo de venta:**
+
 1. Busca por nombre/SKU **o** escanea código de barras (cámara).
 2. Toca productos → carrito; ajusta cantidades con +/−. Stock pintado verde/ámbar/rojo (agotado = bloqueado).
 3. Elige método de pago (efectivo, tarjeta, QR, transferencia — **el fiado no está disponible en POS offline**).
-4. *(Solo online)* asigna/crea comprador y aplica descuento en Bs.
+4. _(Solo online)_ asigna/crea comprador y aplica descuento en Bs.
 5. **COBRAR**: genera **UUID en el cliente**, **encola en IndexedDB primero** (nunca se pierde) y muestra **recibo provisional** (`PROV-xxxx`) al instante. Con conexión sincroniza y trae el correlativo real.
 6. Imprime recibo térmico 80 mm o inicia nueva venta.
 
@@ -113,19 +116,19 @@ Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB
 
 **Campos de la venta** (tabla `sale`):
 
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| `id` | uuid | **generado en el cliente** (idempotencia offline) |
-| `businessId` / `locationId` | uuid | tenant / sucursal |
-| `customerId` | uuid? | comprador (opcional) |
-| `userId` | uuid | vendedor (del token) |
-| `status` | enum | `completed` \| `cancelled` |
-| `subtotal` / `discount` / `total` | numeric | montos |
-| `paymentMethod` | enum | `cash` `card` `qr` `transfer` `credit` |
-| `receiptNumber` | int? | correlativo asignado por el **servidor** al sincronizar |
-| `clientCreatedAt` | timestamp | fecha real de la venta (cliente) |
-| `syncedAt` | timestamp | fecha de sincronización |
-| `cancelledReason` / `cancelledBy` | text / uuid | anulación |
+| Campo                             | Tipo        | Notas                                                   |
+| --------------------------------- | ----------- | ------------------------------------------------------- |
+| `id`                              | uuid        | **generado en el cliente** (idempotencia offline)       |
+| `businessId` / `locationId`       | uuid        | tenant / sucursal                                       |
+| `customerId`                      | uuid?       | comprador (opcional)                                    |
+| `userId`                          | uuid        | vendedor (del token)                                    |
+| `status`                          | enum        | `completed` \| `cancelled`                              |
+| `subtotal` / `discount` / `total` | numeric     | montos                                                  |
+| `paymentMethod`                   | enum        | `cash` `card` `qr` `transfer` `credit`                  |
+| `receiptNumber`                   | int?        | correlativo asignado por el **servidor** al sincronizar |
+| `clientCreatedAt`                 | timestamp   | fecha real de la venta (cliente)                        |
+| `syncedAt`                        | timestamp   | fecha de sincronización                                 |
+| `cancelledReason` / `cancelledBy` | text / uuid | anulación                                               |
 
 **Campos de cada línea** (tabla `sale_item`): `productId?`, `productNameSnapshot`, `unitPriceSnapshot`, `unitCostSnapshot` (costo congelado → ganancia histórica correcta), `quantity`, `lineTotal`.
 
@@ -139,23 +142,23 @@ Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB
 
 **Campos del producto** (tabla `product`):
 
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| `id` | uuid | PK |
-| `businessId` | uuid | tenant |
-| `locationId` | uuid? | ubicación dueña del producto |
-| `sku` | text | único por negocio |
-| `barcode` | text? | código de barras (escáner) |
-| `name` | text | |
-| `description` | text? | |
-| `categoryId` | uuid? | categoría |
-| `price` | numeric | precio de venta |
-| `cost` | numeric? | compra **unitario** (para ganancia) |
-| `costWholesale` | numeric? | compra **por mayor** (informativo) |
-| `imageUrl` | text? | |
-| `attributes` | jsonb | **campos custom por rubro** (llantas: medida; repuestos: OEM) definidos en `business.productSchemaJson` |
-| `isActive` | bool | |
-| `createdAt` / `updatedAt` | timestamp | |
+| Campo                     | Tipo      | Notas                                                                                                   |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------------------- |
+| `id`                      | uuid      | PK                                                                                                      |
+| `businessId`              | uuid      | tenant                                                                                                  |
+| `locationId`              | uuid?     | ubicación dueña del producto                                                                            |
+| `sku`                     | text      | único por negocio                                                                                       |
+| `barcode`                 | text?     | código de barras (escáner)                                                                              |
+| `name`                    | text      |                                                                                                         |
+| `description`             | text?     |                                                                                                         |
+| `categoryId`              | uuid?     | categoría                                                                                               |
+| `price`                   | numeric   | precio de venta                                                                                         |
+| `cost`                    | numeric?  | compra **unitario** (para ganancia)                                                                     |
+| `costWholesale`           | numeric?  | compra **por mayor** (informativo)                                                                      |
+| `imageUrl`                | text?     |                                                                                                         |
+| `attributes`              | jsonb     | **campos custom por rubro** (llantas: medida; repuestos: OEM) definidos en `business.productSchemaJson` |
+| `isActive`                | bool      |                                                                                                         |
+| `createdAt` / `updatedAt` | timestamp |                                                                                                         |
 
 **Endpoints:** `GET /products`, `GET /products/:id/history`, `POST /products`, `PATCH /products/:id`, `POST /products/import`.
 
@@ -167,15 +170,15 @@ Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB
 
 **Campos** (tabla `inventory`):
 
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| `id` | uuid | PK |
-| `businessId` | uuid | tenant |
-| `productId` | uuid | producto |
-| `locationId` | uuid | ubicación |
-| `quantity` | int | stock actual (default 0) |
-| `minStock` | int? | umbral de alerta |
-| — | — | único por (producto, ubicación) |
+| Campo        | Tipo | Notas                           |
+| ------------ | ---- | ------------------------------- |
+| `id`         | uuid | PK                              |
+| `businessId` | uuid | tenant                          |
+| `productId`  | uuid | producto                        |
+| `locationId` | uuid | ubicación                       |
+| `quantity`   | int  | stock actual (default 0)        |
+| `minStock`   | int? | umbral de alerta                |
+| —            | —    | único por (producto, ubicación) |
 
 **Endpoints:** `GET /inventory`, `PATCH /inventory/:id`, `POST /inventory/transfer`.
 
@@ -247,17 +250,17 @@ Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB
 
 **Campos** (tabla `business`):
 
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| `id` | uuid | PK (tenant) |
-| `name` | text | nombre del negocio |
-| `logoUrl` | text? | logo (data URI PNG) |
-| `themeJson` | jsonb | `{ primary, secondary, radius }` |
-| `textsJson` | jsonb | `{ app_name, receipt_footer }` |
-| `productSchemaJson` | jsonb | campos custom que muestra la UI por rubro |
-| `currency` | text | default `BOB` |
-| `taxRate` | numeric | tasa de impuesto |
-| `createdAt` | timestamp | |
+| Campo               | Tipo      | Notas                                     |
+| ------------------- | --------- | ----------------------------------------- |
+| `id`                | uuid      | PK (tenant)                               |
+| `name`              | text      | nombre del negocio                        |
+| `logoUrl`           | text?     | logo (data URI PNG)                       |
+| `themeJson`         | jsonb     | `{ primary, secondary, radius }`          |
+| `textsJson`         | jsonb     | `{ app_name, receipt_footer }`            |
+| `productSchemaJson` | jsonb     | campos custom que muestra la UI por rubro |
+| `currency`          | text      | default `BOB`                             |
+| `taxRate`           | numeric   | tasa de impuesto                          |
+| `createdAt`         | timestamp |                                           |
 
 Contador de recibos (tabla `business_counter`): `businessId` (PK), `lastReceiptNumber` (correlativo atómico por negocio).
 
@@ -306,12 +309,12 @@ Contador de recibos (tabla `business_counter`): `businessId` (PK), `lastReceiptN
 
 ## Anexo — Enums del sistema
 
-| Enum | Valores |
-|------|---------|
-| `role` | `admin`, `seller` |
-| `sale_status` | `completed`, `cancelled` |
-| `payment_method` | `cash`, `card`, `qr`, `transfer`, `credit` (fiado) |
-| `sync_status` (offline) | `pending`, `synced`, `error` |
+| Enum                    | Valores                                            |
+| ----------------------- | -------------------------------------------------- |
+| `role`                  | `admin`, `seller`                                  |
+| `sale_status`           | `completed`, `cancelled`                           |
+| `payment_method`        | `cash`, `card`, `qr`, `transfer`, `credit` (fiado) |
+| `sync_status` (offline) | `pending`, `synced`, `error`                       |
 
 Moneda por defecto: **BOB** (`Bs.`) · Zona horaria: **America/La_Paz**
 </content>

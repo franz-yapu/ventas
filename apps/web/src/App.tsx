@@ -125,10 +125,38 @@ export function App() {
             )
           }
         />
-        <Route path="/ventas" element={<Protected><SalesPage /></Protected>} />
-        <Route path="/productos" element={<Protected><ProductsPage /></Protected>} />
-        <Route path="/inventario" element={<Protected><InventoryPage /></Protected>} />
-        <Route path="/perfil" element={<Protected><ProfilePage /></Protected>} />
+        <Route
+          path="/ventas"
+          element={
+            <Protected>
+              <SalesPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/productos"
+          element={
+            <Protected>
+              <ProductsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/inventario"
+          element={
+            <Protected>
+              <InventoryPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/perfil"
+          element={
+            <Protected>
+              <ProfilePage />
+            </Protected>
+          }
+        />
         <Route
           path="/panel"
           element={
@@ -149,9 +177,30 @@ export function App() {
             </Protected>
           }
         />
-        <Route path="/caja" element={<Protected><CashPage /></Protected>} />
-        <Route path="/caja/z" element={<Protected adminOnly><CashZPage /></Protected>} />
-        <Route path="/administracion" element={<Protected adminOnly><AdminPage /></Protected>} />
+        <Route
+          path="/caja"
+          element={
+            <Protected>
+              <CashPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/caja/z"
+          element={
+            <Protected adminOnly>
+              <CashZPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/administracion"
+          element={
+            <Protected adminOnly>
+              <AdminPage />
+            </Protected>
+          }
+        />
         <Route
           path="/ubicaciones"
           element={
@@ -160,7 +209,14 @@ export function App() {
             </Protected>
           }
         />
-        <Route path="/usuarios" element={<Protected adminOnly><UsersPage /></Protected>} />
+        <Route
+          path="/usuarios"
+          element={
+            <Protected adminOnly>
+              <UsersPage />
+            </Protected>
+          }
+        />
         <Route
           path="/actividad"
           element={
@@ -177,7 +233,14 @@ export function App() {
             </Protected>
           }
         />
-        <Route path="/suscripcion" element={<Protected adminOnly><SubscriptionPage /></Protected>} />
+        <Route
+          path="/suscripcion"
+          element={
+            <Protected adminOnly>
+              <SubscriptionPage />
+            </Protected>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ThemeProvider>

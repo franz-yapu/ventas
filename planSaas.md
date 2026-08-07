@@ -1,6 +1,6 @@
 # VentaFácil — Plan para construir el SaaS
 
-> **Ordenado por prioridad.** El orden de este documento *es* el orden de trabajo: se
+> **Ordenado por prioridad.** El orden de este documento _es_ el orden de trabajo: se
 > empieza arriba y se baja. Dentro de cada bloque, los ítems también van en orden.
 >
 > Verificado contra el código real (revisión del 3 de agosto de 2026). Cada afirmación
@@ -14,20 +14,20 @@
 
 ## Estado a 4 de agosto de 2026
 
-| | Tarea | Estado |
-|---|---|---|
-| 🔴 | #1 Red de seguridad | 🟡 Hecho en local · falta el VPS |
-| 🔴 | #2 Endurecer producción | ✅ Hecho |
-| 🔴 | #3 Aislamiento (RLS) | 🟡 Código listo y probado · falta activarlo en el VPS |
-| 🟠 | #4 Definir el precio | ✅ Por negocio, 3 planes + prueba de 14 días |
-| 🟠 | #5 Suscripciones | ✅ Hecho |
-| 🟠 | #6 Registro self-service | ✅ Hecho (falta sólo el wizard, aplazado) |
-| 🟠 | #7 Panel super-admin | ✅ Hecho |
-| 🟠 | #9 Caja / arqueo | ✅ Hecho |
-| 🟠 | #8 Revocación de sesiones | ✅ Hecho |
-| 🟠 | #10 Legales | 🟡 Escrito · falta revisión de un abogado |
-| 🔵 | #12 Operación | ✅ Hecho en local (falta el monitor de uptime) |
-| 🔵 | #11, #13, #14 Escala | ⬜ Pendiente |
+|     | Tarea                     | Estado                                                |
+| --- | ------------------------- | ----------------------------------------------------- |
+| 🔴  | #1 Red de seguridad       | 🟡 Hecho en local · falta el VPS                      |
+| 🔴  | #2 Endurecer producción   | ✅ Hecho                                              |
+| 🔴  | #3 Aislamiento (RLS)      | 🟡 Código listo y probado · falta activarlo en el VPS |
+| 🟠  | #4 Definir el precio      | ✅ Por negocio, 3 planes + prueba de 14 días          |
+| 🟠  | #5 Suscripciones          | ✅ Hecho                                              |
+| 🟠  | #6 Registro self-service  | ✅ Hecho (falta sólo el wizard, aplazado)             |
+| 🟠  | #7 Panel super-admin      | ✅ Hecho                                              |
+| 🟠  | #9 Caja / arqueo          | ✅ Hecho                                              |
+| 🟠  | #8 Revocación de sesiones | ✅ Hecho                                              |
+| 🟠  | #10 Legales               | 🟡 Escrito · falta revisión de un abogado             |
+| 🔵  | #12 Operación             | ✅ Hecho en local (falta el monitor de uptime)        |
+| 🔵  | #11, #13, #14 Escala      | ⬜ Pendiente                                          |
 
 **Todo el bloque 2 está resuelto en programación.** 271 tests en verde (243 del API,
 28 de la web) y `pnpm typecheck` limpio.
@@ -86,6 +86,7 @@ en la pasarela más que por código —el dunning sí se puede hacer ya—, y la
 Nada de la capa SaaS tiene sentido hasta que esto esté. Son, en este orden:
 
 ## #1 · Red de seguridad 🟡 HECHO EN LOCAL, falta llevarlo al VPS
+
 **Por qué primero:** todo lo que sigue toca la base de datos donde hay ventas reales de
 un cliente que paga. No se experimenta sin red.
 
@@ -108,6 +109,7 @@ un cliente que paga. No se experimenta sin red.
 > Lo que falta necesita acceso al VPS. El procedimiento ya está ensayado en local.
 
 ## #2 · Endurecer la producción actual ✅ HECHO (3 ago 2026)
+
 **Por qué:** esto ya estaba expuesto, con o sin SaaS. No era trabajo de SaaS, era deuda
 de seguridad del presente.
 
@@ -124,12 +126,13 @@ de seguridad del presente.
 - [x] **7 tests** (`apps/api/test/security.test.ts`), incluido el que comprueba que agotado
       el límite del login tampoco pasa la contraseña correcta.
 - [ ] Rotar los secretos JWT de producción si alguna vez se usaron los de `.env.example`.
-      *(Pendiente: requiere acceso al VPS.)*
+      _(Pendiente: requiere acceso al VPS.)_
 
 > ⚠️ **Antes del próximo despliegue hay que definir `CORS_ORIGINS` en el `.env` del
 > servidor**, o el API no levantará. Ej: `CORS_ORIGINS=https://vertexweb.lat`
 
 ## #3 · Aislamiento a prueba de descuidos (RLS) 🟡 CÓDIGO LISTO, falta infra
+
 **Por qué:** es el verdadero requisito para vender. Hoy el aislamiento entre negocios
 depende de que cada consulta recuerde su `where business_id`:
 
@@ -148,7 +151,7 @@ el bug que se descubre cuando ya es tarde.
       respaldo, no la única línea. De paso, varios handlers que hacían 2-3 consultas
       sueltas ahora las agrupan en una transacción (foto coherente y menos ida y vuelta).
       `business.ts` sigue con el `db` global a propósito: la tabla `business` está fuera
-      de RLS porque hay que resolver el negocio *antes* de tener tenant, y lo mismo la
+      de RLS porque hay que resolver el negocio _antes_ de tener tenant, y lo mismo la
       parte del login que busca el negocio por slug.
 - [x] **Suite que demuestra que la migración está completa** ✅:
       `apps/api/test/rls-integration.test.ts` (31 casos) ejercita los endpoints reales
@@ -170,7 +173,7 @@ el bug que se descubre cuando ya es tarde.
 >
 > 1. El usuario `ventafacil` de Postgres es **superusuario**, y Postgres **ignora RLS para
 >    superusuarios** — ni `FORCE` les aplica. La API en producción se conecta con él, así
->    que activar RLS hoy no protegería nada *y lo parecería*. Hace falta un rol sin
+>    que activar RLS hoy no protegería nada _y lo parecería_. Hace falta un rol sin
 >    privilegios: `pnpm --filter @ventafacil/db setup-rls` lo crea.
 > 2. **RLS falla cerrado.** Mientras los módulos usen el `db` global sin fijar el negocio,
 >    Postgres no devuelve ninguna fila. Por eso el orden de arriba no es negociable.
@@ -183,6 +186,7 @@ expuesta, y aunque alguien olvide un `where`, Postgres no entrega datos de otro 
 # 🟠 BLOQUE 2 — Necesario para vender
 
 ## #4 · Definir el precio ✅ DECIDIDO (4 ago 2026)
+
 **Se cobra POR NEGOCIO, con límites incluidos.** Ni por sucursal ni por usuario: un
 precio fijo al mes y un cupo de sucursales, usuarios y productos. Es lo más simple de
 explicar al cliente y lo más simple de cobrar, y no castiga que el negocio dé de alta a
@@ -190,12 +194,12 @@ sus cajeros.
 
 Tres planes públicos más 14 días de prueba, y un plan interno que no se vende:
 
-| Plan | Precio/mes | Sucursales | Usuarios | Productos | Panel y bitácora |
-|---|---|---|---|---|---|
-| Básico | Bs. 149 | 1 | 3 | 500 | — |
-| Pro | Bs. 299 | 3 | 10 | 5.000 | ✓ |
-| Ilimitado | Bs. 599 | ∞ | ∞ | ∞ | ✓ |
-| *Propietario* (interno) | — | ∞ | ∞ | ∞ | ✓ |
+| Plan                    | Precio/mes | Sucursales | Usuarios | Productos | Panel y bitácora |
+| ----------------------- | ---------- | ---------- | -------- | --------- | ---------------- |
+| Básico                  | Bs. 149    | 1          | 3        | 500       | —                |
+| Pro                     | Bs. 299    | 3          | 10       | 5.000     | ✓                |
+| Ilimitado               | Bs. 599    | ∞          | ∞        | ∞         | ✓                |
+| _Propietario_ (interno) | —          | ∞          | ∞        | ∞         | ✓                |
 
 Los **precios y los cupos son una decisión de negocio y viven en un solo archivo**:
 `packages/shared/src/plans.ts` (`PLAN_CATALOG`). Cambiarlos es editar ese archivo y
@@ -203,6 +207,7 @@ volver a correr `pnpm --filter @ventafacil/db seed-plans`; no hay ni un número 
 a mano en el resto del código.
 
 ## #5 · Suscripciones ✅ HECHO (4 ago 2026)
+
 - [x] **Tablas `plan` y `subscription`** (migración `0007`, aditiva). Van **fuera de
       RLS**, junto a `business`: son datos de la plataforma, y el panel super-admin
       (#7) tiene que poder listar todos los tenants — con una política de tenant no
@@ -239,6 +244,7 @@ a mano en el resto del código.
 > extra de plan superior.
 
 ## #6 · Registro self-service 🟠
+
 - [x] **Identificación del negocio por subdominio** ✅ (3 ago 2026). Cada cliente entra
       por `sunegocio.vertexweb.lat` y nunca ve que la plataforma es compartida; se
       descartó pedir un "código de negocio" en el login por delatarlo y añadir fricción.
@@ -268,9 +274,9 @@ a mano en el resto del código.
 - [x] **Correo editable en el perfil**, para que los usuarios anteriores al registro
       (que no tienen ninguno) dejen de depender de que se lo resetees a mano.
       Cambiarlo lo deja sin verificar.
-- [ ] Wizard inicial: sucursal, primeros productos, tema y textos. *(Aplazado a
+- [ ] Wizard inicial: sucursal, primeros productos, tema y textos. _(Aplazado a
       propósito: el alta ya deja el negocio listo para vender, y el wizard se diseña
-      mejor cuando se vea dónde se atasca de verdad un cliente nuevo.)*
+      mejor cuando se vea dónde se atasca de verdad un cliente nuevo.)_
 
 > **Antes de abrir el registro al público** hace falta la #10 (términos y privacidad) y
 > definir `RESEND_API_KEY`, `EMAIL_FROM` y `APP_URL_TEMPLATE` en el servidor. Sin la
@@ -282,6 +288,7 @@ a mano en el resto del código.
 > para inundar el buzón de alguien o llenar la base de negocios basura.
 
 ## #7 · Panel super-admin ✅ HECHO (4 ago 2026)
+
 - [x] **Tabla `platform_admin` aparte**, no un rol más del enum. Si el super-admin
       fuera `role: 'platform'`, cualquier fallo que dejara escribir el rol de un
       usuario convertiría a un cliente en operador de la plataforma.
@@ -354,12 +361,13 @@ Lo que faltaba para dar soporte sin entrar al servidor. El panel dejó de ser s�
 > por correo: si uno pierde la contraseña, se la cambia un principal desde el panel; si
 > se pierden todos, el mismo comando la reescribe desde el servidor.
 
-> **Lo que NO tiene, a sabiendas:** *churn* en porcentaje. Calcularlo exige saber
+> **Lo que NO tiene, a sabiendas:** _churn_ en porcentaje. Calcularlo exige saber
 > cuántos estaban activos al empezar el mes, y hoy no se guarda histórico de estados.
 > Se muestran las bajas del mes, que es un número cierto, en vez de una tasa inventada.
 > Si el churn hace falta de verdad, primero hay que registrar los cambios de estado.
 
 ## #8 · Revocación de sesiones ✅ HECHO (4 ago 2026)
+
 El agujero real no era el tenant suspendido —a ése ya lo cortaba la puerta de la #5 en
 cada petición— sino el **empleado dado de baja**: seguía trabajando hasta que caducara
 su token y **renovando su sesión durante 30 días**. Y "cerrar sesión" sólo borraba los
@@ -395,6 +403,7 @@ tokens del navegador de quien lo pulsaba.
 > restablecimiento **por correo** sí las cierra, porque ahí puede que no lo estés.
 
 ## #9 · Caja / arqueo ✅ HECHO (4 ago 2026)
+
 La tabla `cash_register` llevaba desde la Fase 5 sin un solo endpoint ni pantalla. Ya
 no: se abre el turno con el efectivo del cajón, se anotan las entradas y salidas, y se
 cierra contando lo que hay.
@@ -432,6 +441,7 @@ cierra contando lo que hay.
 > ubicación. Con dos abiertas sobre el mismo cajón físico, ningún arqueo significa nada.
 
 ## #10 · Legales, antes del primer registro público 🟡 ESCRITO, falta revisión legal
+
 - [x] **Términos y política de privacidad** en `/terminos` y `/privacidad` (públicas).
       Redactadas a partir de lo que el sistema hace de verdad —los planes, la prueba,
       que la morosidad no corta, dónde viven los datos, qué se guarda en el navegador—
@@ -466,16 +476,18 @@ cierra contando lo que hay.
 Nada de aquí bloquea vender. Se atiende cuando el uso lo pida.
 
 ## #11 · Cobro automático 🔵
+
 - [ ] Pasarela local (Libélula / PagosNet / Tigo Money / QR Simple).
 - [ ] Dunning: reintentos de cobro y suspensión automática.
 
 ## #12 · Operación ✅ HECHO EN LOCAL (4 ago 2026)
+
 - [x] **CI en GitHub Actions** (`.github/workflows/ci.yml`): tipos → tests → build,
       con un Postgres de verdad como servicio (RLS, índices parciales y transacciones no
       se prueban con un doble). Incluye un paso que **falla si el esquema cambió sin
       generar la migración** — un olvido que hoy se descubriría al desplegar, con la
       base ya en producción.
-      *Sin comprobación de formato*: 88 archivos no pasan `prettier --check` y un CI que
+      _Sin comprobación de formato_: 88 archivos no pasan `prettier --check` y un CI que
       falla desde el primer día enseña a ignorarlo. Formatear el repo es una limpieza
       aparte, y entonces el paso son dos líneas (van comentadas en el propio workflow).
 - [x] **`/health` que comprueba la BASE DE DATOS**, no sólo que el proceso conteste.
@@ -492,8 +504,8 @@ Nada de aquí bloquea vender. Se atiende cuando el uso lo pida.
       semana y entonces es peor que nada. No documenta cuerpos: la validación vive en
       Zod (`packages/shared/src/schemas.ts`), que es una sola fuente y se lee mejor.
 - [x] **Prueba de carga** (`scripts/load-test.mjs`) — ver abajo.
-- [ ] Monitor de uptime externo apuntando a `/health` público. *(Necesita el VPS; es
-      configurar un servicio, no código.)*
+- [ ] Monitor de uptime externo apuntando a `/health` público. _(Necesita el VPS; es
+      configurar un servicio, no código.)_
 
 ### Cuánto aguanta el VPS: medido, no estimado
 
@@ -505,13 +517,13 @@ como el VPS.
 Con ese ajuste, cajas simulando lo que hace una de verdad (mirar catálogo, listar
 ventas, cobrar):
 
-| Cajas simultáneas | req/s | p50 | p95 | Errores |
-|---|---|---|---|---|
-| 3 | 248 | 9 ms | 25 ms | 0 |
-| 5 | 250 | 16 ms | 40 ms | 0 |
-| 10 | 226 | 37 ms | 88 ms | 0 |
-| 20 | 236 | 69 ms | 155 ms | 0 |
-| 40 | 244 | 131 ms | **285 ms** | 0 |
+| Cajas simultáneas | req/s | p50    | p95        | Errores |
+| ----------------- | ----- | ------ | ---------- | ------- |
+| 3                 | 248   | 9 ms   | 25 ms      | 0       |
+| 5                 | 250   | 16 ms  | 40 ms      | 0       |
+| 10                | 226   | 37 ms  | 88 ms      | 0       |
+| 20                | 236   | 69 ms  | 155 ms     | 0       |
+| 40                | 244   | 131 ms | **285 ms** | 0       |
 
 **El techo es ~240 peticiones/s** y no se mueve: el servidor está saturado desde las 3
 cajas simultáneas, y a partir de ahí sólo crece la espera. **Cero errores** en todos los
@@ -535,6 +547,7 @@ clientes.**
 > toda la carga sale de una sola IP.
 
 ## #13 · Producto 🔵
+
 - [ ] Mostrar en la UI las ventas `failed` de la cola offline y ofrecer reintento manual.
 - [ ] Impresión térmica ESC/POS.
 - [ ] Exportar reportes a Excel / PDF.
@@ -545,6 +558,7 @@ clientes.**
 - [ ] Multi-moneda / multi-país (el esquema ya tiene `currency` y `tax_rate` por negocio).
 
 ## #14 · Soporte 🔵
+
 - [ ] Plan de soporte y capacitación: en Bolivia un POS se vende con acompañamiento.
 
 ---
@@ -560,11 +574,13 @@ esfuerzo.** Puede ser tu mayor diferenciador o tu mayor pozo: decide temprano si
 > **Trata todo lo de abajo como preguntas, no como especificación.**
 
 ### Averiguar antes de estimar 🔴
+
 - [ ] Confirmar con el SIN o un contador la **modalidad** que te aplica.
 - [ ] Pedir acceso al ambiente de homologación y **la especificación oficial vigente**.
 - [ ] Recién con el documento en mano, estimar el esfuerzo real.
 
 ### Decisiones que cambian la arquitectura 🔴
+
 - [ ] ¿Facturas tú en nombre de los tenants, o cada uno con su propio certificado?
       La respuesta cambia el modelo de datos y tu exposición legal.
 - [ ] `business` necesitará NIT y razón social; `location`, código de sucursal ante el SIN.
@@ -579,6 +595,7 @@ y sincronizar al reconectar) reutiliza la cola de `offline/sync.ts`.
 # ✅ HECHO
 
 ## Tests (era #0 del bloque 1) — 3 de agosto de 2026
+
 - [x] Vitest en `apps/api` y `apps/web`; `pnpm test` corre las dos suites.
 - [x] **28 tests de aislamiento** (`apps/api/test/tenant-isolation.test.ts`): crean los
       negocios A y B y comprueban que ninguna respuesta al token de A contiene un solo
@@ -594,6 +611,7 @@ auditaba un borrado aunque no borrara nada. Corregido. No había ninguna fuga re
 negocios.
 
 ## Mecanismo de RLS — 3 de agosto de 2026
+
 - [x] Políticas para las 12 tablas con `business_id` (`packages/db/src/rls.ts`), más una
       para `sale_item` que hereda el tenant de su `sale`.
 - [x] `withTenant()` (`packages/db/src/tenant.ts`): fija `app.business_id` con
@@ -603,6 +621,7 @@ negocios.
 - [x] Script de activación con simulacro: `pnpm --filter @ventafacil/db setup-rls`.
 
 ## Backoff de la cola offline — 3 de agosto de 2026
+
 - [x] Antes reintentaba cada 30 s fijos ignorando `attempts`. Ahora cada venta guarda
       `nextAttemptAt` y el worker sólo envía las vencidas, con espera exponencial
       (15 s → 30 min) **y jitter**: sin él, todos los clientes que fallaron a la vez
@@ -618,23 +637,23 @@ negocios.
 VentaFácil **ya era multi-tenant** antes de este plan. No hay que convertirlo en SaaS:
 hay que ponerle la capa de negocio encima y endurecer el aislamiento.
 
-| Capacidad | Dónde |
-|---|---|
-| `business_id` en las 12 tablas de negocio, con índices compuestos | `packages/db/src/schema.ts` |
-| Tenant resuelto en login por slug del negocio | `apps/api/src/modules/auth.ts:20-39` |
-| JWT access/refresh con `businessId` en el payload | `apps/api/src/plugins/auth.ts` |
-| Alta de tenants por CLI (`pnpm new-tenant`) | `packages/db/src/new-tenant.ts` |
-| White-label por tenant (tema, textos, logo, moneda, prefijo SKU) | `business.theme_json` / `texts_json` |
-| Campos de producto configurables por rubro | `business.product_schema_json` |
-| Roles y alcance por sucursal / central | `apps/api/src/lib/scope.ts` |
-| Auditoría por tenant | tabla `audit_log` + `plugins/audit.ts` |
-| Venta con descuento, 5 métodos de pago (incl. fiado) y anulación auditada | `schema.ts` (`sale`) + `modules/sales.ts` |
-| Recibo correlativo por negocio asignado por el servidor | `business_counter.last_receipt_number` |
-| Snapshot de nombre/precio/costo por línea | `sale_item` |
-| Venta offline: UUID de cliente, cola outbox, idempotencia | `apps/web/src/offline/sync.ts` |
-| Reportes y analítica (incl. lectura Z) | `modules/reports.ts`, `modules/analytics.ts` |
-| PWA instalable | `vite-plugin-pwa` |
-| Dockerfile del API + producción con dominio y SSL | `apps/api/Dockerfile`, `vertexweb.lat` |
+| Capacidad                                                                 | Dónde                                        |
+| ------------------------------------------------------------------------- | -------------------------------------------- |
+| `business_id` en las 12 tablas de negocio, con índices compuestos         | `packages/db/src/schema.ts`                  |
+| Tenant resuelto en login por slug del negocio                             | `apps/api/src/modules/auth.ts:20-39`         |
+| JWT access/refresh con `businessId` en el payload                         | `apps/api/src/plugins/auth.ts`               |
+| Alta de tenants por CLI (`pnpm new-tenant`)                               | `packages/db/src/new-tenant.ts`              |
+| White-label por tenant (tema, textos, logo, moneda, prefijo SKU)          | `business.theme_json` / `texts_json`         |
+| Campos de producto configurables por rubro                                | `business.product_schema_json`               |
+| Roles y alcance por sucursal / central                                    | `apps/api/src/lib/scope.ts`                  |
+| Auditoría por tenant                                                      | tabla `audit_log` + `plugins/audit.ts`       |
+| Venta con descuento, 5 métodos de pago (incl. fiado) y anulación auditada | `schema.ts` (`sale`) + `modules/sales.ts`    |
+| Recibo correlativo por negocio asignado por el servidor                   | `business_counter.last_receipt_number`       |
+| Snapshot de nombre/precio/costo por línea                                 | `sale_item`                                  |
+| Venta offline: UUID de cliente, cola outbox, idempotencia                 | `apps/web/src/offline/sync.ts`               |
+| Reportes y analítica (incl. lectura Z)                                    | `modules/reports.ts`, `modules/analytics.ts` |
+| PWA instalable                                                            | `vite-plugin-pwa`                            |
+| Dockerfile del API + producción con dominio y SSL                         | `apps/api/Dockerfile`, `vertexweb.lat`       |
 
 **El producto POS está ~70% hecho.** Lo que falta es la capa SaaS, la seguridad para
 clientes desconocidos, y las brechas de producto de la #9 y la #13.
@@ -666,4 +685,4 @@ esté verificado en staging.
 
 ---
 
-*Corregido contra el código el 3 de agosto de 2026 y reordenado por prioridad.*
+_Corregido contra el código el 3 de agosto de 2026 y reordenado por prioridad._

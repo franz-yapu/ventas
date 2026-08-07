@@ -87,25 +87,21 @@ export async function persistSale(
     .select({ id: schema.location.id })
     .from(schema.location)
     .where(
-      and(
-        eq(schema.location.id, input.locationId),
-        eq(schema.location.businessId, ctx.businessId),
-      ),
+      and(eq(schema.location.id, input.locationId), eq(schema.location.businessId, ctx.businessId)),
     )
     .limit(1);
   if (!loc) throw new Error('LOCATION_SCOPE');
 
-  const productIds = [...new Set(input.items.map((it) => it.productId).filter(Boolean))] as string[];
+  const productIds = [
+    ...new Set(input.items.map((it) => it.productId).filter(Boolean)),
+  ] as string[];
   const costoDeProducto = new Map<string, string | null>();
   if (productIds.length > 0) {
     const propios = await tx
       .select({ id: schema.product.id, cost: schema.product.cost })
       .from(schema.product)
       .where(
-        and(
-          inArray(schema.product.id, productIds),
-          eq(schema.product.businessId, ctx.businessId),
-        ),
+        and(inArray(schema.product.id, productIds), eq(schema.product.businessId, ctx.businessId)),
       );
     if (propios.length !== productIds.length) throw new Error('PRODUCT_SCOPE');
     for (const p of propios) costoDeProducto.set(p.id, p.cost);

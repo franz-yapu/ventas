@@ -49,7 +49,9 @@ describe('lectura sin filtro de tenant', () => {
     await withTenant(a.businessId, async (tx) => {
       expect(await tx.select().from(schema.customer)).toHaveLength(1);
       expect(await tx.select().from(schema.sale)).toHaveLength(1);
-      expect((await tx.select().from(schema.appUser)).every((u) => u.businessId === a.businessId)).toBe(true);
+      expect(
+        (await tx.select().from(schema.appUser)).every((u) => u.businessId === a.businessId),
+      ).toBe(true);
     });
   });
 
@@ -104,8 +106,12 @@ describe('escritura', () => {
   it('un DELETE sin where no borra las filas de otro negocio', async () => {
     await withTenant(a.businessId, (tx) => tx.delete(schema.customer));
 
-    expect(await withTenant(a.businessId, (tx) => tx.select().from(schema.customer))).toHaveLength(0);
-    expect(await withTenant(b.businessId, (tx) => tx.select().from(schema.customer))).toHaveLength(1);
+    expect(await withTenant(a.businessId, (tx) => tx.select().from(schema.customer))).toHaveLength(
+      0,
+    );
+    expect(await withTenant(b.businessId, (tx) => tx.select().from(schema.customer))).toHaveLength(
+      1,
+    );
   });
 });
 

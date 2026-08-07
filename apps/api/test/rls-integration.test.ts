@@ -52,7 +52,9 @@ describe('con RLS activo, cada negocio sigue viendo LO SUYO', () => {
   it.each(LECTURAS)('%s responde y trae los datos propios', async (name, url, esperado) => {
     const res = await app.inject({ method: 'GET', url, headers: auth(a.adminToken) });
 
-    expect(res.statusCode, `${name} respondió ${res.statusCode}: ${res.body.slice(0, 300)}`).toBe(200);
+    expect(res.statusCode, `${name} respondió ${res.statusCode}: ${res.body.slice(0, 300)}`).toBe(
+      200,
+    );
 
     const propio = esperado(a);
     if (propio) {

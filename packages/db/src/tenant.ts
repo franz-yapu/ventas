@@ -18,7 +18,10 @@ export type TenantTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  *     tx.select().from(schema.product),   // sin where: RLS filtra por el tenant
  *   );
  */
-export async function withTenant<T>(businessId: string, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+export async function withTenant<T>(
+  businessId: string,
+  fn: (tx: TenantTx) => Promise<T>,
+): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.business_id', ${businessId}, true)`);
     return fn(tx);

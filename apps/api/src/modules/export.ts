@@ -150,27 +150,29 @@ export async function exportRoutes(app: FastifyInstance) {
       });
 
       const nombre = `${biz.slug ?? 'negocio'}-${new Date().toISOString().slice(0, 10)}.json`;
-      return reply
-        .header('Content-Disposition', `attachment; filename="${nombre}"`)
-        .header('Content-Type', 'application/json; charset=utf-8')
-        // Se responde el objeto DIRECTO, sin el envoltorio { data, error }: esto es un
-        // archivo que la persona se descarga, no una respuesta que consuma la app.
-        .send({
-          exportadoEl: new Date().toISOString(),
-          generadoPor: `${env.nodeEnv === 'production' ? '' : '[no producción] '}VentaFácil`,
-          negocio: {
-            id: biz.id,
-            nombre: biz.name,
-            subdominio: biz.slug,
-            moneda: biz.currency,
-            tasaImpuesto: biz.taxRate,
-            creadoEl: biz.createdAt,
-            terminosAceptadosEl: biz.termsAcceptedAt,
-            versionTerminos: biz.termsVersion,
-          },
-          suscripcion: sub ?? null,
-          ...datos,
-        });
+      return (
+        reply
+          .header('Content-Disposition', `attachment; filename="${nombre}"`)
+          .header('Content-Type', 'application/json; charset=utf-8')
+          // Se responde el objeto DIRECTO, sin el envoltorio { data, error }: esto es un
+          // archivo que la persona se descarga, no una respuesta que consuma la app.
+          .send({
+            exportadoEl: new Date().toISOString(),
+            generadoPor: `${env.nodeEnv === 'production' ? '' : '[no producción] '}VentaFácil`,
+            negocio: {
+              id: biz.id,
+              nombre: biz.name,
+              subdominio: biz.slug,
+              moneda: biz.currency,
+              tasaImpuesto: biz.taxRate,
+              creadoEl: biz.createdAt,
+              terminosAceptadosEl: biz.termsAcceptedAt,
+              versionTerminos: biz.termsVersion,
+            },
+            suscripcion: sub ?? null,
+            ...datos,
+          })
+      );
     },
   );
 }

@@ -77,10 +77,7 @@ export function slugDesdeHostname(
  * `admin` ya estaba en SUBDOMINIOS_RESERVADOS, así que ningún negocio puede llamarse
  * así y quedarse con esa dirección.
  */
-export function esSubdominioPlataforma(
-  hostname: string,
-  dominioBase: string | undefined,
-): boolean {
+export function esSubdominioPlataforma(hostname: string, dominioBase: string | undefined): boolean {
   if (!dominioBase) return false;
   const host = hostname.toLowerCase();
   const base = dominioBase.toLowerCase();
@@ -174,7 +171,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, logoutEverywhere, updateProfile, refresh }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, logout, logoutEverywhere, updateProfile, refresh }}
+    >
       {children}
     </AuthContext.Provider>
   );

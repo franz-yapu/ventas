@@ -26,9 +26,7 @@ export function SubscriptionBanner() {
       <div className="no-print flex items-center gap-2 border-b border-border bg-warning-bg px-4 py-2 text-[13px] text-warning">
         <Clock size={15} className="shrink-0" />
         <span>
-          {dias <= 1
-            ? 'Tu prueba gratis termina hoy.'
-            : `Te quedan ${dias} días de prueba gratis.`}{' '}
+          {dias <= 1 ? 'Tu prueba gratis termina hoy.' : `Te quedan ${dias} días de prueba gratis.`}{' '}
           Plan {sub.plan?.name}.
         </span>
       </div>

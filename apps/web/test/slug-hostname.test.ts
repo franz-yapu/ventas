@@ -46,9 +46,7 @@ describe('slugDesdeHostname', () => {
   });
 
   it('funciona con *.localhost, que es como se prueba en local', () => {
-    expect(slugDesdeHostname('llantas-el-rapido.localhost', 'localhost')).toBe(
-      'llantas-el-rapido',
-    );
+    expect(slugDesdeHostname('llantas-el-rapido.localhost', 'localhost')).toBe('llantas-el-rapido');
     expect(slugDesdeHostname('localhost', 'localhost')).toBeUndefined();
   });
 });

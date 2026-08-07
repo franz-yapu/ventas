@@ -43,8 +43,7 @@ export class ApiError extends Error {
 /** Desenvuelve `{ data, error }` o lanza ApiError. Común a los dos clientes. */
 async function desenvolver<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => ({ data: null, error: res.statusText }))) as
-    | ApiResponse<T>
-    | undefined;
+    ApiResponse<T> | undefined;
 
   if (!res.ok) {
     throw new ApiError(res.status, body?.error ?? 'Error de red', body?.code);

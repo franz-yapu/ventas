@@ -41,8 +41,7 @@ export function EmailVerifyBanner() {
       {user.email ? (
         <>
           <span>
-            Confirma <strong>{user.email}</strong> para poder recuperar tu contraseña si la
-            olvidas.
+            Confirma <strong>{user.email}</strong> para poder recuperar tu contraseña si la olvidas.
           </span>
           {enviado ? (
             <span className="font-semibold">Te enviamos el enlace.</span>

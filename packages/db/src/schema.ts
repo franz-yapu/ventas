@@ -18,7 +18,13 @@ import {
 export const roleEnum = pgEnum('role', ['admin', 'seller']);
 export const saleStatusEnum = pgEnum('sale_status', ['completed', 'cancelled']);
 // 'credit' = fiado (queda como cuenta por cobrar del cliente).
-export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'card', 'qr', 'transfer', 'credit']);
+export const paymentMethodEnum = pgEnum('payment_method', [
+  'cash',
+  'card',
+  'qr',
+  'transfer',
+  'credit',
+]);
 export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'trial',
   'active',

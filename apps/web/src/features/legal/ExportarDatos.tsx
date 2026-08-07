@@ -47,8 +47,8 @@ export function ExportarDatos() {
       <CardContent className="flex flex-col gap-2 p-4">
         <p className="text-sm font-semibold">Descargar mis datos</p>
         <p className="text-xs text-muted">
-          Una copia completa: productos, inventario, ventas con su detalle, clientes,
-          cajas y actividad. Sirve para guardarla o para migrar a otro sistema.
+          Una copia completa: productos, inventario, ventas con su detalle, clientes, cajas y
+          actividad. Sirve para guardarla o para migrar a otro sistema.
         </p>
         {error && <p className="text-[13px] text-danger">{error}</p>}
         <Button variant="outline" onClick={descargar} disabled={bajando}>

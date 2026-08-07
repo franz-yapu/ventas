@@ -66,11 +66,7 @@ async function despachar(log: FastifyBaseLogger) {
  * Registra un 500 para avisar. No espera al envío: un fallo del correo no puede
  * retrasar la respuesta al usuario, que ya está teniendo un mal momento.
  */
-export function avisarDeError(
-  err: Error,
-  ruta: string,
-  log: FastifyBaseLogger,
-): void {
+export function avisarDeError(err: Error, ruta: string, log: FastifyBaseLogger): void {
   if (!env.alertEmail) return;
 
   if (!acumulado) {

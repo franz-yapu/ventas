@@ -17,39 +17,42 @@ export async function reportRoutes(app: FastifyInstance) {
    * por otra puerta. Que no salga en su menú no cerraba nada: el menú es una cortesía,
    * la que cierra es esta línea.
    */
-  app.get('/reports/summary', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
-    const parsedQ = z
-      .object({
-        from: z.string().datetime({ offset: true }).optional(),
-        to: z.string().datetime({ offset: true }).optional(),
-      })
-      .safeParse(req.query);
-    if (!parsedQ.success)
-      return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
-    const { from, to } = parsedQ.data;
-    const businessId = req.authUser!.businessId;
-    // Alcance: la central ve todas las ubicaciones; la sucursal, sólo la suya.
-    const scope = viewScope(req.authUser!);
-    const locL = scope !== undefined ? sql`AND l.id = ${scope}` : sql``;
-    const locSale = scope !== undefined ? sql`AND s.location_id = ${scope}` : sql``;
-    // Filtro de rango (instante absoluto). Sin rango completo => FALSE (agregados en 0).
-    const hasRange = !!(from && to);
-    const rangeFilter = hasRange
-      ? sql`s.client_created_at >= ${from}::timestamptz AND s.client_created_at <= ${to}::timestamptz`
-      : sql`false`;
+  app.get(
+    '/reports/summary',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const parsedQ = z
+        .object({
+          from: z.string().datetime({ offset: true }).optional(),
+          to: z.string().datetime({ offset: true }).optional(),
+        })
+        .safeParse(req.query);
+      if (!parsedQ.success)
+        return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
+      const { from, to } = parsedQ.data;
+      const businessId = req.authUser!.businessId;
+      // Alcance: la central ve todas las ubicaciones; la sucursal, sólo la suya.
+      const scope = viewScope(req.authUser!);
+      const locL = scope !== undefined ? sql`AND l.id = ${scope}` : sql``;
+      const locSale = scope !== undefined ? sql`AND s.location_id = ${scope}` : sql``;
+      // Filtro de rango (instante absoluto). Sin rango completo => FALSE (agregados en 0).
+      const hasRange = !!(from && to);
+      const rangeFilter = hasRange
+        ? sql`s.client_created_at >= ${from}::timestamptz AND s.client_created_at <= ${to}::timestamptz`
+        : sql`false`;
 
-    // Fronteras de tiempo (hoy/semana/mes) calculadas en la zona horaria del negocio.
-    const rows = await withTenant(businessId, (tx) =>
-      tx.execute<{
-        location_id: string;
-        location_name: string;
-        today: string;
-        week: string;
-        month: string;
-        today_count: number;
-        range_total: string;
-        range_count: number;
-      }>(sql`
+      // Fronteras de tiempo (hoy/semana/mes) calculadas en la zona horaria del negocio.
+      const rows = await withTenant(businessId, (tx) =>
+        tx.execute<{
+          location_id: string;
+          location_name: string;
+          today: string;
+          week: string;
+          month: string;
+          today_count: number;
+          range_total: string;
+          range_count: number;
+        }>(sql`
       WITH bounds AS (
         SELECT
           date_trunc('day',   timezone(${TZ}, now())) AS d0,
@@ -75,18 +78,18 @@ export async function reportRoutes(app: FastifyInstance) {
       GROUP BY l.id, l.name, b.d0, b.w0, b.m0
       ORDER BY l.name
     `),
-    );
+      );
 
-    // Ganancia por ubicacion: (precio venta - costo unitario) del snapshot, ventas completadas.
-    // Se calcula aparte porque une sale_item (varias filas por venta) y no debe inflar los totales.
-    const profitRows = await withTenant(businessId, (tx) =>
-      tx.execute<{
-        location_id: string;
-        today: string;
-        week: string;
-        month: string;
-        range: string;
-      }>(sql`
+      // Ganancia por ubicacion: (precio venta - costo unitario) del snapshot, ventas completadas.
+      // Se calcula aparte porque une sale_item (varias filas por venta) y no debe inflar los totales.
+      const profitRows = await withTenant(businessId, (tx) =>
+        tx.execute<{
+          location_id: string;
+          today: string;
+          week: string;
+          month: string;
+          range: string;
+        }>(sql`
       WITH bounds AS (
         SELECT
           date_trunc('day',   timezone(${TZ}, now())) AS d0,
@@ -111,53 +114,54 @@ export async function reportRoutes(app: FastifyInstance) {
       WHERE s.business_id = ${businessId} AND s.status = 'completed' ${locSale}
       GROUP BY s.location_id
     `),
-    );
-    const cogsBy = new Map(profitRows.map((p) => [p.location_id, p]));
+      );
+      const cogsBy = new Map(profitRows.map((p) => [p.location_id, p]));
 
-    const items = rows.map((r) => {
-      const c = cogsBy.get(r.location_id);
-      return {
-        locationId: r.location_id,
-        locationName: r.location_name,
-        today: String(r.today),
-        week: String(r.week),
-        month: String(r.month),
-        todayCount: Number(r.today_count),
-        // ingreso neto (r.*) - COGS (c.*)
-        profitToday: (Number(r.today) - Number(c?.today ?? 0)).toFixed(2),
-        profitWeek: (Number(r.week) - Number(c?.week ?? 0)).toFixed(2),
-        profitMonth: (Number(r.month) - Number(c?.month ?? 0)).toFixed(2),
-        // Rango personalizado (0 si no se envió ?from&to).
-        rangeTotal: String(r.range_total),
-        rangeCount: Number(r.range_count),
-        rangeProfit: (Number(r.range_total) - Number(c?.range ?? 0)).toFixed(2),
-      };
-    });
+      const items = rows.map((r) => {
+        const c = cogsBy.get(r.location_id);
+        return {
+          locationId: r.location_id,
+          locationName: r.location_name,
+          today: String(r.today),
+          week: String(r.week),
+          month: String(r.month),
+          todayCount: Number(r.today_count),
+          // ingreso neto (r.*) - COGS (c.*)
+          profitToday: (Number(r.today) - Number(c?.today ?? 0)).toFixed(2),
+          profitWeek: (Number(r.week) - Number(c?.week ?? 0)).toFixed(2),
+          profitMonth: (Number(r.month) - Number(c?.month ?? 0)).toFixed(2),
+          // Rango personalizado (0 si no se envió ?from&to).
+          rangeTotal: String(r.range_total),
+          rangeCount: Number(r.range_count),
+          rangeProfit: (Number(r.range_total) - Number(c?.range ?? 0)).toFixed(2),
+        };
+      });
 
-    const sum = (key: keyof (typeof items)[number]) =>
-      items.reduce((acc, it) => acc + Number(it[key]), 0).toFixed(2);
-    const sumInt = (key: keyof (typeof items)[number]) =>
-      items.reduce((acc, it) => acc + Number(it[key]), 0);
+      const sum = (key: keyof (typeof items)[number]) =>
+        items.reduce((acc, it) => acc + Number(it[key]), 0).toFixed(2);
+      const sumInt = (key: keyof (typeof items)[number]) =>
+        items.reduce((acc, it) => acc + Number(it[key]), 0);
 
-    return reply.send({
-      data: {
-        byLocation: items,
-        hasRange,
-        totals: {
-          today: sum('today'),
-          week: sum('week'),
-          month: sum('month'),
-          range: sum('rangeTotal'),
+      return reply.send({
+        data: {
+          byLocation: items,
+          hasRange,
+          totals: {
+            today: sum('today'),
+            week: sum('week'),
+            month: sum('month'),
+            range: sum('rangeTotal'),
+          },
+          profit: {
+            today: sum('profitToday'),
+            week: sum('profitWeek'),
+            month: sum('profitMonth'),
+            range: sum('rangeProfit'),
+          },
+          rangeCount: sumInt('rangeCount'),
         },
-        profit: {
-          today: sum('profitToday'),
-          week: sum('profitWeek'),
-          month: sum('profitMonth'),
-          range: sum('rangeProfit'),
-        },
-        rangeCount: sumInt('rangeCount'),
-      },
-      error: null,
-    });
-  });
+        error: null,
+      });
+    },
+  );
 }

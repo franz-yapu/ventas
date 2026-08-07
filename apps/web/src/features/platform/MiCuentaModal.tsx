@@ -95,8 +95,7 @@ export function MiCuentaModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => setCorreo(e.target.value)}
             />
             <p className="mt-1 text-[12px] text-muted">
-              Es el usuario con el que entras al panel. Si lo cambias, tendrás que volver
-              a entrar.
+              Es el usuario con el que entras al panel. Si lo cambias, tendrás que volver a entrar.
             </p>
           </div>
           <Button

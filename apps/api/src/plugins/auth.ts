@@ -15,9 +15,7 @@ export const authPlugin = fp(async (app) => {
 
   app.decorate('requireAuth', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const payload = await req.jwtVerify<
-        AuthUser & { typ?: 'access' | 'refresh'; tv?: number }
-      >();
+      const payload = await req.jwtVerify<AuthUser & { typ?: 'access' | 'refresh'; tv?: number }>();
       if (payload.typ === 'refresh') throw new Error('refresh token no valido para acceso');
 
       // El token puede estar bien firmado y aun así no valer: al usuario lo dieron de

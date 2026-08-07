@@ -39,8 +39,22 @@ async function main() {
   const adminHash = await argon2.hash('caranavi2026');
   const sellerHash = await argon2.hash('vender2026');
   await db.insert(s.appUser).values([
-    { businessId, locationId: caranaviId, name: 'Administrador', username: 'admin', passwordHash: adminHash, role: 'admin' },
-    { businessId, locationId: caranaviId, name: 'Vendedor', username: 'vendedor', passwordHash: sellerHash, role: 'seller' },
+    {
+      businessId,
+      locationId: caranaviId,
+      name: 'Administrador',
+      username: 'admin',
+      passwordHash: adminHash,
+      role: 'admin',
+    },
+    {
+      businessId,
+      locationId: caranaviId,
+      name: 'Vendedor',
+      username: 'vendedor',
+      passwordHash: sellerHash,
+      role: 'seller',
+    },
   ]);
 
   console.log('✓ Seed completo:');

@@ -37,10 +37,7 @@ async function main() {
       isPublic: p.isPublic,
       sortOrder: p.sortOrder,
     };
-    await db
-      .insert(s.plan)
-      .values(row)
-      .onConflictDoUpdate({ target: s.plan.code, set: row });
+    await db.insert(s.plan).values(row).onConflictDoUpdate({ target: s.plan.code, set: row });
   }
   console.log(`✓ Catálogo de planes al día (${PLAN_CATALOG.length} planes).`);
 

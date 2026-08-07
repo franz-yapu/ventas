@@ -54,7 +54,7 @@ probada. Ensayado entero en el staging local.
 
 ⚠️ **Ojo con el orden**: el usuario `ventafacil` de Postgres es superusuario, y Postgres
 **ignora RLS para superusuarios** — ni `FORCE` les aplica. Si el API sigue conectándose con
-él, activar RLS no protege nada *y lo parece*.
+él, activar RLS no protege nada _y lo parece_.
 
 **Recomendación.** Es la que más devuelve por lo que cuesta, y va atada al punto 3: los dos
 son el mismo despliegue.

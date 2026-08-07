@@ -34,7 +34,15 @@ function describe(e: HistoryEntry): string {
   }
 }
 
-export function HistoryModal({ productId, title, onClose }: { productId: string; title: string; onClose: () => void }) {
+export function HistoryModal({
+  productId,
+  title,
+  onClose,
+}: {
+  productId: string;
+  title: string;
+  onClose: () => void;
+}) {
   const { data } = useQuery({
     queryKey: ['product-history', productId],
     queryFn: () => api.get<HistoryEntry[]>(`/products/${productId}/history`),
