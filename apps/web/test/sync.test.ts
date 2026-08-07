@@ -4,10 +4,37 @@ import { setOnline } from './setup';
 
 // El cliente HTTP se sustituye: aquí se prueba la COLA, no la red.
 const post = vi.fn();
-vi.mock('@/lib/api', () => ({ api: { post: (...args: unknown[]) => post(...args) } }));
+// `tokens` también: la cola lee de ahí de quién es la sesión, para no subir con el
+// token de uno lo que cobró otro.
+let accessToken = '';
+vi.mock('@/lib/api', () => ({
+  api: { post: (...args: unknown[]) => post(...args) },
+  tokens: {
+    get access() {
+      return accessToken;
+    },
+  },
+}));
+
+/** Access token de mentira: sólo se lee su carga, nunca se verifica la firma. */
+function tokenDe(userId: string, businessId: string): string {
+  const cuerpo = btoa(JSON.stringify({ sub: userId, businessId }));
+  return `cabecera.${cuerpo}.firma`;
+}
+
+const ANA = { userId: 'ana', businessId: 'negocio-1' };
+const BETO = { userId: 'beto', businessId: 'negocio-1' };
 
 const { db } = await import('@/offline/db');
-const { backoffDelay, dueSales, enqueueSale, retryFailed, syncPending } = await import('@/offline/sync');
+const {
+  backoffDelay,
+  dueSales,
+  enqueueSale,
+  retryFailed,
+  syncPending,
+  sesionActual,
+  ventasDeOtraSesion,
+} = await import('@/offline/sync');
 
 function sale(id: string): CreateSaleInput {
   return {
@@ -37,6 +64,7 @@ const UUID_B = '44444444-4444-4444-8444-444444444444';
 beforeEach(async () => {
   post.mockReset();
   setOnline(true);
+  accessToken = '';
   await db.pendingSales.clear();
 });
 
@@ -204,5 +232,82 @@ describe('backoff ante caída del API', () => {
     expect(r.synced).toBe(1);
     expect(await db.pendingSales.get(UUID_B)).toBeUndefined();
     expect(await db.pendingSales.get(UUID_A)).toBeDefined();
+  });
+});
+
+describe('la cola no cambia de dueño al cambiar de sesión', () => {
+  /**
+   * La cola vive en IndexedDB y sobrevive al cierre de sesión. Sin dueño, las ventas
+   * pendientes de Ana se subían con el token del siguiente que entrara: en el mismo
+   * local quedaban a nombre de Beto —el servidor toma el vendedor del token, no del
+   * payload—, y en otro local el API las rechazaba por alcance, diez reintentos y a
+   * `failed`: una venta cobrada que no llega nunca.
+   */
+  it('las ventas de Ana no se suben con la sesión de Beto', async () => {
+    accessToken = tokenDe(ANA.userId, ANA.businessId);
+    await enqueueSale(sale(UUID_A), ANA);
+
+    // Ana cierra sesión y entra Beto en la misma caja.
+    accessToken = tokenDe(BETO.userId, BETO.businessId);
+    const res = await syncPending();
+
+    expect(post).not.toHaveBeenCalled();
+    expect(res.synced).toBe(0);
+    // Y siguen ahí: borrarlas destruiría una venta ya cobrada.
+    expect(await db.pendingSales.count()).toBe(1);
+  });
+
+  it('cuando vuelve Ana, se suben', async () => {
+    accessToken = tokenDe(ANA.userId, ANA.businessId);
+    await enqueueSale(sale(UUID_A), ANA);
+    accessToken = tokenDe(BETO.userId, BETO.businessId);
+    await syncPending();
+
+    accessToken = tokenDe(ANA.userId, ANA.businessId);
+    post.mockResolvedValue({ results: [{ id: UUID_A, status: 'ok', receiptNumber: 1 }] });
+    const res = await syncPending();
+
+    expect(res.synced).toBe(1);
+    expect(await db.pendingSales.count()).toBe(0);
+  });
+
+  it('tampoco cruzan de negocio', async () => {
+    accessToken = tokenDe(ANA.userId, ANA.businessId);
+    await enqueueSale(sale(UUID_A), ANA);
+    // El mismo usuario, otro negocio: no debería pasar, pero si pasa no se sube.
+    accessToken = tokenDe(ANA.userId, 'negocio-2');
+    await syncPending();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('se pueden contar para avisar en pantalla', async () => {
+    accessToken = tokenDe(ANA.userId, ANA.businessId);
+    await enqueueSale(sale(UUID_A), ANA);
+    await enqueueSale(sale(UUID_B), ANA);
+
+    const ajenas = await ventasDeOtraSesion(BETO);
+    expect(ajenas).toHaveLength(2);
+    expect(await ventasDeOtraSesion(ANA)).toHaveLength(0);
+  });
+
+  it('lo encolado ANTES de que existiera el sello se sigue subiendo', async () => {
+    /*
+      Las ventas que ya estaban en la cola no llevan dueño. Marcarlas como ajenas
+      dejaría ventas cobradas atrapadas en el dispositivo de alguien, que es justo el
+      daño que se quiere evitar. El sello vale para las nuevas.
+    */
+    await enqueueSale(sale(UUID_A)); // sin dueño, como antes de la v3
+    accessToken = tokenDe(BETO.userId, BETO.businessId);
+    post.mockResolvedValue({ results: [{ id: UUID_A, status: 'ok', receiptNumber: 9 }] });
+
+    expect((await syncPending()).synced).toBe(1);
+  });
+
+  it('sin sesión abierta no se juzga a nadie', async () => {
+    // Al arrancar la app antes de entrar: `dueSales` no debe esconder nada.
+    await enqueueSale(sale(UUID_A), ANA);
+    accessToken = '';
+    expect(sesionActual()).toBeNull();
+    expect(await dueSales()).toHaveLength(1);
   });
 });

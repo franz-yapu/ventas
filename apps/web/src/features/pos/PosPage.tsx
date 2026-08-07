@@ -178,7 +178,9 @@ export function PosPage() {
     };
 
     // Se guarda SIEMPRE en la cola local primero (offline-first): la venta nunca se pierde.
-    await enqueueSale(input);
+    // Sellada con quién la cobró: la cola sobrevive al cierre de sesión, y sin esto se
+    // subía con el token del siguiente que entrara, quedando a su nombre.
+    await enqueueSale(input, user ? { userId: user.sub, businessId: user.businessId } : undefined);
     const locName = locations.find((l) => l.id === activeLocation)?.name ?? null;
     const custName = customers?.find((c) => c.id === customerId)?.name ?? null;
 

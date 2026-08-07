@@ -395,6 +395,19 @@ export async function productRoutes(app: FastifyInstance) {
       );
       if (!locOk) return reply.code(400).send({ data: null, error: 'Ubicación no válida' });
 
+      /*
+        La cuota del plan también se aplica aquí.
+
+        `POST /products` la comprobaba y esto no, así que un plan con tope de 500
+        productos se llenaba con 600 subiendo un archivo: el límite sólo existía por la
+        puerta pequeña. Se comprueba el lote ENTERO antes de insertar nada, en vez de ir
+        cortando a mitad — dejar 500 productos dentro y 100 fuera, sin decir cuáles, es
+        peor que no importar.
+      */
+      if (!(await permiteCrear(user.businessId, 'products', reply, body.data.rows.length))) {
+        return reply;
+      }
+
       let created = 0;
       let skipped = 0;
       for (const row of body.data.rows) {

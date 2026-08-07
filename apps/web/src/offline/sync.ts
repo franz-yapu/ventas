@@ -1,5 +1,5 @@
 import type { CreateSaleInput } from '@ventafacil/shared';
-import { api } from '@/lib/api';
+import { api, tokens } from '@/lib/api';
 import { db, setMeta, type PendingSale } from './db';
 
 interface SyncItemResult {
@@ -37,8 +37,16 @@ function nextAttemptFrom(attempts: number, now: number = Date.now()): string {
   return new Date(now + backoffDelay(attempts)).toISOString();
 }
 
-/** Encola una venta para subir cuando haya conexión. Se guarda de inmediato. */
-export async function enqueueSale(payload: CreateSaleInput): Promise<void> {
+/**
+ * Encola una venta para subir cuando haya conexión. Se guarda de inmediato.
+ *
+ * `owner` sella quién la cobró: la cola sobrevive al cierre de sesión, y sin el sello
+ * las ventas de Ana se subían con el token del siguiente que entrara.
+ */
+export async function enqueueSale(
+  payload: CreateSaleInput,
+  owner?: { userId: string; businessId: string },
+): Promise<void> {
   const now = new Date().toISOString();
   const row: PendingSale = {
     id: payload.id,
@@ -47,18 +55,70 @@ export async function enqueueSale(payload: CreateSaleInput): Promise<void> {
     attempts: 0,
     createdAt: now,
     nextAttemptAt: now, // primera subida: sin espera.
+    ownerUserId: owner?.userId,
+    ownerBusinessId: owner?.businessId,
   };
   await db.pendingSales.put(row);
 }
 
-/** Ventas que ya cumplieron su espera y no están descartadas. Más antiguas primero. */
-export async function dueSales(now: Date = new Date()): Promise<PendingSale[]> {
+/**
+ * Ventas encoladas por OTRA persona (o de otro negocio) que siguen en este dispositivo.
+ *
+ * No se suben ni se borran: subirlas las grabaría a nombre de quien esté ahora, y
+ * borrarlas destruiría ventas ya cobradas. Se enseñan para que quien corresponda entre
+ * y las suba.
+ */
+export async function ventasDeOtraSesion(sesion: {
+  userId: string;
+  businessId: string;
+}): Promise<PendingSale[]> {
+  const rows = await db.pendingSales.toArray();
+  return rows.filter((r) => esDeOtro(r, sesion));
+}
+
+/**
+ * De quién es la sesión abierta, leída del access token.
+ *
+ * Se lee del token y no del contexto de React porque el worker de sincronización corre
+ * en un temporizador, fuera del árbol de componentes, y tiene que saber a nombre de
+ * quién va a subir lo que suba. No se verifica la firma: aquí sólo se usa para decidir
+ * qué NO enviar, y la comprobación de verdad la hace el servidor.
+ */
+export function sesionActual(): { userId: string; businessId: string } | null {
+  const token = tokens.access;
+  if (!token) return null;
+  try {
+    const [, cuerpo] = token.split('.');
+    if (!cuerpo) return null;
+    const json = atob(cuerpo.replace(/-/g, '+').replace(/_/g, '/'));
+    const claims = JSON.parse(json) as { sub?: string; businessId?: string };
+    if (!claims.sub || !claims.businessId) return null;
+    return { userId: claims.sub, businessId: claims.businessId };
+  } catch {
+    return null;
+  }
+}
+
+function esDeOtro(r: PendingSale, sesion: { userId: string; businessId: string } | null): boolean {
+  // Sin sesión no se juzga a nadie; y las anteriores a la v3 no llevan sello.
+  if (!sesion || !r.ownerUserId) return false;
+  return r.ownerUserId !== sesion.userId || r.ownerBusinessId !== sesion.businessId;
+}
+
+/**
+ * Ventas que ya cumplieron su espera, no están descartadas y son de ESTA sesión.
+ * Más antiguas primero.
+ */
+export async function dueSales(
+  now: Date = new Date(),
+  sesion: { userId: string; businessId: string } | null = sesionActual(),
+): Promise<PendingSale[]> {
   const rows = await db.pendingSales
     .where('nextAttemptAt')
     .belowOrEqual(now.toISOString())
     .toArray();
   return rows
-    .filter((r) => r.status !== 'failed')
+    .filter((r) => r.status !== 'failed' && !esDeOtro(r, sesion))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 

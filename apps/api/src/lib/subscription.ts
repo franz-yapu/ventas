@@ -188,9 +188,7 @@ async function usoActual(businessId: string, key: LimitKey): Promise<number> {
       const [r] = await tx
         .select({ n: count() })
         .from(schema.location)
-        .where(
-          and(eq(schema.location.businessId, businessId), eq(schema.location.isActive, true)),
-        );
+        .where(and(eq(schema.location.businessId, businessId), eq(schema.location.isActive, true)));
       return r?.n ?? 0;
     }
     if (key === 'users') {
@@ -230,8 +228,14 @@ export async function usoDelPlan(access: TenantAccess) {
 }
 
 /**
- * Comprueba que quepa uno más antes de crearlo. Si no cabe, contesta 402 con el
- * cupo concreto y devuelve `false` para que el handler corte.
+ * Comprueba que quepan `cuantos` más antes de crearlos. Si no caben, contesta 402 con
+ * el cupo concreto y devuelve `false` para que el handler corte.
+ *
+ * `cuantos` existe por la importación masiva: comprobaba el cupo de uno en uno... o más
+ * bien no lo comprobaba en absoluto. `POST /products` sí llamaba aquí, pero
+ * `POST /products/import` no, así que un plan con tope de 500 productos se llenaba con
+ * 600 subiendo un archivo. El límite que sólo se aplica por la puerta pequeña no es un
+ * límite.
  *
  * Se llama ANTES de insertar, no dentro de la transacción: dos altas simultáneas al
  * borde del cupo podrían colarse. Es aceptable — el peor caso es un usuario de más
@@ -241,21 +245,26 @@ export async function permiteCrear(
   businessId: string,
   key: LimitKey,
   reply: FastifyReply,
+  cuantos = 1,
 ): Promise<boolean> {
   const access = await cargarAcceso(businessId);
   const limite = limiteDe(access, key);
   if (limite === null) return true;
 
   const usado = await usoActual(businessId, key);
-  if (usado < limite) return true;
+  if (usado + cuantos <= limite) return true;
 
+  const caben = Math.max(0, limite - usado);
   reply.code(402).send({
     data: null,
     error:
       `Tu plan ${access.plan!.name} permite hasta ${limite} ${limitLabel(key, limite)}. ` +
+      (cuantos > 1
+        ? `Estás intentando agregar ${cuantos} y sólo ${caben === 0 ? 'no queda espacio' : `caben ${caben}`}. `
+        : '') +
       `Cambia de plan para agregar más.`,
     code: 'plan_limit',
-    limit: { key, used: usado, max: limite },
+    limit: { key, used: usado, max: limite, requested: cuantos },
   });
   return false;
 }

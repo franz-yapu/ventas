@@ -97,25 +97,41 @@ beforeEach(() => {
 describe('estados que dejan operar', () => {
   it('sin fila de suscripción (negocio anterior al SaaS) vende con normalidad', async () => {
     await sinSuscripcion(a.businessId);
-    const res = await app.inject({ method: 'GET', url: '/api/v1/products', headers: auth(a.adminToken) });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(a.adminToken),
+    });
     expect(res.statusCode).toBe(200);
   });
 
   it('en prueba vigente, vende', async () => {
     await darPlan(a.businessId, 'basico', 'trial', enUnaSemana());
-    const res = await app.inject({ method: 'GET', url: '/api/v1/products', headers: auth(a.adminToken) });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(a.adminToken),
+    });
     expect(res.statusCode).toBe(200);
   });
 
   it('activa, vende', async () => {
     await darPlan(a.businessId, 'pro', 'active');
-    const res = await app.inject({ method: 'GET', url: '/api/v1/products', headers: auth(a.adminToken) });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(a.adminToken),
+    });
     expect(res.statusCode).toBe(200);
   });
 
   it('MOROSA sigue vendiendo: un pago atrasado no puede cerrar la caja del cliente', async () => {
     await darPlan(a.businessId, 'basico', 'past_due');
-    const res = await app.inject({ method: 'GET', url: '/api/v1/products', headers: auth(a.adminToken) });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(a.adminToken),
+    });
     expect(res.statusCode).toBe(200);
   });
 });
@@ -171,7 +187,11 @@ describe('estados que bloquean', () => {
 
   it('402 y no 401: el frontend no debe confundirlo con sesión caducada y echar al usuario', async () => {
     await darPlan(a.businessId, 'basico', 'suspended');
-    const res = await app.inject({ method: 'GET', url: '/api/v1/sales', headers: auth(a.adminToken) });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/sales',
+      headers: auth(a.adminToken),
+    });
     expect(res.statusCode).toBe(402);
     expect(res.statusCode).not.toBe(401);
   });
@@ -239,6 +259,77 @@ describe('límites del plan', () => {
     expect(res.json().code).toBe('plan_limit');
   });
 
+  it('la IMPORTACIÓN masiva también respeta el cupo', async () => {
+    /*
+      El límite sólo se aplicaba por la puerta pequeña: `POST /products` comprobaba la
+      cuota y `POST /products/import` no, así que un plan con tope se llenaba subiendo un
+      archivo. Verificado: 600 productos creados con tope de 500.
+    */
+    await darPlan(a.businessId, PLAN_DOS, 'active'); // 2 productos; el negocio ya tiene 1
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/products/import',
+      headers: auth(a.adminToken),
+      payload: {
+        rows: [
+          { name: 'Importado 1', price: '10.00' },
+          { name: 'Importado 2', price: '10.00' },
+          { name: 'Importado 3', price: '10.00' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(402);
+    expect(res.json().code).toBe('plan_limit');
+    // Y dice cuántos caben, que es lo que necesita quien está subiendo el archivo.
+    expect(res.json().limit).toMatchObject({ key: 'products', used: 1, max: 2, requested: 3 });
+  });
+
+  it('el lote se rechaza ENTERO: no deja media importación dentro', async () => {
+    // Cortar a mitad dejaría unos productos sí y otros no, sin decir cuáles. Peor que
+    // no importar.
+    await darPlan(a.businessId, PLAN_DOS, 'active');
+    const antes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(a.adminToken),
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/products/import',
+      headers: auth(a.adminToken),
+      payload: {
+        rows: [
+          { name: 'X1', price: '1.00' },
+          { name: 'X2', price: '1.00' },
+          { name: 'X3', price: '1.00' },
+        ],
+      },
+    });
+    const despues = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products',
+      headers: auth(a.adminToken),
+    });
+    expect(despues.json().data.total).toBe(antes.json().data.total);
+  });
+
+  it('una importación que SÍ cabe se hace entera', async () => {
+    await darPlan(a.businessId, 'basico', 'active'); // holgado
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/products/import',
+      headers: auth(a.adminToken),
+      payload: {
+        rows: [
+          { name: 'Cabe 1', price: '10.00' },
+          { name: 'Cabe 2', price: '10.00' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.created).toBe(2);
+  });
+
   it('con cupo disponible, el alta pasa', async () => {
     await darPlan(a.businessId, 'basico', 'active'); // 3 usuarios, el negocio tiene 1
     const res = await app.inject({
@@ -273,7 +364,9 @@ describe('límites del plan', () => {
     await db
       .update(schema.location)
       .set({ isActive: false })
-      .where(and(eq(schema.location.businessId, a.businessId), eq(schema.location.isCentral, false)));
+      .where(
+        and(eq(schema.location.businessId, a.businessId), eq(schema.location.isCentral, false)),
+      );
     const [extra] = await db
       .insert(schema.location)
       .values({ businessId: a.businessId, name: 'Sucursal cupo' })
