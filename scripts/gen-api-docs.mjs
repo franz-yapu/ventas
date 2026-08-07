@@ -1,7 +1,13 @@
 /**
  * Genera `docs/API.md` a partir de las rutas REALES de la aplicación.
  *
- *   pnpm --filter @ventafacil/api exec tsx ../../scripts/gen-api-docs.mjs
+ *   pnpm docs:api
+ *
+ * Tiene que correr con `tsx`, no con `node`: importa el árbol de rutas del código
+ * TypeScript sin compilar. Con `node` pelado falla con un module-not-found — y si alguien
+ * manda ese error a /dev/null, el archivo se queda como estaba y parece que no había nada
+ * que regenerar. Pasó: llevó a dar por bueno un `docs/API.md` al que le faltaban nueve
+ * rutas. Por eso hay un script en la raíz y un paso de CI que lo comprueba.
  *
  * Se genera en vez de escribirse a mano por un motivo concreto: una lista de endpoints
  * escrita a mano se queda desactualizada en una semana, y entonces es peor que no
@@ -178,7 +184,15 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
     md += '\n';
   }
 
-  return md + `---\n\n*Generado el ${new Date().toISOString().slice(0, 10)}.*\n`;
+  /*
+    Sin sello de fecha, a propósito.
+
+    Con la fecha del día, el archivo cambia cada vez que se regenera aunque no se haya
+    tocado una sola ruta — y el paso de CI que comprueba que está al día fallaría cada
+    mañana por un motivo falso. Un CI que falla por algo que no importa enseña a
+    ignorarlo. Cuándo cambió ya lo dice el historial de git, que además no se equivoca.
+  */
+  return md;
 }
 
 const app = await buildApp({ logger: false });

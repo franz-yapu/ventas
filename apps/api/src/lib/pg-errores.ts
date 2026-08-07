@@ -19,6 +19,8 @@
 
 /** Violación de restricción única. Es contrato de PostgreSQL, no de drizzle. */
 const UNIQUE_VIOLATION = '23505';
+/** Texto que no se puede convertir al tipo de la columna. Típicamente un uuid mal escrito. */
+const INVALID_TEXT_REPRESENTATION = '22P02';
 
 /**
  * Recorre la cadena de causas.
@@ -48,6 +50,24 @@ export function violaUnica(e: unknown, nombre: string): boolean {
     // drivers. Se miran los dos para no volver a atarse a uno.
     const restriccion = c.constraint_name ?? c.constraint;
     if (typeof restriccion === 'string' && restriccion.includes(nombre)) return true;
+  }
+  return false;
+}
+
+/**
+ * ¿El error es "eso no es un identificador válido"?
+ *
+ * Un `:id` que no es un uuid llega hasta la base y allí revienta con 22P02. Sin esto la
+ * app respondía **500** a `/sales/abc`, `/customers/123` o cualquier enlace viejo mal
+ * copiado. Y no era sólo el código equivocado: cada 500 se escribe en el log como "error
+ * no controlado" y dispara un aviso por correo, así que un rastreador probando URLs
+ * llenaba el buzón de operación con avisos de algo que no está roto.
+ *
+ * Es un 400: el problema está en lo que pidió el cliente, y no hay nada que reintentar.
+ */
+export function esIdInvalido(e: unknown): boolean {
+  for (const c of causas(e)) {
+    if (c.code === INVALID_TEXT_REPRESENTATION) return true;
   }
   return false;
 }

@@ -731,6 +731,72 @@ describe('días que faltan para el corte', () => {
 });
 
 describe('renombrar un negocio', () => {
+  /**
+   * Renombrar y mudar de subdominio comparten endpoint, pero NO son la misma acción.
+   *
+   * Cambiarle el nombre a un cliente es cosmético y se deshace en diez segundos.
+   * Cambiarle la dirección deja a TODO su personal fuera en el acto, con un "usuario o
+   * contraseña incorrectos" que no explica nada, hasta que alguien les pase la nueva URL.
+   * Es la misma línea que ya se trazó antes: atender el teléfono es de cualquier
+   * operador; las decisiones que dejan a un cliente sin operar, del principal.
+   */
+  const EMAIL_SOPORTE = 'soporte.slug@ventafacil.test';
+  const CLAVE_SOPORTE = 'clave-de-soporte-larga';
+  let tokenSoporte = '';
+  /**
+   * Negocio propio y desechable para estos tres casos.
+   *
+   * Renombrar y mudar el slug de `a` rompía dos casos posteriores que dependen de que
+   * siga llamándose y viviendo donde estaba: el de la bitácora, que compara contra el
+   * nombre original, y el del rescate de acceso, que entra por `a.slug`. Los tests que
+   * MUTAN estado compartido tienen que traerse el suyo.
+   */
+  let mudanza: Tenant;
+
+  beforeAll(async () => {
+    mudanza = await createTenant(app, 'plat-mudanza');
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/platform/admins',
+      headers: auth(token()),
+      payload: { email: EMAIL_SOPORTE, name: 'Soporte', password: CLAVE_SOPORTE },
+    });
+    tokenSoporte = (await entrar(EMAIL_SOPORTE, CLAVE_SOPORTE)).json().data.accessToken;
+  });
+
+  it('un operador de soporte SÍ puede renombrar', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${mudanza.businessId}`,
+      headers: auth(tokenSoporte),
+      payload: { name: 'Renombrado por soporte' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('pero NO puede mudarlo de subdominio: eso deja al cliente fuera', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${mudanza.businessId}`,
+      headers: auth(tokenSoporte),
+      payload: { slug: 'direccion-nueva-soporte' },
+    });
+    expect(res.statusCode).toBe(403);
+    // Y el mensaje habla de lo que intentó, no de administrar operadores.
+    expect(res.json().error).toMatch(/subdominio/i);
+  });
+
+  it('el principal sí puede mudarlo', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${mudanza.businessId}`,
+      headers: auth(token()),
+      payload: { slug: 'direccion-nueva-principal' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.slug).toBe('direccion-nueva-principal');
+  });
+
   it('cambia el nombre', async () => {
     const res = await app.inject({
       method: 'PATCH',

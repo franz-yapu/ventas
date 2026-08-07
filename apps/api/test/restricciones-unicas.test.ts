@@ -133,3 +133,36 @@ describe('violaUnica reconoce el error por contrato de PostgreSQL', () => {
     expect(violaUnica(undefined, 'business_slug_unique')).toBe(false);
   });
 });
+
+describe('un identificador mal formado es un 400, no un 500', () => {
+  /**
+   * Un `:id` que no es un uuid llegaba hasta Postgres y reventaba con 22P02, y la app lo
+   * devolvía como 500. No era sólo el código equivocado: cada 500 se escribe en el log
+   * como "error no controlado" y dispara un aviso por correo, así que un rastreador
+   * probando URLs llenaba el buzón de operación con avisos de algo que no está roto.
+   *
+   * Se atiende en el manejador global —un solo sitio— porque afecta a todas las rutas con
+   * parámetro y seguirá afectando a las que vengan.
+   */
+  it.each([
+    ['/api/v1/sales/abc'],
+    ['/api/v1/customers/123'],
+    ['/api/v1/cash/registers/xx'],
+    ['/api/v1/products/no-es-uuid/history'],
+  ])('%s responde 400', async (url) => {
+    const res = await app.inject({ method: 'GET', url, headers: auth(t.adminToken) });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(res.statusCode).not.toBe(500);
+  });
+
+  it('un uuid válido que no existe sigue dando 404, no 400', async () => {
+    // Que el remedio no se lleve por delante el caso legítimo: "bien escrito pero no
+    // está" y "eso ni siquiera es un identificador" son dos respuestas distintas.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/sales/11111111-1111-4111-8111-111111111111',
+      headers: auth(t.adminToken),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});

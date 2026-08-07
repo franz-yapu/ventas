@@ -13,6 +13,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "docs:api": "pnpm --filter @ventafacil/api exec tsx ../../scripts/gen-api-docs.mjs",
     "db:generate": "pnpm --filter @ventafacil/db generate",
     "db:migrate": "pnpm --filter @ventafacil/db migrate",
     "db:seed": "pnpm --filter @ventafacil/db seed",

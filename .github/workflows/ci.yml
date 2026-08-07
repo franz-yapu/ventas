@@ -93,6 +93,20 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Mismo razonamiento que la migración de abajo, para la documentación: se genera a
+      # mano y es fácil añadir una ruta y olvidarse. `docs/API.md` llegó a tener 65 de 74
+      # endpoints, y nadie lo notó porque un documento GENERADO no se duda — se supone
+      # que está al día por construcción. Un documento que miente y parece fiable es peor
+      # que no tenerlo, así que lo comprueba el CI y no la buena memoria de nadie.
+      - name: ¿La documentación del API está al día?
+        run: |
+          pnpm docs:api
+          if [ -n "$(git status --porcelain docs/API.md)" ]; then
+            echo "::error::Hay rutas nuevas sin documentar. Corre: pnpm docs:api"
+            git diff --stat docs/API.md
+            exit 1
+          fi
+
       # Las migraciones se generan a mano (`pnpm db:generate`) y es fácil cambiar el
       # esquema y olvidarse. Si al regenerar aparece un archivo nuevo, es que faltaba:
       # se descubriría al desplegar, con la base ya en producción.

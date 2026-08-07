@@ -51,7 +51,7 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 
 ---
 
-## Endpoints (65)
+## Endpoints (74)
 
 ### Actividad
 
@@ -115,19 +115,28 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 | `OPTIONS` | `*` | requerida |
 | `GET` | `/api/v1/dashboard-config` | requerida |
 | `PUT` | `/api/v1/dashboard-config` | requerida |
+| `GET` | `/api/v1/public/business/:slug` | requerida |
 | `GET` | `/health` | — pública |
 
 ### Panel de plataforma
 
 | Método | Ruta | Sesión |
 |---|---|---|
+| `GET` | `/api/v1/platform/admins` | requerida |
+| `POST` | `/api/v1/platform/admins` | requerida |
+| `PATCH` | `/api/v1/platform/admins/:id` | requerida |
 | `GET` | `/api/v1/platform/audit` | requerida |
 | `POST` | `/api/v1/platform/login` | — pública |
 | `GET` | `/api/v1/platform/me` | requerida |
+| `PATCH` | `/api/v1/platform/me` | requerida |
+| `PATCH` | `/api/v1/platform/me/password` | requerida |
 | `GET` | `/api/v1/platform/metrics` | requerida |
 | `GET` | `/api/v1/platform/tenants` | requerida |
 | `GET` | `/api/v1/platform/tenants/:id` | requerida |
+| `PATCH` | `/api/v1/platform/tenants/:id` | requerida |
 | `PATCH` | `/api/v1/platform/tenants/:id/subscription` | requerida |
+| `GET` | `/api/v1/platform/tenants/:id/users` | requerida |
+| `POST` | `/api/v1/platform/tenants/:id/users/:userId/password` | requerida |
 
 ### Registro de negocios
 
@@ -193,6 +202,3 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 | `POST` | `/api/v1/sales/:id/cancel` | requerida |
 | `POST` | `/api/v1/sales/sync` | requerida |
 
----
-
-*Generado el 2026-08-04.*

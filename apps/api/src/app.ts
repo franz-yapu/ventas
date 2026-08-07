@@ -29,6 +29,7 @@ import { reportRoutes } from './modules/reports.js';
 import { saleRoutes } from './modules/sales.js';
 import { subscriptionRoutes } from './modules/subscription.js';
 import { userRoutes } from './modules/users.js';
+import { esIdInvalido } from './lib/pg-errores.js';
 import './types.js';
 
 /**
@@ -99,6 +100,20 @@ export async function buildApp(
    */
   app.setErrorHandler((err: Error & { statusCode?: number; error?: unknown }, req, reply) => {
     const status = err.statusCode ?? 500;
+
+    /*
+      Un identificador mal formado es culpa de quien pregunta, no del servidor.
+
+      Un `:id` que no es un uuid llega hasta Postgres y allí revienta con 22P02. Antes eso
+      salía como 500: código equivocado, entrada de "error no controlado" en el log, y un
+      aviso por correo — así que bastaba un rastreador probando URLs para llenar el buzón
+      de operación con avisos de algo que no está roto. Se atiende aquí, en un solo sitio,
+      porque afecta a todas las rutas con parámetro y seguirá afectando a las que vengan.
+    */
+    if (esIdInvalido(err)) {
+      return reply.code(400).send({ data: null, error: 'Identificador no válido' });
+    }
+
     if (status >= 500) {
       req.log.error({ err }, 'error no controlado');
       // Además del log, un aviso: nadie mira un log a las 3 de la tarde de un martes.

@@ -327,20 +327,33 @@ export async function platformRoutes(app: FastifyInstance) {
    * en la siguiente petición, no cuando le caduque la sesión.
    */
   const soloPrincipal = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!(await esPrincipal(req, reply, 'administrar operadores'))) return reply;
+  };
+
+  /**
+   * ¿Quien pregunta es el operador principal? Contesta 403 con el motivo si no.
+   *
+   * `que` va en el mensaje. El texto era fijo —"puede administrar operadores"— y se
+   * usaba también para cambiar el plan de un cliente o suspenderlo, así que a un
+   * operador de soporte le salía una explicación que no tenía nada que ver con lo que
+   * acababa de intentar. Un mensaje que no describe el caso enseña a no leerlos.
+   */
+  async function esPrincipal(req: FastifyRequest, reply: FastifyReply, que: string) {
     const [yo] = await db
       .select({ isOwner: schema.platformAdmin.isOwner, isActive: schema.platformAdmin.isActive })
       .from(schema.platformAdmin)
       .where(eq(schema.platformAdmin.id, req.platformUser!.sub))
       .limit(1);
     if (!yo || !yo.isActive) {
-      return reply.code(401).send({ data: null, error: 'No autorizado' });
+      reply.code(401).send({ data: null, error: 'No autorizado' });
+      return false;
     }
     if (!yo.isOwner) {
-      return reply
-        .code(403)
-        .send({ data: null, error: 'Sólo un operador principal puede administrar operadores' });
+      reply.code(403).send({ data: null, error: `Sólo un operador principal puede ${que}.` });
+      return false;
     }
-  };
+    return true;
+  }
 
   /** Cuántos principales quedarían activos si a `excepto` le pasara lo que va a pasarle. */
   async function principalesActivos(excepto?: string): Promise<number> {
@@ -674,6 +687,18 @@ export async function platformRoutes(app: FastifyInstance) {
       if (!(await slugDisponible(slug))) {
         return reply.code(409).send({ data: null, error: 'Esa dirección ya está ocupada' });
       }
+      /*
+        Mudar de subdominio es del PRINCIPAL; renombrar, de cualquiera.
+
+        No son la misma acción aunque compartan endpoint. Cambiarle el nombre a un
+        cliente es cosmético y se deshace en diez segundos. Cambiarle la dirección deja
+        a TODO su personal fuera en el acto, con un "usuario o contraseña incorrectos"
+        que no explica nada, hasta que alguien les pase la nueva URL por teléfono.
+
+        Es la misma línea que ya se trazó en esta ronda anterior: atender el teléfono es
+        de cualquier operador; las decisiones que dejan a un cliente sin operar, no.
+      */
+      if (!(await esPrincipal(req, reply, 'mudar un negocio de subdominio'))) return reply;
       patch.slug = slug;
     }
     if (Object.keys(patch).length === 0) {
