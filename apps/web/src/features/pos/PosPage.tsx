@@ -58,6 +58,8 @@ export function PosPage() {
   const [scanOpen, setScanOpen] = useState(false);
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  /** Motivo por el que se pide confirmación antes de cobrar; null = cobra directo. */
+  const [confirmar, setConfirmar] = useState<string | null>(null);
   const showToast = (text: string, ok = true) => {
     setToast({ text, ok });
     setTimeout(() => setToast(null), 2600);
@@ -239,6 +241,52 @@ export function PosPage() {
   }
 
   const canCheckout = cart.length > 0 && !!activeLocation && !busy;
+
+  /**
+   * Umbral a partir del cual una venta se confirma por el monto.
+   *
+   * No es una cifra sagrada: es "esto ya no es la compra de siempre" para una tienda de
+   * barrio. Si algún día molesta, el sitio para volverlo configurable es Configuración,
+   * junto al tope de descuento.
+   */
+  const MONTO_QUE_MERECE_CONFIRMAR = 1000;
+
+  /**
+   * ¿Esta venta merece una confirmación antes de registrarse?
+   *
+   * "Cobrar" no pedía ninguna: un roce y la venta quedaba hecha —así apareció la venta
+   * #104 durante la revisión, sin que nadie la quisiera—. Pero confirmar SIEMPRE tampoco
+   * sirve: es el gesto más repetido del día, y un diálogo que se pulsa doscientas veces
+   * deja de leerse en una semana, justo cuando haría falta.
+   *
+   * Así que se pregunta sólo cuando algo se sale de lo normal, que es donde el error sale
+   * caro y no se descubre hasta el arqueo:
+   *   - hay descuento (dinero que se deja de cobrar),
+   *   - es fiado (no entra efectivo y queda alguien debiendo),
+   *   - o el total es alto para el mostrador.
+   */
+  function motivoParaConfirmar(): string | null {
+    if (discountNum > 0) {
+      return `Vas a cobrar ${money(total)} con ${money(discountNum)} de descuento.`;
+    }
+    if (payment === 'credit') {
+      const cliente = customers?.find((c) => c.id === customerId)?.name;
+      return cliente
+        ? `Vas a fiar ${money(total)} a ${cliente}. Quedará como deuda suya.`
+        : `Vas a fiar ${money(total)}.`;
+    }
+    if (total >= MONTO_QUE_MERECE_CONFIRMAR) {
+      return `Vas a cobrar ${money(total)}, que es una venta grande.`;
+    }
+    return null;
+  }
+
+  /** Lo que pulsa el botón: confirma si toca, y si no cobra directo. */
+  function alPulsarCobrar() {
+    const motivo = motivoParaConfirmar();
+    if (motivo) setConfirmar(motivo);
+    else void checkout();
+  }
   // Sin fiado: el método 'credit' no se ofrece nunca.
   const methods = PAYMENT_METHODS.filter((m) => m !== 'credit');
   const PAY_ICON: Record<string, typeof Banknote> = {
@@ -520,12 +568,37 @@ export function PosPage() {
             size="xl"
             className="h-14 w-full text-base"
             disabled={!canCheckout}
-            onClick={checkout}
+            onClick={alPulsarCobrar}
           >
             {busy ? 'Cobrando…' : `Cobrar · ${money(total)}`}
           </Button>
         </CardContent>
       </Card>
+
+      {/*
+        Sólo aparece cuando la venta se sale de lo normal (ver `motivoParaConfirmar`).
+        El botón que confirma repite el total: si alguien llegó aquí por un roce, lo que
+        tiene que leer es cuánto va a cobrar, no la palabra "aceptar".
+      */}
+      {confirmar && (
+        <Modal open onClose={() => setConfirmar(null)} title="Confirma la venta">
+          <p className="text-[15px] leading-[1.6]">{confirmar}</p>
+          <div className="mt-5 flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setConfirmar(null)}>
+              Volver
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setConfirmar(null);
+                void checkout();
+              }}
+            >
+              Cobrar {money(total)}
+            </Button>
+          </div>
+        </Modal>
+      )}
 
       {scanOpen && (
         <Suspense fallback={null}>

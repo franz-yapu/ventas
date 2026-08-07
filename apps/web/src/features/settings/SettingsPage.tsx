@@ -332,14 +332,21 @@ export function SettingsPage() {
                 onChange={(e) => setForm({ ...form, currency: e.target.value })}
               />
             </div>
-            <div>
-              <label className="text-sm text-muted">Tasa de impuesto (%)</label>
-              <Input
-                inputMode="decimal"
-                value={form.taxRate}
-                onChange={(e) => setForm({ ...form, taxRate: e.target.value })}
-              />
-            </div>
+            {/*
+              La "Tasa de impuesto (%)" se quitó de aquí a propósito.
+
+              Se guardaba, se exportaba... y no intervenía en NINGÚN cálculo: ninguna
+              venta la usaba, porque el total se valida como `subtotal − descuento`. Un
+              ajuste que no hace nada es peor que no tenerlo: el dueño lo configuraba
+              creyendo que estaba cobrando IVA, y no lo estaba. Y los términos ya dicen
+              que el sistema no emite facturas fiscales ni sustituye a nadie ante
+              Impuestos Nacionales.
+
+              La columna `business.tax_rate` se queda en la base y en la exportación —
+              borrarla es una migración con pérdida por un campo que quizá se implemente—,
+              pero deja de prometerse en pantalla. Si algún día se implementa de verdad,
+              el trabajo está en la venta, el recibo, los reportes y el arqueo, no aquí.
+            */}
             <div>
               <label className="text-sm text-muted">Descuento máximo del vendedor (%)</label>
               <Input
