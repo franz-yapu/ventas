@@ -143,6 +143,20 @@ const RUTAS_LIBRES = new Set(
     '/subscription/me',
     '/plans',
     '/business/me',
+    /*
+      Llevarse los propios datos NO se bloquea, y es el caso que más importa.
+
+      Los términos prometen dos cosas: que puedes descargar una copia completa «en
+      cualquier momento», y que si cancelas se conservan tus datos N días «por si quieres
+      volver o descargar una copia». El sistema hacía exactamente lo contrario: la
+      exportación caía en el 402 general, así que dejaba de funcionar justo en el momento
+      para el que se escribió esa frase — al cancelar, al vencer la prueba, al suspender.
+
+      Aquí el que estaba mal era el sistema, no el texto. Suspender a alguien le impide
+      OPERAR, no recuperar lo suyo: son sus ventas y sus clientes. Y el tope propio de la
+      ruta (5/hora por IP) ya evita que se use como forma barata de castigar al servidor.
+    */
+    '/business/export',
   ].map((r) => API_PREFIX + r),
 );
 

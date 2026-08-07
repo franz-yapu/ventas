@@ -1,10 +1,19 @@
 import { schema, withTenant } from '@ventafacil/db';
+import type { AuditAction, AuditEntity } from '@ventafacil/shared';
 import type { FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 
 export interface AuditEntry {
-  action: string;
-  entity: string;
+  /**
+   * Tipadas contra la lista de `@ventafacil/shared`, no `string`.
+   *
+   * Con `string` el API podía emitir una acción que la pantalla no sabía traducir, y eso
+   * fue exactamente lo que pasó: trece de las veintiuna salían crudas en la bitácora, que
+   * es la única herramienta que tiene un dueño para vigilar a su gente. Ahora añadir una
+   * acción sin ponerle nombre en español no compila.
+   */
+  action: AuditAction;
+  entity: AuditEntity;
   entityId?: string | null;
   before?: unknown;
   after?: unknown;

@@ -128,6 +128,17 @@ const TOOLTIP = {
     fontSize: 12,
   },
   labelStyle: { color: 'var(--color-muted)' },
+  /*
+    El VALOR también, y esto faltaba.
+
+    `contentStyle.color` viste el recuadro, pero Recharts pinta cada línea del tooltip con
+    el color de SU serie —el primario del negocio, crudo—, y ahí se quedaba en 3.25:1
+    sobre el panel oscuro: el número, que es lo único que se ha ido a leer, era lo menos
+    legible del gráfico. `--color-primary-ink` existe justo para la marca usada como
+    texto, pero aquí ni siquiera hace falta la marca: quién es cada serie ya lo dice el
+    gráfico. El número se lee en el color del texto normal.
+  */
+  itemStyle: { color: 'var(--color-fg)' },
   // El resalte de fondo también es un gris fijo suyo, y sobre el panel oscuro se ve como
   // una mancha clara.
   cursor: { fill: 'var(--color-track)', stroke: 'var(--color-border)' },

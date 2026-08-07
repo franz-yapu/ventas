@@ -180,20 +180,29 @@ export function PlatformPage() {
 
   return (
     <div className="min-h-full bg-bg">
-      <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
-        <div className="flex items-center gap-3">
+      {/*
+        En móvil la cabecera se apila, y no por gusto.
+
+        En una fila, los tres botones más la identidad del operador sumaban 99 px más que
+        la pantalla de un teléfono: "Salir" quedaba entero fuera, sin forma de llegar a él
+        —era la única pantalla del producto con desborde horizontal—. `flex-wrap` con los
+        botones a la derecha resuelve el caso sin cambiar nada en escritorio.
+      */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-fg text-bg">
             <ShieldCheck size={18} />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-[15px] font-bold tracking-[-0.02em]">Plataforma</div>
-            <div className="text-[12px] text-muted">
+            {/* El correo se recorta en vez de empujar: es identificación, no acción. */}
+            <div className="truncate text-[12px] text-muted">
               {admin?.email}
               {admin?.isOwner && ' · principal'}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Administrar operadores sólo aparece para quien puede: un botón que
               siempre responde "no tienes permiso" es peor que no estar. */}
           {admin?.isOwner && (
@@ -350,9 +359,7 @@ function TenantModal({
       {data && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] text-muted">
-              {data.business.slug ?? 'sin subdominio'}
-            </span>
+            <span className="text-[13px] text-muted">{data.business.slug ?? 'sin subdominio'}</span>
             <div className="flex items-center gap-2">
               <VenceBadge vence={data.vence} />
               <EstadoBadge status={sub?.status ?? null} />
@@ -535,14 +542,12 @@ function DatosDelNegocio({
         <label className="mb-1 block text-[13px] font-semibold">Subdominio</label>
         <Input value={s} onChange={(e) => setS(e.target.value)} placeholder="mi-negocio" />
         <p className="mt-1 text-[12px] text-warning">
-          Si lo cambias, la dirección actual deja de funcionar de inmediato. Avísale al
-          cliente antes.
+          Si lo cambias, la dirección actual deja de funcionar de inmediato. Avísale al cliente
+          antes.
         </p>
       </div>
       {error && <p className="text-[13px] text-danger">{error}</p>}
-      {nuevaUrl && (
-        <p className="text-[13px] text-success">Nueva dirección: {nuevaUrl}</p>
-      )}
+      {nuevaUrl && <p className="text-[13px] text-success">Nueva dirección: {nuevaUrl}</p>}
       <div className="flex gap-2">
         <Button variant="outline" className="flex-1" onClick={() => setAbierto(false)}>
           Cerrar
@@ -619,8 +624,8 @@ function UsuariosDelNegocio({ id }: { id: string }) {
         ))}
       </ul>
       <p className="text-[12px] text-muted">
-        Un usuario sin correo verificado no puede recuperar su contraseña solo: es el
-        caso en el que hace falta darle una desde aquí.
+        Un usuario sin correo verificado no puede recuperar su contraseña solo: es el caso en el que
+        hace falta darle una desde aquí.
       </p>
     </div>
   );

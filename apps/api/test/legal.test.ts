@@ -62,7 +62,13 @@ describe('aceptación de los términos', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/register',
-      payload: { ...ALTA, slug: 'sin-aceptar', username: 'xxx1', email: 'xxx1@x.test', acceptTerms: false },
+      payload: {
+        ...ALTA,
+        slug: 'sin-aceptar',
+        username: 'xxx1',
+        email: 'xxx1@x.test',
+        acceptTerms: false,
+      },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toContain('términos');
@@ -174,5 +180,56 @@ describe('exportación de datos', () => {
   it('sin sesión no se exporta nada', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/business/export' });
     expect(res.statusCode).toBe(401);
+  });
+
+  describe('llevarse los datos no se bloquea nunca', () => {
+    /**
+     * Los términos prometen que puedes descargar una copia completa «en cualquier
+     * momento», y que si cancelas se conservan tus datos N días «por si quieres volver o
+     * descargar una copia».
+     *
+     * El sistema hacía exactamente lo contrario: la exportación caía en el 402 general de
+     * suscripción, así que dejaba de funcionar justo en el momento para el que se
+     * escribió esa frase. Aquí el que estaba mal era el sistema, no el texto — suspender
+     * a alguien le impide OPERAR, no recuperar lo suyo.
+     */
+    it.each([
+      ['prueba vencida', 'trial', () => new Date(Date.now() - 86_400_000)],
+      ['suspendida', 'suspended', () => null],
+      ['cancelada', 'cancelled', () => null],
+    ])('con la suscripción %s, sigue pudiendo exportar', async (_n, estado, vence) => {
+      await db
+        .insert(schema.subscription)
+        .values({
+          businessId: t.businessId,
+          planCode: 'basico',
+          status: estado as never,
+          trialEndsAt: vence(),
+        })
+        .onConflictDoUpdate({
+          target: schema.subscription.businessId,
+          set: { planCode: 'basico', status: estado as never, trialEndsAt: vence() },
+        });
+      clearAccessCache();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/business/export',
+        headers: auth(t.adminToken),
+      });
+      expect(res.statusCode, res.body.slice(0, 120)).toBe(200);
+      expect(res.json().negocio).toBeTruthy();
+    });
+
+    it('pero seguir OPERANDO sí se bloquea: exportar no reabre la puerta', async () => {
+      // Que el arreglo no se pase de largo. Lo que se abre es llevarse lo propio, no
+      // volver a vender sin pagar.
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/products',
+        headers: auth(t.adminToken),
+      });
+      expect(res.statusCode).toBe(402);
+    });
   });
 });

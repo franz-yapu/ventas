@@ -11,25 +11,19 @@ import { api } from '@/lib/api';
 import { currentWeek, dateTime } from '@/lib/format';
 import type { AppUserRow, AuditRow } from '@/lib/types';
 import { useInfiniteList } from '@/lib/useInfinite';
+import { AUDIT_ACTION_LABELS, AUDIT_ENTITY_LABELS } from '@ventafacil/shared';
 import { EmptyState, Page, PageHeader, SkeletonRows } from '@/components/ui/page';
 
-const ACTION_LABELS: Record<string, string> = {
-  login: 'Inicio de sesión',
-  create: 'Creación',
-  update: 'Edición',
-  price_change: 'Cambio de precio',
-  delete: 'Eliminación',
-  cancel: 'Cancelación',
-  sale: 'Venta',
-  import: 'Importación',
-};
-const ENTITY_LABELS: Record<string, string> = {
-  app_user: 'Usuario',
-  product: 'Producto',
-  category: 'Categoría',
-  location: 'Ubicación',
-  sale: 'Venta',
-};
+/*
+  Los rótulos vienen de `@ventafacil/shared`, no de aquí.
+
+  Estaban escritos en esta pantalla y se habían quedado en 8 de las 21 acciones que emite
+  el servidor: `transfer`, `open`, `close`, `stock_adjust` y nueve más salían crudas, en
+  la única pantalla que tiene un dueño para vigilar a su gente. Ahora la lista es una y
+  está tipada: añadir una acción sin nombre en español no compila.
+*/
+const ACTION_LABELS: Record<string, string> = AUDIT_ACTION_LABELS;
+const ENTITY_LABELS: Record<string, string> = AUDIT_ENTITY_LABELS;
 // Tono del chip por tipo de acción (coincide con el prototipo).
 const ACTION_TONE: Record<string, BadgeTone> = {
   create: 'success',
