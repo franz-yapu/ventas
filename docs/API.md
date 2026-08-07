@@ -51,7 +51,7 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 
 ---
 
-## Endpoints (76)
+## Endpoints (79)
 
 ### Actividad
 
@@ -178,6 +178,8 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 | `GET` | `/api/v1/locations` | requerida |
 | `POST` | `/api/v1/locations` | requerida |
 | `PATCH` | `/api/v1/locations/:id` | requerida |
+| `DELETE` | `/api/v1/locations/:id` | requerida |
+| `PATCH` | `/api/v1/locations/:id/principal` | requerida |
 
 ### Suscripción
 
@@ -193,6 +195,7 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 | `GET` | `/api/v1/users` | requerida |
 | `POST` | `/api/v1/users` | requerida |
 | `PATCH` | `/api/v1/users/:id` | requerida |
+| `DELETE` | `/api/v1/users/:id` | requerida |
 
 ### Ventas
 

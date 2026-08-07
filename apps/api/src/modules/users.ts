@@ -4,6 +4,7 @@ import argon2 from 'argon2';
 import { and, asc, count, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { colgandoDeUsuario, mensajeDesactivado } from '../lib/borrado.js';
 import { violaUnica } from '../lib/pg-errores.js';
 import { esUbicacionDelNegocio, NINGUNA_UBICACION } from '../lib/scope.js';
 import { revocarTodo } from '../lib/sessions.js';
@@ -282,6 +283,104 @@ export async function userRoutes(app: FastifyInstance) {
 
       await app.audit(req, { action: 'update', entity: 'app_user', entityId: id, after: row });
       return reply.send({ data: row, error: null });
+    },
+  );
+
+  /**
+   * DELETE /users/:id — borra si no ha hecho nada; si ha hecho algo, desactiva y lo dice.
+   *
+   * Ver `lib/borrado.ts`. Aquí lo que las claves foráneas NO defienden son los abonos, los
+   * movimientos de caja y la bitácora: los tres quedan en SET NULL, así que un borrado
+   * físico dejaría un abono sin saber quién lo cobró y una bitácora sin autor — que es
+   * como no tener bitácora, porque su único trabajo es decir quién hizo qué.
+   */
+  app.delete(
+    '/users/:id',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const businessId = req.authUser!.businessId;
+
+      const [actual] = await withTenant(businessId, (tx) =>
+        tx
+          .select()
+          .from(schema.appUser)
+          .where(and(eq(schema.appUser.id, id), eq(schema.appUser.businessId, businessId)))
+          .limit(1),
+      );
+      if (!actual) return reply.code(404).send({ data: null, error: 'Usuario no encontrado' });
+
+      // Un encargado sólo administra a los suyos, igual que al editar.
+      if (!puedeAdministrarA(req.authUser!, actual.locationId)) {
+        return reply
+          .code(403)
+          .send({ data: null, error: 'Sólo puedes administrar usuarios de tu propia sucursal' });
+      }
+
+      // Nadie se borra a sí mismo: quedarse fuera de la propia cuenta por un clic es un
+      // rodeo caro (hay que llamar a soporte) para algo que no aporta nada.
+      if (id === req.authUser!.sub) {
+        return reply.code(409).send({ data: null, error: 'No puedes eliminar tu propia cuenta.' });
+      }
+
+      if (actual.role === 'admin' && (await esElUltimoAdminCentral(businessId, id))) {
+        return reply.code(409).send({
+          data: null,
+          error:
+            'Es el último administrador del negocio. Nombra a otro antes de eliminarlo, o ' +
+            'nadie podrá administrarlo.',
+          code: 'ultimo_admin',
+        });
+      }
+
+      const colgando = await colgandoDeUsuario(businessId, id);
+
+      // En cualquiera de los dos caminos se le cierran las sesiones: si se borra, su token
+      // apuntaría a un usuario que ya no está; si se desactiva, es lo que ya se hacía.
+      await revocarTodo(businessId, id);
+
+      if (colgando.total === 0) {
+        await withTenant(businessId, (tx) =>
+          tx.delete(schema.appUser).where(eq(schema.appUser.id, id)),
+        );
+        await app.audit(req, {
+          action: 'delete',
+          entity: 'app_user',
+          entityId: id,
+          before: { name: actual.name, username: actual.username, role: actual.role },
+        });
+        return reply.send({
+          data: { eliminado: true, mensaje: `${actual.name} se eliminó.` },
+          error: null,
+        });
+      }
+
+      const [desactivado] = await withTenant(businessId, (tx) =>
+        tx
+          .update(schema.appUser)
+          .set({ isActive: false })
+          .where(eq(schema.appUser.id, id))
+          .returning({
+            id: schema.appUser.id,
+            name: schema.appUser.name,
+            isActive: schema.appUser.isActive,
+          }),
+      );
+      await app.audit(req, {
+        action: 'update',
+        entity: 'app_user',
+        entityId: id,
+        after: { isActive: false, motivo: 'intento de borrado con historial' },
+      });
+      return reply.send({
+        data: {
+          eliminado: false,
+          desactivado,
+          mensaje: mensajeDesactivado(actual.name, colgando),
+          colgando: colgando.detalle,
+        },
+        error: null,
+      });
     },
   );
 }
