@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { History, Package, Pencil, Plus, Search, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { History, Package, Pencil, Plus, Search } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { ImportarProductos } from '@/features/products/ImportarProductos';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { EmptyState, Page, PageHeader, SkeletonRows } from '@/components/ui/page';
@@ -76,7 +77,7 @@ export function ProductsPage() {
         acciones={
           puedeGestionarCatalogo && (
             <>
-              <CsvImport schema={business?.productSchema ?? []} onDone={reload} />
+              <ImportarProductos onDone={reload} />
               <Button onClick={() => setEditing('new')}>
                 <Plus size={18} /> Nuevo
               </Button>
@@ -287,60 +288,6 @@ export function ProductsPage() {
 }
 
 // Importación CSV simple. Cabecera esperada: sku,name,price + columnas de atributos por rubro.
-function CsvImport({
-  schema,
-  onDone,
-}: {
-  schema: Array<{ key: string; label: string; type: string; required?: boolean }>;
-  onDone: () => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  const [result, setResult] = useState<string | null>(null);
-
-  const attrKeys = schema.map((s) => s.key);
-
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).filter((l) => l.trim());
-    const header = lines[0]?.split(',').map((h) => h.trim().toLowerCase()) ?? [];
-    const rows = lines.slice(1).map((line) => {
-      const cols = line.split(',');
-      const get = (name: string) => cols[header.indexOf(name)]?.trim() ?? '';
-      const attributes: Record<string, string> = {};
-      for (const k of attrKeys) if (header.includes(k)) attributes[k] = get(k);
-      return { sku: get('sku'), name: get('name'), price: get('price') || '0', attributes };
-    });
-    try {
-      const r = await api.post<{ created: number; skipped: number }>('/products/import', { rows });
-      setResult(`Importados: ${r.created} · Omitidos: ${r.skipped}`);
-      onDone();
-    } catch {
-      setResult('Error al importar');
-    }
-    if (ref.current) ref.current.value = '';
-  }
-
-  return (
-    <>
-      <input ref={ref} type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
-      <Button
-        variant="outline"
-        onClick={() => ref.current?.click()}
-        title="sku,name,price + atributos"
-      >
-        <Upload size={18} /> CSV
-      </Button>
-      {result && (
-        <Modal open onClose={() => setResult(null)} title="Importación CSV">
-          <p className="text-sm">{result}</p>
-        </Modal>
-      )}
-    </>
-  );
-}
-
 function ProductForm({
   product,
   schema,

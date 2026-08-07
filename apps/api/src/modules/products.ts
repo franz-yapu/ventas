@@ -378,6 +378,15 @@ export async function productRoutes(app: FastifyInstance) {
         .object({
           rows: z.array(upsertProductSchema).max(1000),
           locationId: z.string().uuid().optional(),
+          /**
+           * Número de la primera fila de este lote EN EL ARCHIVO original.
+           *
+           * Un archivo de 5.000 productos se sube por lotes —una sola petición se pasa de
+           * cualquier tiempo de espera razonable—, así que sin esto el lote 7 informaría
+           * de un error "en la fila 3" y quien corrige, mirando su hoja de cálculo, no
+           * encontraría nada ahí.
+           */
+          desdeFila: z.number().int().min(1).optional(),
         })
         .safeParse(req.body);
       if (!body.success) return reply.code(400).send({ data: null, error: 'Filas invalidas' });
@@ -408,10 +417,22 @@ export async function productRoutes(app: FastifyInstance) {
         return reply;
       }
 
+      /*
+        Cada fila rechazada dice POR QUÉ y en qué línea del archivo iba.
+
+        Antes era `catch { skipped++ }`: la respuesta decía "87 saltadas" y ahí terminaba.
+        Con un archivo de 5.000 filas eso es inservible — no hay forma de saber cuáles ni
+        de arreglarlas, así que lo único que queda es volver a intentarlo entero y esperar.
+
+        `fila` es el número de línea EN EL ARCHIVO, no el índice del lote: quien está
+        corrigiendo mira una hoja de cálculo, no nuestro JSON.
+      */
       let created = 0;
-      let skipped = 0;
-      for (const row of body.data.rows) {
+      const errores: Array<{ fila: number; sku?: string; nombre?: string; motivo: string }> = [];
+
+      for (const [i, row] of body.data.rows.entries()) {
         const { locationId: _l, initialStock, minStock, ...productData } = row;
+        const fila = (body.data.desdeFila ?? 1) + i;
         try {
           await withTenant(user.businessId, async (tx) => {
             const sku = productData.sku ?? (await nextProductSku(tx, user.businessId));
@@ -428,12 +449,29 @@ export async function productRoutes(app: FastifyInstance) {
             });
           });
           created++;
-        } catch {
-          skipped++;
+        } catch (e) {
+          errores.push({
+            fila,
+            sku: productData.sku,
+            nombre: productData.name,
+            motivo: violaUnica(e, 'product_business_sku_uq')
+              ? `Ya existe un producto con el código ${productData.sku}`
+              : 'No se pudo guardar esta fila',
+          });
+          // Lo inesperado al log del servidor: ahí puede mirarlo quien sabe qué hacer.
+          if (!violaUnica(e, 'product_business_sku_uq')) req.log.error(e, 'importando producto');
         }
       }
-      await app.audit(req, { action: 'import', entity: 'product', after: { created, skipped } });
-      return reply.send({ data: { created, skipped }, error: null });
+
+      await app.audit(req, {
+        action: 'import',
+        entity: 'product',
+        after: { created, saltadas: errores.length },
+      });
+      return reply.send({
+        data: { created, skipped: errores.length, errores },
+        error: null,
+      });
     },
   );
 }
