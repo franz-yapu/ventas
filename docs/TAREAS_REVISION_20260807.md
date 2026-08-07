@@ -1,14 +1,17 @@
 # Tareas pendientes — revisión con tres agentes del 2026-08-07
 
-> ## Estado al cerrar la sesión del 7 de agosto
+> ## ✅ Cerrado el 7 de agosto de 2026 — los siete bloques
 >
-> **Bloques 0, 1, 2 y 3 cerrados** — 17 tareas, 6 commits (`d812417` … `b406194`), de
-> 405 tests a **462** (345 del API + 117 de la web), typecheck y build limpios.
+> **13 commits** (`d812417` … `88d4c22`). De 405 tests a **504** (373 del API + 131 de la
+> web). Cobertura del API del 84 % al **88,5 %**. Typecheck, build y formato limpios.
 >
-> **Faltan los bloques 4, 5 y 6: 24 tareas.** Ninguna es de dinero ni de aislamiento;
-> la de más valor es la 4.1 (el generador de `docs/API.md` pierde 9 de 74 rutas y
-> regenerarlo no delata nada) y las del bloque 6, que son las que evitan la próxima
-> ronda de 54 hallazgos.
+> Quedan sólo tres cosas, y ninguna es código:
+>
+> - **0.2** — comprobar qué secreto JWT tiene el VPS. Lo ejecuta franz.
+> - **1.2** — comprobar en producción si quedaron filas de inventario huérfanas.
+> - **0.4** — migrar a react-router 7, razonada abajo como _no urgente_.
+>
+> ⛔ **Antes de desplegar: `docs/DESPLIEGUE_TRAS_REVISION.md`.**
 >
 > Tres cosas que aparecieron al arreglar y no estaban en el informe:
 >
@@ -174,7 +177,7 @@ where l.business_id is distinct from i.business_id`.
 
 ## Bloque 4 — Medio
 
-- [ ] **4.1 ✓ Arreglar `scripts/gen-api-docs.mjs`: pierde 9 de las 74 rutas reales.**
+- [x] **4.1 ✓ Arreglar `scripts/gen-api-docs.mjs`: pierde 9 de las 74 rutas reales.**
       `docs/API.md` documenta 65 y **regenerarlo no produce ninguna diferencia**, así que nada
       lo delata. Faltan casi todas las de administración de operadores: `GET`/`POST
 /platform/admins`, `PATCH /platform/admins/:id`, `PATCH /platform/me`,
@@ -184,52 +187,52 @@ where l.business_id is distinct from i.business_id`.
       _Comprobar_: que el generador emita tantas rutas como `printRoutes()` sin `HEAD` — y
       **añadir esa comprobación al CI**, que es lo que convierte el documento en fiable.
 
-- [ ] **4.2 ✓ Que el export no se bloquee con 402** cuando vence la prueba o hay suspensión
+- [x] **4.2 ✓ Que el export no se bloquee con 402** cuando vence la prueba o hay suspensión
       (`subscription.ts:135-147`): es justo el caso que los términos prometen
       (`textos.ts:73,74,156,162`). O se arregla, o es la **quinta promesa retirada**.
       → tarea del skill `legal`.
 
-- [ ] **4.3 ✓ Decidir qué pasa con la "Tasa de impuesto (%)".** `db/schema.ts:43`: editable,
+- [x] **4.3 ✓ Decidir qué pasa con la "Tasa de impuesto (%)".** `db/schema.ts:43`: editable,
       guardada y exportada, y **no interviene en ningún cálculo** — `createSaleSchema` exige
       `total = subtotal − discount`. O se implementa, o se quita de la pantalla: un ajuste que
       no hace nada es peor que no tenerlo. Si se quita, **sexta promesa retirada**.
 
-- [ ] **4.4 ✓ Que mudar el subdominio sea del operador principal.** `platform.ts:634`. Deja a
+- [x] **4.4 ✓ Que mudar el subdominio sea del operador principal.** `platform.ts:634`. Deja a
       todo el personal del cliente fuera con "Usuario o contraseña incorrectos". La ronda
       anterior decidió que lo comercial es del principal y esto se quedó fuera.
 
-- [ ] **4.5 ? Devolver 400 y no 500 con un `:id` que no es UUID.** En todas las rutas. Ensucia
+- [x] **4.5 ? Devolver 400 y no 500 con un `:id` que no es UUID.** En todas las rutas. Ensucia
       el log y dispara los avisos por correo de `alertas.ts`. Se arregla en un sitio: validando
       los params con zod en un hook, no ruta por ruta.
 
-- [ ] **4.6 ? Que una venta mal formada no tumbe el lote entero de `/sales/sync`.** Mal asunto
+- [x] **4.6 ? Que una venta mal formada no tumbe el lote entero de `/sales/sync`.** Mal asunto
       para una PWA offline: una venta corrupta bloquea todas las demás del dispositivo.
 
-- [ ] **4.7 ✓ Arreglar el desborde de 99 px del panel de plataforma en móvil** (390×844, los dos
+- [x] **4.7 ✓ Arreglar el desborde de 99 px del panel de plataforma en móvil** (390×844, los dos
       modos): "Salir" queda entero fuera de pantalla. Es la única pantalla del producto con
       desborde horizontal.
 
-- [ ] **4.8 ✓ Pasar el tooltip de las gráficas por `--color-primary-ink`.** Recharts usa el
+- [x] **4.8 ✓ Pasar el tooltip de las gráficas por `--color-primary-ink`.** Recharts usa el
       color de marca crudo: 3.28:1 y 3.25:1 en oscuro. El token existe exactamente para esto.
 
-- [ ] **4.9 ✓ Quitar la numeración duplicada de Términos y Privacidad** ("1. 1. Quiénes
+- [x] **4.9 ✓ Quitar la numeración duplicada de Términos y Privacidad** ("1. 1. Quiénes
       somos…"): `LegalPage.tsx:44` y `:55` añaden el número que `textos.ts:33+` ya trae.
 
-- [ ] **4.10 ✓ Traducir los códigos crudos de Actividad**: `transfer`, `open`, `close`,
+- [x] **4.10 ✓ Traducir los códigos crudos de Actividad**: `transfer`, `open`, `close`,
       `inventory`.
 
-- [ ] **4.11 ✓ Decidir si "Cobrar" pide confirmación.** Hoy registra la venta sin ninguna — el
+- [x] **4.11 ✓ Decidir si "Cobrar" pide confirmación.** Hoy registra la venta sin ninguna — el
       agente visual creó la venta #104 sin querer. En un POS con prisa y dedos, que sea una
       decisión y no un descuido.
 
-- [ ] **4.12 ? Hacer atómica el alta de negocio.** `packages/db/src/create-tenant.ts:61-99`: un
+- [x] **4.12 ? Hacer atómica el alta de negocio.** `packages/db/src/create-tenant.ts:61-99`: un
       fallo a media deja un negocio zombi sin admin que **ocupa el slug para siempre**.
 
-- [ ] **4.13 ? Guarda de "último admin de la central".** `users.ts:143`: el negocio puede
+- [x] **4.13 ? Guarda de "último admin de la central".** `users.ts:143`: el negocio puede
       quedarse sin quien lo administre. `platform.ts:341` ya resolvió el mismo problema y no se
       trasladó.
 
-- [ ] **4.14 ? Que el mailer de consola no diga `enviado: true`.** `lib/mailer.ts:80` +
+- [x] **4.14 ? Que el mailer de consola no diga `enviado: true`.** `lib/mailer.ts:80` +
       `platform.ts:825` → `correoEnviado: true` mentiroso en el rescate de contraseña, y claves
       temporales escritas en el log. Añadir guarda: sin `RESEND_API_KEY` en producción, no
       arrancar (o al menos no mentir).
@@ -238,20 +241,20 @@ where l.business_id is distinct from i.business_id`.
 
 ## Bloque 5 — Bajo
 
-- [ ] **5.1 ✓** Botones deshabilitados a 2.39–2.45:1.
-- [ ] **5.2 ✓** El párrafo del login a 4.36–4.45:1 por `opacity-[.88]`.
-- [ ] **5.3 ✓** Enlaces y botones sin `:focus-visible` propio (los `<input>` sí lo tienen).
-- [ ] **5.4 ✓** "Hasta" huérfano de su campo en móvil; importes de 4 cifras partidos en dos líneas.
-- [ ] **5.5 ✓** Panel y Reportes sin skeleton; 404 de favicon.
-- [ ] **5.6 ?** El límite de export (5/h por IP) lo agotan los 403/402 de quien no puede exportar.
-- [ ] **5.7 ?** Mensaje equivocado en `soloPrincipal`; dos errores en inglés.
-- [ ] **5.8 ?** `jwtRefreshSecret` está muerto: el refresh se firma con el de acceso (`env.ts:92`).
+- [x] **5.1 ✓** Botones deshabilitados a 2.39–2.45:1.
+- [x] **5.2 ✓** El párrafo del login a 4.36–4.45:1 por `opacity-[.88]`.
+- [x] **5.3 ✓** Enlaces y botones sin `:focus-visible` propio (los `<input>` sí lo tienen).
+- [x] **5.4 ✓** "Hasta" huérfano de su campo en móvil; importes de 4 cifras partidos en dos líneas.
+- [x] **5.5 ✓** Panel y Reportes sin skeleton; 404 de favicon.
+- [x] **5.6 ?** El límite de export (5/h por IP) lo agotan los 403/402 de quien no puede exportar.
+- [x] **5.7 ?** Mensaje equivocado en `soloPrincipal`; dos errores en inglés.
+- [x] **5.8 ?** `jwtRefreshSecret` está muerto: el refresh se firma con el de acceso (`env.ts:92`).
       Decidir si se usa o se borra — una variable que no hace nada engaña al que despliega.
-- [ ] **5.9 ?** `/auth/logout` no comprueba `typ` (`auth.ts:199`).
-- [ ] **5.10 ?** `auth_token` fuera de RLS sin la nota que sí llevan `business` y `subscription`
+- [x] **5.9 ?** `/auth/logout` no comprueba `typ` (`auth.ts:199`).
+- [x] **5.10 ?** `auth_token` fuera de RLS sin la nota que sí llevan `business` y `subscription`
       (`rls.ts:27`). Documentarlo o meterlo.
-- [ ] **5.11 ?** `inventory.ts:53` admite `quantity` negativo.
-- [ ] **5.12 ?** BD de tests con nombre fijo: dos corridas concurrentes se destruyen
+- [x] **5.11 ?** `inventory.ts:53` admite `quantity` negativo.
+- [x] **5.12 ?** BD de tests con nombre fijo: dos corridas concurrentes se destruyen
       (`global-setup.ts:40`). Molesta justo cuando se lanzan agentes en paralelo, como hoy.
 - [x] **5.13 ?** `vitest.config.ts:33` no sube `LOGIN_RATE_LIMIT_MAX` y `sessions.test.ts` roza
       el tope de 20: un test más y se pone rojo sin que nadie haya roto nada.
@@ -260,29 +263,29 @@ where l.business_id is distinct from i.business_id`.
 
 ## Bloque 6 — De fondo: por qué existían estos 54
 
-- [ ] **6.1 Empezar a montar componentes en los tests.** La web está en **3,5 %** de cobertura,
+- [x] **6.1 Empezar a montar componentes en los tests.** La web está en **3,5 %** de cobertura,
       cero componentes montados, sin `@testing-library/react`. Las 70 pantallas (10.329 líneas)
       sólo las vigila una ronda manual como esta, que **no deja red**. Empezar por lo que ya
       falló: POS (cobrar), caja (cierre) y login.
 
-- [ ] **6.2 Umbral de cobertura en el CI.** Hoy nada impide que un módulo nuevo entre sin tests.
+- [x] **6.2 Umbral de cobertura en el CI.** Hoy nada impide que un módulo nuevo entre sin tests.
       Los tres módulos peor cubiertos del API son de donde salieron el crítico y dos altos:
       `inventory.ts` **28 %**, `sales.ts` 77 %, `products.ts` 81 %. La cobertura fue un mapa
       fiable de dónde estaban los fallos. Requiere añadir `@vitest/coverage-v8`.
 
-- [ ] **6.3 Arreglar o quitar `pnpm lint`.** Falla siempre: `packages/shared` declara
+- [x] **6.3 Arreglar o quitar `pnpm lint`.** Falla siempre: `packages/shared` declara
       `eslint src` y no hay eslint ni config en el repo. Un script que falla siempre es peor que
       no tenerlo.
 
-- [ ] **6.4 Subir tests de los módulos flojos**, por orden de daño: `inventory.ts` (28 %),
+- [x] **6.4 Subir tests de los módulos flojos**, por orden de daño: `inventory.ts` (28 %),
       `customers.ts` (53 %, es fiado y es dinero), `alertas.ts` (25 %), y las **ramas** de
       `audit.ts` (100 % de sentencias, **23 %** de ramas).
 
-- [ ] **6.5 Partir el chunk de entrada de la web.** 1.021 kB (1.862 KiB de precarga del service
+- [x] **6.5 Partir el chunk de entrada de la web.** 1.021 kB (1.862 KiB de precarga del service
       worker) para un POS que arranca en tabletas baratas por la conexión de una tienda. El
       escáner y los widgets ya están separados.
 
-- [ ] **6.6 Formatear el repo de una vez** (49 archivos) y activar el paso de formato en el CI,
+- [x] **6.6 Formatear el repo de una vez** (49 archivos) y activar el paso de formato en el CI,
       que son dos líneas ya escritas en el propio `ci.yml`. Commit aparte, sin mezclar.
 
 ---

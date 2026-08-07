@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { clearAccessCache } from '../src/lib/subscription.js';
+import { buildApp } from '../src/app.js';
 import { auth, createTenant, makeApp, resetDb, type Tenant } from './helpers.js';
 
 /**
@@ -18,6 +19,8 @@ import { auth, createTenant, makeApp, resetDb, type Tenant } from './helpers.js'
 let app: FastifyInstance;
 let t: Tenant;
 let otro: Tenant;
+/** Encargado de una sucursal: puede entrar, pero NO puede exportar el negocio. */
+let sucursalToken = '';
 
 const ALTA = {
   businessName: 'Bazar Central',
@@ -34,6 +37,34 @@ beforeAll(async () => {
   await resetDb();
   t = await createTenant(app, 'legal-a');
   otro = await createTenant(app, 'legal-b');
+
+  /*
+    El encargado va en el SEGUNDO negocio, no en `t`.
+
+    Puesto en `t` cambiaba su número de usuarios y rompía "el admin descarga una copia
+    completa", que comprueba que la exportación trae exactamente los suyos. Para lo que
+    hace falta aquí da igual de qué negocio sea: lo que se prueba es que un admin de
+    sucursal recibe 403 y que ese 403 no consume el cupo de nadie, y el contador del tope
+    es por IP, común a toda la suite.
+  */
+  const [sucursal] = await db
+    .insert(schema.location)
+    .values({ businessId: otro.businessId, name: 'Sucursal Sur', isCentral: false })
+    .returning();
+  await db.insert(schema.appUser).values({
+    businessId: otro.businessId,
+    locationId: sucursal!.id,
+    name: 'Encargado Sur',
+    username: 'encargado.sur',
+    passwordHash: await argon2.hash('secreto123'),
+    role: 'admin',
+  });
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { username: 'encargado.sur', password: 'secreto123', business: otro.slug },
+  });
+  sucursalToken = login.json().data.accessToken;
 });
 
 afterAll(async () => {
@@ -180,6 +211,42 @@ describe('exportación de datos', () => {
   it('sin sesión no se exporta nada', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/business/export' });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('a quien NO puede exportar, sus rechazos no gastan el cupo de los demás', async () => {
+    /*
+      El tope se contaba en un hook `onRequest`, antes de los guardias, así que los 403
+      gastaban cupo. Como el contador es por IP y todas las cajas de una tienda salen por
+      la misma, a un encargado de sucursal le bastaban unos pocos intentos fallidos para
+      dejar al negocio entero sin poder exportar durante una hora.
+
+      Se levanta una app PROPIA con el tope real (3), porque la suite corre con 500 para
+      no agotarse a sí misma — con ese número, ninguna cantidad razonable de rechazos
+      demostraría nada y el test pasaría sin comprobar el arreglo. Es el mismo patrón que
+      usa `security.test.ts` con el límite del login.
+    */
+    const solo = await buildApp({ logger: false, exportRateLimitMax: 3 });
+    await solo.ready();
+    try {
+      for (let i = 0; i < 6; i++) {
+        const res = await solo.inject({
+          method: 'GET',
+          url: '/api/v1/business/export',
+          headers: auth(sucursalToken),
+        });
+        expect(res.statusCode, `intento ${i + 1}: ${res.body.slice(0, 80)}`).toBe(403);
+      }
+
+      // Y el admin de la central sigue pudiendo, que es lo que se estaba rompiendo.
+      const res = await solo.inject({
+        method: 'GET',
+        url: '/api/v1/business/export',
+        headers: auth(t.adminToken),
+      });
+      expect(res.statusCode, res.body.slice(0, 120)).toBe(200);
+    } finally {
+      await solo.close();
+    }
   });
 
   describe('llevarse los datos no se bloquea nunca', () => {

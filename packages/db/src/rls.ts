@@ -42,10 +42,25 @@ const TENANT_TABLES = [
 ] as const;
 
 /**
- * `business` queda fuera a propósito: es la tabla raíz y el alta de un negocio nuevo
- * (registro self-service) ocurre justamente cuando todavía no hay tenant en contexto.
- * Se sigue protegiendo con el filtro de aplicación. `sale_item` tampoco tiene
- * `business_id`; se protege heredando de su `sale`.
+ * Lo que queda FUERA de la lista, y por qué. Cada ausencia es una decisión, no un olvido.
+ *
+ * - `business`: es la tabla raíz, y el alta de un negocio nuevo (registro self-service)
+ *   ocurre justamente cuando todavía no hay tenant en contexto. Se protege con el filtro
+ *   de aplicación.
+ * - `sale_item`: no tiene `business_id`; hereda el tenant de su `sale` con su propia
+ *   política (ver `saleItemPolicies`).
+ * - `plan` y `subscription`: son datos de PLATAFORMA, no de un negocio. El panel los
+ *   consulta para toda la cartera, así que una política por tenant los haría inservibles.
+ * - **`auth_token`**: los tokens de verificación de correo y de restablecimiento de
+ *   contraseña se consultan **antes** de saber de quién son — ése es justamente el
+ *   trabajo del token: decir a qué negocio y a qué usuario pertenece quien llega con un
+ *   enlace y sin sesión. Fijar el tenant primero exigiría saber lo que se está buscando.
+ *   Se protege por ser irrepetible y de un solo uso (`buscarToken` + `marcarUsado`), con
+ *   caducidad corta; y no guarda nada que sirva de algo sin canjearlo.
+ *
+ * Si se añade una tabla con `business_id`, va arriba. Si se añade una que no lo tenga,
+ * viene aquí con su motivo escrito — este comentario es la lista de excepciones y sólo
+ * sirve si está completa.
  */
 const TENANT_VAR = 'app.business_id';
 

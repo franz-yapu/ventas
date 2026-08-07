@@ -115,24 +115,28 @@ export function AuditPage() {
           ))}
         </Select>
         <div className="flex items-center gap-1">
-          <label className="text-sm text-muted">Desde</label>
-          <Input
-            type="date"
-            filter
-            className="max-w-[10rem]"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-          <label className="text-sm text-muted">Hasta</label>
-          <Input
-            type="date"
-            filter
-            className="max-w-[10rem]"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => setTo(e.target.value)}
-          />
+          <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
+            Desde
+            <Input
+              type="date"
+              filter
+              className="max-w-[10rem]"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </label>
+          <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
+            Hasta
+            <Input
+              type="date"
+              filter
+              className="max-w-[10rem]"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </label>
         </div>
       </div>
 

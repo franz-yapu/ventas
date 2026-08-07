@@ -40,6 +40,8 @@ declare module 'fastify' {
      * se rompía al añadir el test número veintiuno — que es exactamente lo que pasó.
      */
     loginRateLimitMax: number;
+    /** Tope de exportaciones de ESTA instancia. Mismo motivo que el de arriba. */
+    exportRateLimitMax: number;
     requireAuth: import('fastify').preHandlerHookHandler;
     requireAdmin: import('fastify').preHandlerHookHandler;
     /** Admin de la central: acciones que afectan al negocio entero. */

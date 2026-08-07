@@ -49,26 +49,40 @@ export function ReportsPage() {
         descripcion="Ventas y ganancia por sucursal. La ganancia usa el costo que tenía el producto el día de la venta."
       />
 
-      {/* Filtro de rango de fechas */}
+      {/*
+        Filtro de rango de fechas. Cada etiqueta va PEGADA a su campo, en su propio grupo.
+
+        El contenedor tiene `flex-wrap` para que los filtros bajen de línea en un teléfono,
+        y sin agrupar cada pareja el salto caía donde tocara: "Hasta" quedaba solo al final
+        de una línea y su campo empezaba la siguiente. Una etiqueta huérfana no etiqueta
+        nada — quien mira tiene que adivinar cuál de los dos calendarios es.
+
+        El `<label>` envuelve al campo, así que además quedan asociados de verdad: tocar la
+        palabra enfoca el campo, que en un móvil es una diana mucho más grande.
+      */}
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-sm text-muted">Desde</label>
-        <Input
-          type="date"
-          filter
-          className="max-w-[10rem]"
-          value={from}
-          max={to || undefined}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-        <label className="text-sm text-muted">Hasta</label>
-        <Input
-          type="date"
-          filter
-          className="max-w-[10rem]"
-          value={to}
-          min={from || undefined}
-          onChange={(e) => setTo(e.target.value)}
-        />
+        <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
+          Desde
+          <Input
+            type="date"
+            filter
+            className="max-w-[10rem]"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </label>
+        <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
+          Hasta
+          <Input
+            type="date"
+            filter
+            className="max-w-[10rem]"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </label>
       </div>
 
       {/* KPIs. Mientras cargan, esqueletos del mismo alto: así la página no da el

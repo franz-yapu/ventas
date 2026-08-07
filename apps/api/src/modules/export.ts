@@ -16,9 +16,23 @@ import { env } from '../env.js';
  * migrar a otro sistema o para guardar.
  */
 export async function exportRoutes(app: FastifyInstance) {
-  const limite = {
-    rateLimit: { max: env.exportRateLimitMax, timeWindow: env.exportRateLimitWindow },
-  };
+  /**
+   * El tope, montado como preHandler y no en `config`.
+   *
+   * `config.rateLimit` lo cuenta Fastify en un hook `onRequest`, ANTES de los guardias,
+   * así que los rechazos gastaban cupo: a un encargado de sucursal —que no puede
+   * exportar— le bastaban cinco intentos fallidos para dejar sin exportaciones durante
+   * una hora a TODA la tienda, porque el contador es por IP y todas las cajas salen por
+   * la misma. Un tope pensado contra el abuso terminaba castigando al que no hizo nada.
+   *
+   * Como preHandler va detrás de `requireAuth` y `requireCentralAdmin`, así que sólo
+   * cuenta las peticiones que ya demostraron tener derecho a estar ahí — que son las
+   * únicas que pueden costar algo, porque son las únicas que llegan a leer la base.
+   */
+  const limite = app.rateLimit({
+    max: app.exportRateLimitMax,
+    timeWindow: env.exportRateLimitWindow,
+  });
 
   /**
    * La exportación es un derecho del NEGOCIO, y quien responde por el negocio es la
@@ -32,7 +46,7 @@ export async function exportRoutes(app: FastifyInstance) {
    */
   app.get(
     '/business/export',
-    { preHandler: [app.requireAuth, app.requireCentralAdmin], config: limite },
+    { preHandler: [app.requireAuth, app.requireCentralAdmin, limite] },
     async (req, reply) => {
       const businessId = req.authUser!.businessId;
 

@@ -37,7 +37,7 @@ import './types.js';
  * levantarla en memoria (app.inject) sin abrir un puerto.
  */
 export async function buildApp(
-  opts: { logger?: boolean; loginRateLimitMax?: number } = {},
+  opts: { logger?: boolean; loginRateLimitMax?: number; exportRateLimitMax?: number } = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
@@ -51,6 +51,7 @@ export async function buildApp(
   // Tope del login de esta instancia. Por defecto el de la configuración; los tests que
   // prueban el limitador levantan su propia app con el valor real.
   app.decorate('loginRateLimitMax', opts.loginRateLimitMax ?? env.loginRateLimitMax);
+  app.decorate('exportRateLimitMax', opts.exportRateLimitMax ?? env.exportRateLimitMax);
 
   // Cabeceras de seguridad. Se desactiva CSP: este servicio sólo responde JSON, nunca
   // HTML, así que una política de contenido no protege nada y sí puede estorbar.
