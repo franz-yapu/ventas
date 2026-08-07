@@ -212,3 +212,116 @@ export function trialDaysLeft(
   const ends = trialEndsAt instanceof Date ? trialEndsAt : new Date(trialEndsAt);
   return Math.ceil((ends.getTime() - now.getTime()) / 86_400_000);
 }
+
+// ── Ciclos de contratación ─────────────────────────────────────
+
+/**
+ * Contratar por más tiempo sale más barato, como en el hosting.
+ *
+ * El descuento no es generosidad: es a cambio de que el cliente se comprometa y de
+ * cobrar por adelantado. Por eso viene con una regla de devolución, y por eso esa regla
+ * se enseña ANTES de firmar y no en un anexo.
+ */
+export interface CicloDefinition {
+  /** Meses que se contratan de una vez. */
+  meses: number;
+  /** Cómo se llama en pantalla. */
+  nombre: string;
+  /** Descuento sobre el precio mensual, en porcentaje entero. */
+  descuentoPct: number;
+}
+
+export const CICLOS: CicloDefinition[] = [
+  { meses: 1, nombre: 'Mensual', descuentoPct: 0 },
+  { meses: 12, nombre: '1 año', descuentoPct: 10 },
+  { meses: 24, nombre: '2 años', descuentoPct: 15 },
+  { meses: 36, nombre: '3 años', descuentoPct: 20 },
+  { meses: 60, nombre: '5 años', descuentoPct: 30 },
+];
+
+export function cicloDeMeses(meses: number): CicloDefinition | undefined {
+  return CICLOS.find((c) => c.meses === meses);
+}
+
+/**
+ * Qué se paga por contratar `meses` de un plan, y cuánto se ahorra.
+ *
+ * Todo en céntimos internamente y devuelto como string decimal: nunca float. Un
+ * redondeo de medio céntimo repetido sesenta veces es un descuadre que después nadie
+ * sabe de dónde salió.
+ */
+export function cotizar(
+  precioMensual: string,
+  meses: number,
+): { meses: number; descuentoPct: number; sinDescuento: string; total: string; ahorro: string } {
+  const ciclo = cicloDeMeses(meses) ?? CICLOS[0]!;
+  const centavosMes = Math.round(Number(precioMensual) * 100);
+  const bruto = centavosMes * ciclo.meses;
+  const total = Math.round((bruto * (100 - ciclo.descuentoPct)) / 100);
+  return {
+    meses: ciclo.meses,
+    descuentoPct: ciclo.descuentoPct,
+    sinDescuento: (bruto / 100).toFixed(2),
+    total: (total / 100).toFixed(2),
+    ahorro: ((bruto - total) / 100).toFixed(2),
+  };
+}
+
+/**
+ * Qué se devuelve si el cliente se va antes de terminar el ciclo.
+ *
+ * **Sobre el tiempo NO usado se devuelve la mitad.** Es la regla que fijó el negocio, y
+ * la razón de que sea la mitad y no todo es que el descuento se dio por adelantado a
+ * cambio de la permanencia: devolver el 100% convertiría el plan de 5 años en un plan
+ * mensual con descuento, que es exactamente lo que no es.
+ *
+ * El ejemplo que hay que poder responder sin dudar: paga 5 años, se va a los 2. Quedan
+ * 3 sin usar, y se le devuelve la mitad de esos 3.
+ *
+ * Se cuenta por MESES CUMPLIDOS y hacia abajo, no por días. Dos motivos:
+ *
+ * 1. Se puede decir en voz alta: "contrataste 60, usaste 24, quedan 36 sin usar y te
+ *    devolvemos la mitad de esos 36". Con días de por medio hace falta una hoja de
+ *    cálculo y la conversación se convierte en una discusión.
+ * 2. Redondear hacia abajo le da el margen al CLIENTE. Quien lleva 24 meses y 20 días
+ *    cuenta como 24, no como 25. Es una diferencia pequeña y siempre a favor de quien se
+ *    está yendo, que es exactamente cuando no conviene discutir por céntimos — y evita el
+ *    absurdo contrario: contratar y arrepentirse el mismo día costaría un mes entero.
+ */
+export const PORCENTAJE_DEVOLUCION = 50;
+
+export function calcularDevolucion(
+  totalPagado: string,
+  mesesContratados: number,
+  mesesUsados: number,
+): { mesesSinUsar: number; proporcional: string; devolucion: string } {
+  const usados = Math.min(Math.max(0, Math.floor(mesesUsados)), mesesContratados);
+  const sinUsar = mesesContratados - usados;
+  const centavos = Math.round(Number(totalPagado) * 100);
+  const proporcional = Math.round((centavos * sinUsar) / mesesContratados);
+  const devolucion = Math.round((proporcional * PORCENTAJE_DEVOLUCION) / 100);
+  return {
+    mesesSinUsar: sinUsar,
+    proporcional: (proporcional / 100).toFixed(2),
+    devolucion: (devolucion / 100).toFixed(2),
+  };
+}
+
+/**
+ * El texto que se enseña ANTES de contratar. No es letra pequeña: va en la pantalla.
+ *
+ * Un descuento por 5 años es dinero cobrado por adelantado con una obligación de 5 años
+ * detrás. Quien firma tiene que saber qué pasa si cambia de idea, y tiene que saberlo
+ * antes — no cuando llame para irse.
+ */
+export function avisoDePermanencia(meses: number): string | null {
+  if (meses <= 1) return null;
+  const años = meses / 12;
+  const cuanto = años >= 1 ? `${años} ${años === 1 ? 'año' : 'años'}` : `${meses} meses`;
+  return (
+    `Estás contratando ${cuanto} por adelantado. Si decides irte antes de terminar, ` +
+    `se te devuelve el ${PORCENTAJE_DEVOLUCION}% de lo que quede sin usar. ` +
+    `Ejemplo: si contratas 5 años y te vas a los 2, quedan 3 sin usar y se te devuelve ` +
+    `la mitad de esos 3.`
+  );
+}

@@ -1,5 +1,9 @@
 import { db, schema, slugDisponible, withTenant } from '@ventafacil/db';
 import {
+  avisoDePermanencia,
+  calcularDevolucion,
+  CICLOS,
+  cotizar,
   effectiveStatus,
   isBlocked,
   MENSAJE_SLUG,
@@ -38,6 +42,17 @@ const updateSubBody = z.object({
   status: z.enum(SUBSCRIPTION_STATUS).optional(),
   trialEndsAt: z.string().datetime().nullable().optional(),
   suspendedReason: z.string().max(500).nullable().optional(),
+  /**
+   * Meses contratados de una vez. Sólo se aceptan los ciclos del catálogo.
+   *
+   * Un número libre parecería más flexible y sería peor: cada combinación suelta obliga a
+   * inventar un descuento sobre la marcha, y el precio dejaría de estar en un solo sitio.
+   */
+  billingMonths: z
+    .number()
+    .int()
+    .refine((m) => CICLOS.some((c) => c.meses === m), 'Ese ciclo de contratación no existe')
+    .optional(),
 });
 
 const listQuery = z.object({
@@ -899,6 +914,101 @@ export async function platformRoutes(app: FastifyInstance) {
    * plan no es ayudarle: es cortarle la venta o tocarle lo que paga. Eso es una decisión
    * comercial, y quien responde por ella es el principal.
    */
+  /**
+   * GET /platform/tenants/:id/cotizacion — qué costaría cada ciclo, y qué implica.
+   *
+   * Se calcula en el SERVIDOR y no en el panel por el mismo motivo por el que los precios
+   * viven en un solo archivo: si el descuento se calculara en pantalla, dentro de un año
+   * habría dos verdades sobre cuánto cuesta un plan de tres años y la que gana sería la
+   * que alguien recuerde actualizar.
+   *
+   * Devuelve además el AVISO de permanencia, que no es letra pequeña: quien firma cinco
+   * años tiene que saber qué pasa si cambia de idea, y tiene que saberlo antes de firmar,
+   * no cuando llame para irse.
+   */
+  app.get(
+    '/platform/tenants/:id/cotizacion',
+    { preHandler: app.requirePlatform },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const q = z.object({ planCode: z.string().min(1).optional() }).safeParse(req.query);
+      if (!q.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
+
+      const [sub] = await db
+        .select({ planCode: schema.subscription.planCode })
+        .from(schema.subscription)
+        .where(eq(schema.subscription.businessId, id))
+        .limit(1);
+
+      const codigo = q.data.planCode ?? sub?.planCode;
+      if (!codigo) return reply.code(400).send({ data: null, error: 'Indica el plan a cotizar' });
+
+      const [planFila] = await db
+        .select({
+          code: schema.plan.code,
+          name: schema.plan.name,
+          priceMonthly: schema.plan.priceMonthly,
+        })
+        .from(schema.plan)
+        .where(eq(schema.plan.code, codigo))
+        .limit(1);
+      if (!planFila) return reply.code(400).send({ data: null, error: 'Ese plan no existe' });
+
+      const opciones = CICLOS.map((c) => ({
+        ...cotizar(planFila.priceMonthly, c.meses),
+        nombre: c.nombre,
+        aviso: avisoDePermanencia(c.meses),
+      }));
+
+      return reply.send({
+        data: { plan: planFila, opciones },
+        error: null,
+      });
+    },
+  );
+
+  /**
+   * GET /platform/tenants/:id/devolucion — cuánto le tocaría si se va hoy.
+   *
+   * La pregunta que se hace por teléfono, con el cliente esperando. Tenerla calculada
+   * evita que se resuelva de memoria y evita también la discusión: sale de lo que PAGÓ y
+   * de los meses cumplidos, y se puede leer en voz alta con sus tres números.
+   */
+  app.get(
+    '/platform/tenants/:id/devolucion',
+    { preHandler: app.requirePlatform },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const [sub] = await db
+        .select({
+          billingMonths: schema.subscription.billingMonths,
+          billedAmount: schema.subscription.billedAmount,
+          cycleStartedAt: schema.subscription.cycleStartedAt,
+        })
+        .from(schema.subscription)
+        .where(eq(schema.subscription.businessId, id))
+        .limit(1);
+
+      if (!sub || !sub.billedAmount || !sub.cycleStartedAt || sub.billingMonths <= 1) {
+        // Un mensual no tiene nada que devolver: se deja de cobrar y ya.
+        return reply.send({ data: null, error: null });
+      }
+
+      const meses = (Date.now() - sub.cycleStartedAt.getTime()) / (30.44 * 24 * 60 * 60 * 1000);
+      const d = calcularDevolucion(sub.billedAmount, sub.billingMonths, meses);
+
+      return reply.send({
+        data: {
+          ...d,
+          pagado: sub.billedAmount,
+          mesesContratados: sub.billingMonths,
+          mesesUsados: sub.billingMonths - d.mesesSinUsar,
+        },
+        error: null,
+      });
+    },
+  );
+
   app.patch(
     '/platform/tenants/:id/subscription',
     { preHandler: [app.requirePlatform, soloPrincipal] },
@@ -947,6 +1057,37 @@ export async function platformRoutes(app: FastifyInstance) {
         patch.trialEndsAt = d.trialEndsAt ? new Date(d.trialEndsAt) : null;
       }
       if (d.suspendedReason !== undefined) patch.suspendedReason = d.suspendedReason;
+
+      /*
+        Contratar un ciclo: se guarda lo COBRADO, no sólo el plan.
+
+        `billedAmount` es una foto del importe, y hace falta porque el precio del plan
+        puede cambiar entre que alguien firma cinco años y decide irse. Lo que se le
+        devuelve se calcula sobre lo que pagó, no sobre lo que cuesta hoy; sin esta
+        columna esa cuenta no se puede hacer y acaba resolviéndose de memoria.
+
+        El vencimiento sale del ciclo, así que contratar dos años deja de exigir que
+        alguien recuerde poner la fecha a mano dentro de veinticuatro meses.
+      */
+      if (d.billingMonths !== undefined) {
+        const codigo = d.planCode ?? before?.planCode;
+        const [planFila] = codigo
+          ? await db
+              .select({ priceMonthly: schema.plan.priceMonthly })
+              .from(schema.plan)
+              .where(eq(schema.plan.code, codigo))
+              .limit(1)
+          : [];
+        if (!planFila) {
+          return reply.code(400).send({ data: null, error: 'No se sabe qué plan cotizar' });
+        }
+        const q = cotizar(planFila.priceMonthly, d.billingMonths);
+        const desde = new Date();
+        patch.billingMonths = q.meses;
+        patch.billedAmount = q.total;
+        patch.cycleStartedAt = desde;
+        patch.currentPeriodEnd = new Date(new Date(desde).setMonth(desde.getMonth() + q.meses));
+      }
 
       let after;
       if (before) {

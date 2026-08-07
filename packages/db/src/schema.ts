@@ -118,6 +118,21 @@ export const subscription = pgTable('subscription', {
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
   // Hasta cuándo está pagado el periodo en curso (lo usará el cobro automático, #11).
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  /**
+   * Meses contratados de una vez, y lo que se cobró por ellos.
+   *
+   * Hacen falta los dos para poder responder la pregunta que se hace cuando un cliente se
+   * va: cuánto le toca de vuelta. Con sólo el plan no se puede — el precio pudo haber
+   * cambiado desde que firmó, y lo que se devuelve se calcula sobre lo que PAGÓ, no sobre
+   * lo que cuesta hoy. `billedAmount` es esa foto.
+   *
+   * Por defecto 1 mes: es lo que tenían todas las suscripciones antes de que existieran
+   * los ciclos, y describe bien lo que eran.
+   */
+  billingMonths: integer('billing_months').notNull().default(1),
+  billedAmount: numeric('billed_amount', { precision: 12, scale: 2 }),
+  /** Cuándo empezó el ciclo contratado: con esto y `billingMonths` sale lo usado. */
+  cycleStartedAt: timestamp('cycle_started_at', { withTimezone: true }),
   suspendedReason: text('suspended_reason'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

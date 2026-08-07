@@ -947,3 +947,102 @@ describe('rescate del acceso de un cliente', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+describe('contratación por más de un mes', () => {
+  /**
+   * Un descuento por cinco años es dinero cobrado por adelantado con una obligación de
+   * cinco años detrás. Lo que se prueba aquí no es que la cuenta salga —eso ya lo fija
+   * `ciclos.test.ts`— sino que el panel pueda **enseñar el trato antes de firmarlo** y
+   * responder después la pregunta que se hace por teléfono: cuánto me devuelven.
+   */
+  it('la cotización trae los cinco ciclos con su descuento', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/platform/tenants/${a.businessId}/cotizacion?planCode=basico`,
+      headers: auth(token()),
+    });
+    expect(res.statusCode, res.body.slice(0, 120)).toBe(200);
+    const { opciones } = res.json().data;
+    expect(opciones).toHaveLength(5);
+    expect(opciones[0].descuentoPct).toBe(0);
+    expect(opciones[4].meses).toBe(60);
+    expect(opciones[4].descuentoPct).toBe(30);
+  });
+
+  it('cada opción con permanencia trae su AVISO, y el mensual no', async () => {
+    // No es letra pequeña: quien firma tiene que leerlo en la misma pantalla.
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/platform/tenants/${a.businessId}/cotizacion?planCode=basico`,
+      headers: auth(token()),
+    });
+    const { opciones } = res.json().data;
+    expect(opciones[0].aviso).toBeNull();
+    expect(opciones[4].aviso).toContain('50%');
+    expect(opciones[4].aviso).toContain('5 años');
+  });
+
+  it('contratar un ciclo guarda lo cobrado y mueve el vencimiento', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${a.businessId}/subscription`,
+      headers: auth(token()),
+      payload: { planCode: 'basico', billingMonths: 60 },
+    });
+    expect(res.statusCode, res.body.slice(0, 150)).toBe(200);
+
+    const [sub] = await db
+      .select()
+      .from(schema.subscription)
+      .where(eq(schema.subscription.businessId, a.businessId));
+
+    expect(sub!.billingMonths).toBe(60);
+    // 149.00 × 60 con 30% de descuento.
+    expect(sub!.billedAmount).toBe('6258.00');
+    expect(sub!.cycleStartedAt).toBeTruthy();
+    // El vencimiento sale del ciclo: nadie tiene que acordarse de ponerlo a mano dentro
+    // de cinco años.
+    const fin = sub!.currentPeriodEnd!;
+    expect(fin.getFullYear()).toBe(new Date().getFullYear() + 5);
+  });
+
+  it('y entonces la devolución se puede leer en voz alta', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/platform/tenants/${a.businessId}/devolucion`,
+      headers: auth(token()),
+    });
+    expect(res.statusCode).toBe(200);
+    const d = res.json().data;
+    expect(d.pagado).toBe('6258.00');
+    expect(d.mesesContratados).toBe(60);
+    // Recién contratado: no ha usado nada, así que le tocaría la mitad de todo.
+    expect(d.mesesSinUsar).toBe(60);
+    expect(d.devolucion).toBe('3129.00');
+  });
+
+  it('un ciclo inventado se rechaza', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${a.businessId}/subscription`,
+      headers: auth(token()),
+      payload: { billingMonths: 7 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('un mensual no tiene nada que devolver', async () => {
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${b.businessId}/subscription`,
+      headers: auth(token()),
+      payload: { planCode: 'basico', billingMonths: 1 },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/platform/tenants/${b.businessId}/devolucion`,
+      headers: auth(token()),
+    });
+    expect(res.json().data).toBeNull();
+  });
+});
