@@ -24,7 +24,11 @@ let b: Tenant;
 let adminId: string;
 
 async function entrar(email = EMAIL, password = CLAVE) {
-  return app.inject({ method: 'POST', url: '/api/v1/platform/login', payload: { email, password } });
+  return app.inject({
+    method: 'POST',
+    url: '/api/v1/platform/login',
+    payload: { email, password },
+  });
 }
 
 /**
@@ -83,7 +87,11 @@ beforeEach(() => {
 
 describe('la frontera entre negocio y plataforma', () => {
   it('un token de NEGOCIO no entra al panel', async () => {
-    for (const url of ['/api/v1/platform/tenants', '/api/v1/platform/metrics', '/api/v1/platform/me']) {
+    for (const url of [
+      '/api/v1/platform/tenants',
+      '/api/v1/platform/metrics',
+      '/api/v1/platform/me',
+    ]) {
       const res = await app.inject({ method: 'GET', url, headers: auth(a.adminToken) });
       expect(res.statusCode, url).toBe(401);
     }
