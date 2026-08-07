@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, Boxes, History, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Exportar } from '@/components/Exportar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -65,11 +66,14 @@ export function InventoryPage() {
               : 'Stock por producto y sucursal. Nada por debajo del mínimo.'
         }
         acciones={
-          canTransfer && (
-            <Button variant="secondary" onClick={() => setTransferOpen(true)}>
-              <ArrowLeftRight size={18} /> Transferir
-            </Button>
-          )
+          <>
+            <Exportar seccion="inventario" filtros={{ locationId }} />
+            {canTransfer && (
+              <Button variant="secondary" onClick={() => setTransferOpen(true)}>
+                <ArrowLeftRight size={18} /> Transferir
+              </Button>
+            )}
+          </>
         }
       />
 

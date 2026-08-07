@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { EmptyState, Page, PageHeader } from '@/components/ui/page';
 import { api } from '@/lib/api';
-import { money, PAYMENT_LABELS } from '@/lib/format';
+import { money, etiquetaDePago } from '@/lib/format';
 import { downloadCsv } from '@/lib/print';
 import type { CashZ } from '@/lib/types';
 
@@ -25,7 +25,7 @@ export function CashZPage() {
       rows.push([
         r.seller,
         r.location,
-        PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod,
+        etiquetaDePago(r.paymentMethod),
         r.total,
         r.count,
       ]),
@@ -78,7 +78,7 @@ export function CashZPage() {
                 <tr key={i} className="border-b border-border last:border-0">
                   <td className="p-3">{r.seller}</td>
                   <td className="p-3">{r.location}</td>
-                  <td className="p-3">{PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod}</td>
+                  <td className="p-3">{etiquetaDePago(r.paymentMethod)}</td>
                   <td className="p-3 text-right">{r.count}</td>
                   <td className="p-3 text-right font-medium">{money(r.total)}</td>
                 </tr>
@@ -104,7 +104,7 @@ export function CashZPage() {
                 </span>
               </div>
               <div className="mt-1 text-[12px] leading-[1.5] text-muted">
-                {r.location} · {PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod} · {r.count}{' '}
+                {r.location} · {etiquetaDePago(r.paymentMethod)} · {r.count}{' '}
                 venta{r.count === 1 ? '' : 's'}
               </div>
             </div>

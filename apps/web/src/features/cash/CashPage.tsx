@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Exportar } from '@/components/Exportar';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -11,7 +12,7 @@ import { Page, PageHeader } from '@/components/ui/page';
 import { Select } from '@/components/ui/select';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api, ApiError } from '@/lib/api';
-import { dateTime, money, PAYMENT_LABELS } from '@/lib/format';
+import { dateTime, money, etiquetaDePago } from '@/lib/format';
 import type { CashCurrent, CashHistoryRow } from '@/lib/types';
 
 /**
@@ -54,11 +55,14 @@ export function CashPage() {
         descripcion="Apertura, movimientos y arqueo del turno. El descuadre se calcula contra lo que se cobró en efectivo."
         acciones={
           user?.role === 'admin' && (
+            <>
+              <Exportar seccion="caja" />
             <Link to="/caja/z">
               <Button variant="outline">
                 <FileText size={16} /> Lectura Z
               </Button>
             </Link>
+            </>
           )
         }
       />
@@ -148,7 +152,7 @@ export function CashPage() {
                     className="flex items-baseline justify-between text-sm"
                   >
                     <span>
-                      {PAYMENT_LABELS[r.paymentMethod] ?? r.paymentMethod}
+                      {etiquetaDePago(r.paymentMethod)}
                       <span className="ml-2 text-[13px] text-muted">
                         {r.count} venta{r.count === 1 ? '' : 's'}
                       </span>

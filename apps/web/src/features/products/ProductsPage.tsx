@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { History, Package, Pencil, Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Exportar } from '@/components/Exportar';
 import { ImportarProductos } from '@/features/products/ImportarProductos';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -75,14 +76,17 @@ export function ProductsPage() {
             : 'El catálogo del negocio. Los da de alta un administrador.'
         }
         acciones={
-          puedeGestionarCatalogo && (
-            <>
-              <ImportarProductos onDone={reload} />
-              <Button onClick={() => setEditing('new')}>
-                <Plus size={18} /> Nuevo
-              </Button>
-            </>
-          )
+          <>
+            <Exportar seccion="productos" />
+            {puedeGestionarCatalogo && (
+              <>
+                <ImportarProductos onDone={reload} />
+                <Button onClick={() => setEditing('new')}>
+                  <Plus size={18} /> Nuevo
+                </Button>
+              </>
+            )}
+          </>
         }
       />
 

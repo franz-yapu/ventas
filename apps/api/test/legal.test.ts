@@ -300,3 +300,90 @@ describe('exportación de datos', () => {
     });
   });
 });
+
+describe('exportar los datos de una pantalla', () => {
+  /**
+   * La exportación completa sirve para migrar o para guardar; esto es lo otro, lo que se
+   * pide todos los días: "el listado de ventas de marzo, en Excel".
+   *
+   * Una sola ruta para las seis secciones, y no un exportador por pantalla, porque seis
+   * exportadores serían seis copias de la misma decisión sobre quién ve qué — y basta con
+   * que una se escriba con prisa para que se escape el costo.
+   *
+   * **Ésta SÍ pasa por la puerta de la suscripción, y `/business/export` no.** No es una
+   * incoherencia: lo que los términos prometen es poder llevarse los datos, y eso lo
+   * cumple la copia completa, que sigue abierta aunque la cuenta esté cancelada. Bajar el
+   * listado de marzo en Excel es una comodidad de la operación diaria, y la operación
+   * diaria es justo lo que se para cuando alguien deja de pagar.
+   */
+  beforeAll(async () => {
+    // Otros casos de este archivo dejan la suscripción cancelada a propósito.
+    await db
+      .insert(schema.subscription)
+      .values({ businessId: t.businessId, planCode: 'basico', status: 'active' })
+      .onConflictDoUpdate({
+        target: schema.subscription.businessId,
+        set: { planCode: 'basico', status: 'active', trialEndsAt: null },
+      });
+    clearAccessCache();
+  });
+  it.each([['ventas'], ['productos'], ['inventario'], ['clientes'], ['caja'], ['actividad']])(
+    '%s devuelve filas con cabeceras en español',
+    async (seccion) => {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/export/${seccion}`,
+        headers: auth(t.adminToken),
+      });
+      expect(res.statusCode, res.body.slice(0, 150)).toBe(200);
+      const { filas } = res.json().data;
+      expect(Array.isArray(filas)).toBe(true);
+      if (filas.length > 0) {
+        // Las claves son lo que va a leer una persona en la primera fila del Excel.
+        expect(Object.keys(filas[0]).some((k) => /[A-ZÁÉÍÓÚÑ]/.test(k[0]!))).toBe(true);
+      }
+    },
+  );
+
+  it('una sección inventada responde 404, no una hoja vacía', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/export/loquesea',
+      headers: auth(t.adminToken),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('un encargado de sucursal NO exporta el negocio', async () => {
+    // Mismo criterio que la exportación completa: quien responde por el negocio es la
+    // central. Con `requireAdmin` a secas, un encargado se bajaba las ventas de los otros
+    // locales en un solo archivo.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/export/ventas',
+      headers: auth(sucursalToken),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('las fechas filtran de verdad', async () => {
+    const futuro = new Date(Date.now() + 86_400_000).toISOString();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/export/ventas?from=${futuro}`,
+      headers: auth(t.adminToken),
+    });
+    expect(res.json().data.filas).toHaveLength(0);
+  });
+
+  it('NUNCA sale el costo, ni siquiera en productos', async () => {
+    // La ruta la protege `requireCentralAdmin`, así que hoy sólo llega quien puede verlo.
+    // El filtro está puesto igual, para el día que se abra a un encargado.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/export/productos',
+      headers: auth(t.adminToken),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+});

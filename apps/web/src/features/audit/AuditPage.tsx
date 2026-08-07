@@ -3,6 +3,7 @@ import { Eye, History } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Exportar } from '@/components/Exportar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -72,6 +73,7 @@ export function AuditPage() {
       <PageHeader
         titulo="Registro de actividad"
         descripcion="Quién cambió qué y cuándo. Se escribe solo y no se puede editar."
+      acciones={<Exportar seccion="actividad" filtros={{ from, to }} />}
       />
 
       <div className="flex flex-wrap gap-2">

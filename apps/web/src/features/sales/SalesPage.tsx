@@ -3,6 +3,7 @@ import { Ban, Printer, Receipt as ReceiptIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Exportar } from '@/components/Exportar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -66,6 +67,7 @@ export function SalesPage() {
       <PageHeader
         titulo="Ventas"
         descripcion="Historial de recibos. Cancelar una venta devuelve su stock y queda registrado."
+      acciones={<Exportar seccion="ventas" filtros={{ from, to, locationId }} />}
       />
 
       <div className="flex flex-wrap gap-2">

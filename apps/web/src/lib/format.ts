@@ -25,10 +25,11 @@ export function currentWeek(): { from: string; to: string } {
   return { from: fmt(monday), to: fmt(sunday) };
 }
 
-export const PAYMENT_LABELS: Record<string, string> = {
-  cash: 'Efectivo',
-  card: 'Tarjeta',
-  qr: 'QR',
-  transfer: 'Transferencia',
-  credit: 'Fiado',
-};
+/**
+ * Re-exportado de `@ventafacil/shared`: la lista vive en un solo sitio.
+ *
+ * Estaba escrita aquí, y al añadir la exportación a Excel apareció el segundo sitio que
+ * la necesitaba — que es justo como dos listas empiezan a separarse. Se deja el nombre de
+ * siempre para no tocar las quince pantallas que ya lo importan de aquí.
+ */
+export { PAYMENT_LABELS, etiquetaDePago } from '@ventafacil/shared';

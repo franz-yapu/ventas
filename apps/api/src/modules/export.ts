@@ -1,7 +1,16 @@
 import { db, schema, withTenant } from '@ventafacil/db';
-import { eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lte } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import {
+  AUDIT_ACTION_LABELS,
+  AUDIT_ENTITY_LABELS,
+  PAYMENT_LABELS,
+  SALE_STATUS_LABELS,
+} from '@ventafacil/shared';
+import { z } from 'zod';
 import { env } from '../env.js';
+import { sinCostosLista } from '../lib/costos.js';
+import { filtroDeUbicacion } from '../lib/scope.js';
 
 /**
  * Exportación de los datos de un negocio.
@@ -187,6 +196,254 @@ export async function exportRoutes(app: FastifyInstance) {
             ...datos,
           })
       );
+    },
+  );
+
+  /**
+   * GET /export/:seccion — los datos de UNA pantalla, con sus mismos filtros.
+   *
+   * La exportación completa de arriba sirve para migrar o para guardar; esto es lo otro,
+   * lo que se pide todos los días: "el listado de ventas de marzo, en Excel".
+   *
+   * ## Por qué devuelve JSON y el Excel se arma en el navegador
+   *
+   * Podría generar el .xlsx aquí. No lo hace por dos razones, y la primera pesa más:
+   *
+   * 1. **El VPS tiene 1 vCPU para todo el stack.** Construir una hoja de cálculo de
+   *    20.000 filas es trabajo real de CPU, y mientras dura, la caja de una tienda espera
+   *    para cobrar. El navegador de quien pidió el informe está ocioso y ya tiene la
+   *    librería cargada — que trabaje él.
+   * 2. **Una dependencia menos en el servidor.** El código que corre en producción es el
+   *    que hay que mantener y auditar; el que corre en un navegador, no tanto.
+   *
+   * ## Una sola ruta para todas las secciones
+   *
+   * Cada pantalla ya sabe filtrar y ya tiene su alcance resuelto. Escribir un exportador
+   * por pantalla sería copiar seis veces la misma decisión sobre quién puede ver qué — y
+   * es exactamente por ahí por donde se escapan los costos: basta con que uno de los seis
+   * se escriba con prisa. Aquí el filtro y `sinCostos` se aplican en un sitio.
+   */
+  app.get(
+    '/export/:seccion',
+    { preHandler: [app.requireAuth, app.requireCentralAdmin, limite] },
+    async (req, reply) => {
+      const { seccion } = req.params as { seccion: string };
+      const q = z
+        .object({
+          /*
+            Se acepta `2026-08-09` además del ISO completo.
+
+            Un `<input type="date">` devuelve la fecha pelada, así que exigir ISO obligaba
+            a que cada pantalla se acordara de convertirla — y la que no se acordara se
+            llevaría un 400 sin más pista que "parámetros inválidos". Es exactamente lo
+            que pasó al conectar el primer botón.
+          */
+          from: z.string().min(8).optional(),
+          to: z.string().min(8).optional(),
+          locationId: z.string().uuid().optional(),
+        })
+        .safeParse(req.query);
+      if (!q.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
+
+      const user = req.authUser!;
+      const businessId = user.businessId;
+
+      /**
+       * `hasta` con fecha pelada llega al FINAL de ese día.
+       *
+       * "Del 1 al 9" quiere decir incluyendo el 9. Tomando las 00:00 del 9 se perdería
+       * un día entero de ventas sin que nadie lo notara — el informe saldría, sólo que
+       * mal, que es la peor forma de fallar.
+       */
+      const soloFecha = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+      const aFecha = (v: string | undefined, finDelDia: boolean): Date | null => {
+        if (!v) return null;
+        const d = new Date(soloFecha(v) ? `${v}T${finDelDia ? '23:59:59.999' : '00:00:00'}` : v);
+        return Number.isNaN(d.getTime()) ? null : d;
+      };
+      const desde = aFecha(q.data.from, false);
+      const hasta = aFecha(q.data.to, true);
+
+      const filas = await withTenant(businessId, async (tx) => {
+        switch (seccion) {
+          case 'ventas': {
+            const w = [eq(schema.sale.businessId, businessId)];
+            const alcance = filtroDeUbicacion(user, schema.sale.locationId);
+            if (alcance) w.push(alcance);
+            if (q.data.locationId) w.push(eq(schema.sale.locationId, q.data.locationId));
+            if (desde) w.push(gte(schema.sale.clientCreatedAt, desde));
+            if (hasta) w.push(lte(schema.sale.clientCreatedAt, hasta));
+            return tx
+              .select({
+                Recibo: schema.sale.receiptNumber,
+                Fecha: schema.sale.clientCreatedAt,
+                Sucursal: schema.location.name,
+                Vendedor: schema.appUser.name,
+                Cliente: schema.customer.name,
+                'Forma de pago': schema.sale.paymentMethod,
+                Subtotal: schema.sale.subtotal,
+                Descuento: schema.sale.discount,
+                Total: schema.sale.total,
+                Estado: schema.sale.status,
+              })
+              .from(schema.sale)
+              .leftJoin(schema.location, eq(schema.location.id, schema.sale.locationId))
+              .leftJoin(schema.appUser, eq(schema.appUser.id, schema.sale.userId))
+              .leftJoin(schema.customer, eq(schema.customer.id, schema.sale.customerId))
+              .where(and(...w))
+              .orderBy(desc(schema.sale.clientCreatedAt));
+          }
+
+          case 'productos':
+            return tx
+              .select({
+                Código: schema.product.sku,
+                'Código de barras': schema.product.barcode,
+                Producto: schema.product.name,
+                Descripción: schema.product.description,
+                Categoría: schema.category.name,
+                Precio: schema.product.price,
+                Costo: schema.product.cost,
+                Activo: schema.product.isActive,
+              })
+              .from(schema.product)
+              .leftJoin(schema.category, eq(schema.category.id, schema.product.categoryId))
+              .where(eq(schema.product.businessId, businessId))
+              .orderBy(asc(schema.product.name));
+
+          case 'inventario':
+            return tx
+              .select({
+                Código: schema.product.sku,
+                Producto: schema.product.name,
+                Sucursal: schema.location.name,
+                Cantidad: schema.inventory.quantity,
+                Mínimo: schema.inventory.minStock,
+              })
+              .from(schema.inventory)
+              .innerJoin(schema.product, eq(schema.product.id, schema.inventory.productId))
+              .innerJoin(schema.location, eq(schema.location.id, schema.inventory.locationId))
+              .where(
+                and(
+                  eq(schema.inventory.businessId, businessId),
+                  q.data.locationId
+                    ? eq(schema.inventory.locationId, q.data.locationId)
+                    : undefined,
+                ),
+              )
+              .orderBy(asc(schema.product.name), asc(schema.location.name));
+
+          case 'clientes':
+            return tx
+              .select({
+                Cliente: schema.customer.name,
+                Teléfono: schema.customer.phone,
+                Notas: schema.customer.notes,
+                Activo: schema.customer.isActive,
+              })
+              .from(schema.customer)
+              .where(eq(schema.customer.businessId, businessId))
+              .orderBy(asc(schema.customer.name));
+
+          case 'caja': {
+            const w = [eq(schema.cashRegister.businessId, businessId)];
+            const alcance = filtroDeUbicacion(user, schema.cashRegister.locationId);
+            if (alcance) w.push(alcance);
+            if (desde) w.push(gte(schema.cashRegister.openedAt, desde));
+            if (hasta) w.push(lte(schema.cashRegister.openedAt, hasta));
+            return tx
+              .select({
+                Sucursal: schema.location.name,
+                Abrió: schema.appUser.name,
+                'Abierta el': schema.cashRegister.openedAt,
+                'Cerrada el': schema.cashRegister.closedAt,
+                'Monto inicial': schema.cashRegister.openingAmount,
+                Esperado: schema.cashRegister.expectedAmount,
+                Contado: schema.cashRegister.closingAmount,
+                Notas: schema.cashRegister.notes,
+              })
+              .from(schema.cashRegister)
+              .leftJoin(schema.location, eq(schema.location.id, schema.cashRegister.locationId))
+              .leftJoin(schema.appUser, eq(schema.appUser.id, schema.cashRegister.userId))
+              .where(and(...w))
+              .orderBy(desc(schema.cashRegister.openedAt));
+          }
+
+          case 'actividad': {
+            const w = [eq(schema.auditLog.businessId, businessId)];
+            if (desde) w.push(gte(schema.auditLog.createdAt, desde));
+            if (hasta) w.push(lte(schema.auditLog.createdAt, hasta));
+            return tx
+              .select({
+                Fecha: schema.auditLog.createdAt,
+                Quién: schema.appUser.name,
+                Acción: schema.auditLog.action,
+                Sobre: schema.auditLog.entity,
+              })
+              .from(schema.auditLog)
+              .leftJoin(schema.appUser, eq(schema.appUser.id, schema.auditLog.userId))
+              .where(and(...w))
+              .orderBy(desc(schema.auditLog.createdAt))
+              .limit(20_000);
+          }
+
+          default:
+            return null;
+        }
+      });
+
+      if (filas === null) {
+        return reply.code(404).send({ data: null, error: 'No se exporta esa sección' });
+      }
+
+      /*
+        El COSTO se quita igual que en las pantallas.
+
+        Esta ruta la protege `requireCentralAdmin`, así que hoy sólo llega quien puede ver
+        costos. Pasa por `sinCostosLista` de todas formas: el día que se abra a un
+        encargado de sucursal —que es una petición razonable— el filtro ya está puesto, y
+        no dependerá de que alguien se acuerde. Ocho puertas cerradas y una abierta dan el
+        mismo resultado que ninguna cerrada.
+      */
+      const limpias = sinCostosLista(filas as Array<Record<string, unknown>>, user);
+
+      /*
+        Los códigos se traducen aquí, no en la pantalla.
+
+        Una columna que dice "cash" y otra que dice "completed" en un Excel que se le manda
+        al contador no es un detalle: es un archivo que hay que explicar por teléfono. Los
+        rótulos salen de `@ventafacil/shared`, los mismos que usa la aplicación, para que no
+        haya dos listas que se separen.
+      */
+      const traducidas = limpias.map((f) => {
+        const r: Record<string, unknown> = { ...f };
+        const pago = r['Forma de pago'];
+        if (typeof pago === 'string' && pago in PAYMENT_LABELS) {
+          r['Forma de pago'] = PAYMENT_LABELS[pago as keyof typeof PAYMENT_LABELS];
+        }
+        const estado = r['Estado'];
+        if (typeof estado === 'string' && estado in SALE_STATUS_LABELS) {
+          r['Estado'] = SALE_STATUS_LABELS[estado as keyof typeof SALE_STATUS_LABELS];
+        }
+        const accion = r['Acción'];
+        if (typeof accion === 'string' && accion in AUDIT_ACTION_LABELS) {
+          r['Acción'] = AUDIT_ACTION_LABELS[accion as keyof typeof AUDIT_ACTION_LABELS];
+        }
+        const sobre = r['Sobre'];
+        if (typeof sobre === 'string' && sobre in AUDIT_ENTITY_LABELS) {
+          r['Sobre'] = AUDIT_ENTITY_LABELS[sobre as keyof typeof AUDIT_ENTITY_LABELS];
+        }
+        // `true`/`false` en una hoja de cálculo se lee peor que Sí/No.
+        for (const k of ['Activo']) if (typeof r[k] === 'boolean') r[k] = r[k] ? 'Sí' : 'No';
+        return r;
+      });
+
+      await app.audit(req, {
+        action: 'export',
+        entity: 'business',
+        after: { seccion, filas: traducidas.length },
+      });
+      return reply.send({ data: { seccion, filas: traducidas }, error: null });
     },
   );
 }
