@@ -1074,4 +1074,55 @@ describe('el sync traduce sus errores', () => {
     expect(res.body).not.toContain('LOCATION_SCOPE');
     expect(res.body).not.toContain('Error:');
   });
+
+  it('una venta corrupta NO tumba las sanas del mismo lote', async () => {
+    /*
+      El sobre validaba el contenido entero (`z.array(createSaleSchema)`), así que una
+      sola venta mal formada rechazaba el lote con 400 y ninguna de las demás subía. En
+      una PWA que cobra sin conexión eso es una fila corrupta secuestrando el día de
+      trabajo de una caja — reintentando cada 30 segundos sin que nadie entienda por qué.
+    */
+    const buena = (id: string) => ({
+      id,
+      locationId: t.locationId,
+      status: 'completed',
+      subtotal: '50.00',
+      discount: '0',
+      total: '50.00',
+      paymentMethod: 'cash',
+      clientCreatedAt: new Date().toISOString(),
+      items: [
+        {
+          productId: t.productId,
+          productNameSnapshot: 'Producto',
+          unitPriceSnapshot: '50.00',
+          quantity: 1,
+          lineTotal: '50.00',
+        },
+      ],
+    });
+    const idA = crypto.randomUUID();
+    const idB = crypto.randomUUID();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales/sync',
+      headers: auth(t.adminToken),
+      payload: {
+        sales: [
+          buena(idA),
+          // Corrupta: sin `items` y con el total sin cuadrar.
+          { id: crypto.randomUUID(), total: 'esto-no-es-dinero' },
+          buena(idB),
+        ],
+      },
+    });
+
+    expect(res.statusCode, 'el lote entero se rechazó').toBe(200);
+    const results = res.json().data.results as Array<{ id: string; status: string }>;
+    expect(results).toHaveLength(3);
+    expect(results.find((r) => r.id === idA)!.status).toBe('ok');
+    expect(results.find((r) => r.id === idB)!.status).toBe('ok');
+    expect(results[1]!.status).toBe('error');
+  });
 });

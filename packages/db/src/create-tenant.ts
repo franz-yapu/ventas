@@ -1,8 +1,7 @@
 import { DEFAULT_PLAN_CODE, TERMS_VERSION, TRIAL_DAYS } from '@ventafacil/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from './client.js';
 import * as s from './schema.js';
-import { withTenant } from './tenant.js';
 
 export interface NuevoNegocio {
   name: string;
@@ -58,25 +57,43 @@ export async function crearNegocio(input: NuevoNegocio): Promise<NegocioCreado> 
     );
   }
 
-  const [biz] = await db
-    .insert(s.business)
-    .values({
-      name: input.name,
-      slug: input.slug,
-      termsAcceptedAt: input.aceptaTerminos ? new Date() : null,
-      termsVersion: input.aceptaTerminos ? TERMS_VERSION : null,
-    })
-    .returning();
-  const businessId = biz!.id;
+  /*
+    Todo el alta en UNA transacción, y esto no es pulcritud: es lo que evita negocios zombi.
 
-  await db.insert(s.subscription).values({
-    businessId,
-    planCode,
-    status: 'trial',
-    trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
-  });
+    Antes eran tres actos sueltos —el negocio, la suscripción, y una transacción aparte
+    para el contador, la sucursal y el administrador—. Si el tercero fallaba (un usuario
+    repetido, la conexión, cualquier cosa), los dos primeros ya estaban escritos: quedaba
+    un negocio SIN ADMINISTRADOR, al que nadie puede entrar, ocupando su subdominio **para
+    siempre**. Y el subdominio es lo primero que elige un cliente al registrarse, así que
+    el siguiente que quisiera ese nombre se topaba con "esa dirección ya está ocupada"
+    apuntando a un fantasma.
 
-  return withTenant(businessId, async (tx) => {
+    El contexto de tenant se fija a mitad de la transacción, después de insertar el
+    negocio: `set_config(..., true)` es LOCAL a la transacción, así que vale para lo que
+    viene detrás y desaparece al terminar, igual que en `withTenant`.
+  */
+  return db.transaction(async (tx) => {
+    const [biz] = await tx
+      .insert(s.business)
+      .values({
+        name: input.name,
+        slug: input.slug,
+        termsAcceptedAt: input.aceptaTerminos ? new Date() : null,
+        termsVersion: input.aceptaTerminos ? TERMS_VERSION : null,
+      })
+      .returning();
+    const businessId = biz!.id;
+
+    await tx.insert(s.subscription).values({
+      businessId,
+      planCode,
+      status: 'trial',
+      trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
+    });
+
+    // A partir de aquí, las tablas bajo RLS necesitan saber de quién son las filas.
+    await tx.execute(sql`select set_config('app.business_id', ${businessId}, true)`);
+
     await tx.insert(s.businessCounter).values({ businessId, lastReceiptNumber: 0 });
     // Sucursal central por defecto: sin ella el negocio no puede vender.
     const [loc] = await tx

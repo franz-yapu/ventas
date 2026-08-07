@@ -1,7 +1,7 @@
 import { schema, withTenant } from '@ventafacil/db';
 import { createUserSchema } from '@ventafacil/shared';
 import argon2 from 'argon2';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, count, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { violaUnica } from '../lib/pg-errores.js';
@@ -23,6 +23,31 @@ function puedeAdministrarA(
 ): boolean {
   if (admin.isCentral) return true;
   return !!locationId && locationId === admin.locationId;
+}
+
+/**
+ * ¿Es el último administrador ACTIVO de la central que le queda al negocio?
+ *
+ * Sólo cuentan los de la central: un encargado de sucursal no puede administrar el
+ * negocio (ver `requireCentralAdmin`), así que dejar sólo encargados es dejarlo sin nadie.
+ */
+async function esElUltimoAdminCentral(businessId: string, excepto: string): Promise<boolean> {
+  const [row] = await withTenant(businessId, (tx) =>
+    tx
+      .select({ n: count() })
+      .from(schema.appUser)
+      .innerJoin(schema.location, eq(schema.location.id, schema.appUser.locationId))
+      .where(
+        and(
+          eq(schema.appUser.businessId, businessId),
+          eq(schema.appUser.role, 'admin'),
+          eq(schema.appUser.isActive, true),
+          eq(schema.location.isCentral, true),
+          ne(schema.appUser.id, excepto),
+        ),
+      ),
+  );
+  return (row?.n ?? 0) === 0;
 }
 
 export async function userRoutes(app: FastifyInstance) {
@@ -181,6 +206,29 @@ export async function userRoutes(app: FastifyInstance) {
             error: 'Un vendedor necesita una ubicación: sin ella no podría vender ni ver nada.',
           });
         }
+      }
+
+      /*
+        No dejar al negocio sin nadie que lo administre.
+
+        Desactivar al último admin de la central, o degradarlo a vendedor, deja el negocio
+        sin quien pueda crear usuarios, abrir sucursales o tocar la configuración — y sin
+        nadie que pueda deshacerlo desde dentro. Se sale de ahí llamando a soporte para
+        que use el rescate del panel, que es un rodeo caro para un descuido de un clic.
+
+        `platform.ts` ya resolvió exactamente esto para los operadores principales
+        (`principalesActivos`) y no se trasladó aquí. Es la misma pregunta.
+      */
+      const seQuedaSinAdmin =
+        (parsed.data.isActive === false || parsed.data.role === 'seller') &&
+        actual.role === 'admin';
+      if (seQuedaSinAdmin && (await esElUltimoAdminCentral(req.authUser!.businessId, id))) {
+        return reply.code(409).send({
+          data: null,
+          error:
+            'Es el último administrador del negocio. Nombra a otro antes de quitarle el cargo, o nadie podrá administrarlo.',
+          code: 'ultimo_admin',
+        });
       }
 
       const patch: Record<string, unknown> = { ...parsed.data };

@@ -84,7 +84,18 @@ export async function enviarCorreo(
     { para: correo.to, asunto: correo.subject, cuerpo: correo.text },
     '📧 Correo (driver de consola — define RESEND_API_KEY para enviarlo de verdad)',
   );
-  return { enviado: true, driver: 'consola' };
+  /*
+    `enviado: false`, y el `driver` dice por qué.
+
+    Devolvía `true`, y eso hacía mentir a quien lo consultara: el rescate de contraseña
+    del panel respondía `correoEnviado: true` y el operador colgaba el teléfono tranquilo
+    mientras el cliente esperaba un correo que nunca salió de esta máquina. Escribirlo en
+    el log es un buzón para desarrollar, no un envío.
+
+    Quien llama tiene los dos datos y puede decir la verdad: "se envió", o "no hay correo
+    configurado, dicta tú la contraseña".
+  */
+  return { enviado: false, driver: 'consola' };
 }
 
 /**

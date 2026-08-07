@@ -136,3 +136,60 @@ describe('crear un vendedor exige ubicación', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('el negocio no se queda sin quien lo administre', () => {
+  /**
+   * Desactivar al último admin de la central, o degradarlo a vendedor, dejaba el negocio
+   * sin nadie que pudiera crear usuarios, abrir sucursales ni tocar la configuración — y
+   * sin nadie que pudiera deshacerlo desde dentro. Se salía de ahí llamando a soporte
+   * para que usara el rescate del panel: un rodeo caro para un descuido de un clic.
+   *
+   * `platform.ts` ya tenía esta guarda para los operadores principales y no se había
+   * trasladado aquí. Es la misma pregunta.
+   */
+  it('no se puede desactivar al último admin de la central', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${t.adminId}`,
+      headers: auth(t.adminToken),
+      payload: { isActive: false },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe('ultimo_admin');
+  });
+
+  it('tampoco degradarlo a vendedor', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${t.adminId}`,
+      headers: auth(t.adminToken),
+      payload: { role: 'seller' },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('con OTRO admin en la central, sí se puede', async () => {
+    // La guarda protege al último, no al cargo: nombrar sucesor y retirarse es normal.
+    const nuevo = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(t.adminToken),
+      payload: {
+        name: 'Segundo Admin',
+        username: 'admin2',
+        password: 'secreto123',
+        role: 'admin',
+        locationId: t.locationId,
+      },
+    });
+    expect(nuevo.statusCode).toBe(201);
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${t.adminId}`,
+      headers: auth(t.adminToken),
+      payload: { role: 'seller' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+  });
+});

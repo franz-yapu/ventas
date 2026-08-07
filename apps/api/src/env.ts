@@ -142,6 +142,22 @@ export function resolvePlatformSecret(entorno: string = nodeEnv): string {
   return secret;
 }
 
+/**
+ * Variable obligatoria en producción, opcional fuera.
+ *
+ * Para las que no son secretos pero cuya ausencia rompe algo en silencio.
+ */
+function exigirEnProduccion(nombre: string, valor: string | undefined): string {
+  if (nodeEnv === 'production' && !valor) {
+    throw new Error(
+      `${nombre} es obligatoria en produccion: sin ella los correos NO se envian, se ` +
+        'escriben en el log del servidor, y quien se registre o pida restablecer su ' +
+        'contrasena esperara un correo que nunca sale.',
+    );
+  }
+  return valor ?? '';
+}
+
 export const env = {
   port: Number(process.env.API_PORT ?? 3000),
   nodeEnv,
@@ -197,8 +213,15 @@ export const env = {
   exportRateLimitWindow: process.env.EXPORT_RATE_LIMIT_WINDOW ?? '1 hour',
 
   // ── Correo transaccional ─────────────────────────────────────
-  /** Sin clave, los correos se escriben en el log en vez de enviarse. Ver mailer.ts. */
-  resendApiKey: process.env.RESEND_API_KEY ?? '',
+  /**
+   * Sin clave, los correos se escriben en el log en vez de enviarse. Ver `mailer.ts`.
+   *
+   * En producción eso no es un modo de desarrollo, es una avería silenciosa: quien se
+   * registra nunca recibe el enlace de verificación, quien olvida su contraseña nunca
+   * recibe el de restablecimiento, y ninguno de los dos sabe por qué. Se comprueba al
+   * arrancar, igual que CORS_ORIGINS y los secretos.
+   */
+  resendApiKey: exigirEnProduccion('RESEND_API_KEY', process.env.RESEND_API_KEY),
   emailFrom: process.env.EMAIL_FROM ?? 'VentaFácil <no-responder@localhost>',
   /**
    * URL de la app de un negocio. `{slug}` se sustituye por su subdominio.

@@ -90,7 +90,28 @@ export async function saleRoutes(app: FastifyInstance) {
     const { businessId, sub: userId, locationId, isCentral, role } = req.authUser!;
 
     const results = [];
-    for (const sale of parsed.data.sales) {
+    for (const cruda of parsed.data.sales) {
+      /*
+        Cada venta se valida por su cuenta.
+
+        El sobre ya no valida el contenido (ver `syncSalesSchema`): antes una sola venta
+        mal formada hacía que el lote entero se rechazara con 400 y ninguna de las demás
+        subiera. En una PWA que cobra sin conexión, eso es una fila corrupta secuestrando
+        el día de trabajo de una caja — reintentando cada 30 segundos, sin que nadie
+        entienda por qué. La corrupta sale como `error` con su motivo, y las sanas entran.
+      */
+      const v = createSaleSchema.safeParse(cruda);
+      if (!v.success) {
+        const id = (cruda as { id?: unknown })?.id;
+        results.push({
+          id: typeof id === 'string' ? id : null,
+          status: 'error',
+          error: v.error.issues[0]?.message ?? 'Venta con datos inválidos',
+          code: 'venta_invalida',
+        });
+        continue;
+      }
+      const sale = v.data;
       try {
         const r = await withTenant(businessId, (tx) =>
           persistSale(tx, { businessId, userId, locationId, isCentral, role }, sale),

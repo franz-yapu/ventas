@@ -76,9 +76,7 @@ export const loginSchema = z.object({
  * romper a quien ya los tiene así; pero quien se registra solo, y quien restablece su
  * contraseña, empiezan con el listón más alto.
  */
-export const passwordNueva = z
-  .string()
-  .min(8, 'La contraseña debe tener al menos 8 caracteres');
+export const passwordNueva = z.string().min(8, 'La contraseña debe tener al menos 8 caracteres');
 
 // ── Registro self-service ──────────────────────────────────────
 export const registerSchema = z.object({
@@ -194,14 +192,23 @@ export const createSaleSchema = z
    * sea coherente: antes se aceptaba `total: "1.00"` con `subtotal: "30.00"`, o una
    * línea de Bs. 9999 para un producto de Bs. 10.
    */
-  .refine((d) => d.items.every((it) => igual(it.lineTotal, String(Number(it.unitPriceSnapshot) * it.quantity))), {
-    message: 'El total de una línea no coincide con precio × cantidad',
-    path: ['items'],
-  })
-  .refine((d) => igual(d.subtotal, String(d.items.reduce((a, it) => a + Number(it.lineTotal), 0))), {
-    message: 'El subtotal no coincide con la suma de las líneas',
-    path: ['subtotal'],
-  })
+  .refine(
+    (d) =>
+      d.items.every((it) =>
+        igual(it.lineTotal, String(Number(it.unitPriceSnapshot) * it.quantity)),
+      ),
+    {
+      message: 'El total de una línea no coincide con precio × cantidad',
+      path: ['items'],
+    },
+  )
+  .refine(
+    (d) => igual(d.subtotal, String(d.items.reduce((a, it) => a + Number(it.lineTotal), 0))),
+    {
+      message: 'El subtotal no coincide con la suma de las líneas',
+      path: ['subtotal'],
+    },
+  )
   .refine((d) => Number(d.discount) <= Number(d.subtotal), {
     message: 'El descuento no puede superar al subtotal',
     path: ['discount'],
@@ -220,9 +227,21 @@ export const createSaleSchema = z
     path: ['clientCreatedAt'],
   });
 
-/** Sincronizacion en lote: acepta varias ventas, responde por item. */
+/**
+ * Sincronizacion en lote: acepta varias ventas, responde por item.
+ *
+ * El sobre se valida SIN mirar dentro de cada venta, a proposito. Antes era
+ * `z.array(createSaleSchema)`, es decir todo o nada: bastaba UNA venta mal formada en la
+ * cola de un dispositivo para que el lote entero se rechazara con 400 y ninguna de las
+ * demas subiera. En una PWA que cobra sin conexion eso es lo peor que puede pasar — una
+ * fila corrupta secuestra el dia de trabajo de una caja, y encima reintentando cada 30
+ * segundos sin que nadie entienda por que.
+ *
+ * Cada venta se valida por separado en el handler, que ya responde item por item: la
+ * corrupta sale como `error` con su motivo y las sanas entran.
+ */
 export const syncSalesSchema = z.object({
-  sales: z.array(createSaleSchema).max(200),
+  sales: z.array(z.unknown()).max(200),
 });
 
 export const cancelSaleSchema = z.object({
@@ -244,12 +263,9 @@ export const updateProfileSchema = z
     currentPassword: z.string().min(1).optional(),
     newPassword: z.string().min(6).optional(),
   })
-  .refine(
-    (d) => d.name !== undefined || d.newPassword !== undefined || d.email !== undefined,
-    {
-      message: 'No hay cambios para guardar',
-    },
-  )
+  .refine((d) => d.name !== undefined || d.newPassword !== undefined || d.email !== undefined, {
+    message: 'No hay cambios para guardar',
+  })
   .refine((d) => d.newPassword === undefined || !!d.currentPassword, {
     message: 'Ingresa tu contraseña actual',
     path: ['currentPassword'],
@@ -274,13 +290,9 @@ export const closeCashSchema = z.object({
 
 export const cashMovementSchema = z.object({
   type: z.enum(CASH_MOVEMENT_TYPES, { required_error: 'Indica si entra o sale dinero' }),
-  amount: money
-    .refine((v) => Number(v) > 0, 'El monto debe ser mayor a cero'),
+  amount: money.refine((v) => Number(v) > 0, 'El monto debe ser mayor a cero'),
   // Un movimiento sin motivo es indistinguible de un faltante.
-  reason: z
-    .string({ required_error: 'Explica el motivo' })
-    .min(3, 'Explica el motivo')
-    .max(200),
+  reason: z.string({ required_error: 'Explica el motivo' }).min(3, 'Explica el motivo').max(200),
 });
 
 // ── Clientes / fiado ───────────────────────────────────────────
