@@ -18,6 +18,25 @@ interface ModalProps {
 // hoja #fbfbf9 pegada abajo en móvil (radio superior) y centrada en escritorio.
 export function Modal({ open, onClose, title, children, className }: ModalProps) {
   const hoja = useRef<HTMLDivElement>(null);
+  /**
+   * `onClose` vive en una ref, y esto NO es un detalle de estilo.
+   *
+   * Quien usa este componente le pasa una flecha en línea —`onClose={() => setX(null)}`—,
+   * que es una función NUEVA en cada render. Con `onClose` en las dependencias del efecto
+   * de abajo, cada tecla que escribía alguien cambiaba el estado del padre, provocaba un
+   * render, cambiaba la identidad de `onClose`, y el efecto se limpiaba y se volvía a
+   * montar. Su limpieza devuelve el foco a donde estaba ANTES de abrir y su montaje lo
+   * lleva al primer campo, así que el foco salía disparado en cada letra: el campo del
+   * motivo de una cancelación se quedaba en la primera y no se podía escribir nada más.
+   *
+   * Era bloqueante y no era de la pantalla de ventas: le pasaba a CUALQUIER modal con un
+   * formulario cuyo estado viva en el padre, que son casi todos.
+   *
+   * Con la ref, el efecto depende sólo de `open` —que es cuándo tiene que hacer algo— y
+   * sigue llamando siempre a la versión más reciente.
+   */
+  const cerrar = useRef(onClose);
+  cerrar.current = onClose;
 
   /**
    * Escape cierra, y el tabulador se queda DENTRO.
@@ -38,7 +57,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     (primero ?? hoja.current)?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onClose();
+      if (e.key === 'Escape') return cerrar.current();
       if (e.key !== 'Tab' || !hoja.current) return;
       const focos = Array.from(hoja.current.querySelectorAll<HTMLElement>(ENFOCABLES));
       if (focos.length === 0) return;
@@ -66,7 +85,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       document.body.style.overflow = overflow;
       veniaDe?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (

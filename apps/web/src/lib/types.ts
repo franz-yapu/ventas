@@ -135,6 +135,8 @@ export interface CashBreakdown {
   cashPayments: string;
   movementsIn: string;
   movementsOut: string;
+  /** Lo cobrado en efectivo que después se anuló, ya sumado dentro de `cashSales`. */
+  cancelledCash: string;
   /** Lo que DEBERÍA haber en el cajón. */
   expected: string;
   byPaymentMethod: Array<{ paymentMethod: string; total: string; count: number }>;

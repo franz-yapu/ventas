@@ -26,6 +26,19 @@ export function ProductsPage() {
   const [history, setHistory] = useState<{ id: string; name: string } | null>(null);
   const isAdmin = user?.role === 'admin';
   const isCentral = !!user?.isCentral;
+  /**
+   * Quién puede dar de alta productos: cualquier ADMIN, no cualquiera de la central.
+   *
+   * La pantalla lo condicionaba a `isCentral`, que es dónde está la persona, no qué
+   * puede hacer. Salían las dos equivocaciones opuestas a la vez: un VENDEDOR de la
+   * sucursal central veía el botón "Nuevo" —y al guardar se llevaba un 403 del
+   * servidor, que sí miraba el rol—, y un encargado de sucursal, que sí tiene permiso,
+   * no lo veía.
+   *
+   * Es el mismo error que ya se corrigió en el API hace dos rondas: `isCentral` usado
+   * como si fuera un permiso. Aquí quedaba el último resto, en el dibujo.
+   */
+  const puedeGestionarCatalogo = isAdmin;
 
   // Sólo la central filtra por ubicación; la sucursal siempre ve la suya.
   const { data: locations } = useQuery({
@@ -56,13 +69,12 @@ export function ProductsPage() {
       <PageHeader
         titulo="Productos"
         descripcion={
-          isCentral
-            ? 'El catálogo del negocio. Sólo la central da de alta productos.'
-            : 'El catálogo del negocio. Los da de alta la central.'
+          puedeGestionarCatalogo
+            ? 'El catálogo del negocio. El stock que ves es el de tu sucursal.'
+            : 'El catálogo del negocio. Los da de alta un administrador.'
         }
         acciones={
-          // Sólo la central da de alta / importa productos y asigna su ubicación.
-          isCentral && (
+          puedeGestionarCatalogo && (
             <>
               <CsvImport schema={business?.productSchema ?? []} onDone={reload} />
               <Button onClick={() => setEditing('new')}>
@@ -117,13 +129,13 @@ export function ProductsPage() {
               descripcion={
                 filtrando
                   ? 'Prueba con otro nombre o SKU, o quita el filtro de ubicación.'
-                  : isCentral
+                  : puedeGestionarCatalogo
                     ? 'Da de alta el primero, o impórtalos de una vez desde un CSV.'
-                    : 'Los productos los da de alta la sucursal central.'
+                    : 'Los productos los da de alta un administrador.'
               }
               accion={
                 !filtrando &&
-                isCentral && (
+                puedeGestionarCatalogo && (
                   <Button onClick={() => setEditing('new')}>
                     <Plus size={18} /> Nuevo producto
                   </Button>

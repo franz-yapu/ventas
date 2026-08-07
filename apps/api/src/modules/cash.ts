@@ -23,6 +23,16 @@ interface Desglose {
   cashPayments: string;
   movementsIn: string;
   movementsOut: string;
+  /**
+   * Lo cobrado en efectivo que después se ANULÓ, dentro de este turno.
+   *
+   * Va aparte porque ya está sumado dentro de `cashSales` —el billete entró al cajón— y
+   * la pantalla necesita poder decirlo. Sin este número, anular una venta no producía
+   * ningún cambio visible en la caja: el esperado no se movía (que es lo correcto) pero
+   * tampoco aparecía nada que explicara por qué, así que parecía que la anulación no se
+   * había registrado. Con él, la caja puede recordar que hay un billete que sacar.
+   */
+  cancelledCash: string;
   expected: string;
   /** Ventas del turno por método de pago (la "lectura Z" del turno). */
   byPaymentMethod: Array<{ paymentMethod: string; total: string; count: number }>;
@@ -95,6 +105,17 @@ async function calcularDesglose(
       AND cp.created_at < ${finDelTurno}::timestamptz
   `);
 
+  const anuladas = await tx.execute<{ total: string }>(sql`
+    SELECT COALESCE(SUM(s.total), 0) AS total
+    FROM sale s
+    WHERE s.business_id = ${businessId}
+      AND s.location_id = ${caja.locationId}
+      AND s.status = 'cancelled'
+      AND s.payment_method = 'cash'
+      AND s.client_created_at >= ${desde}::timestamptz
+      AND s.client_created_at < ${finDelTurno}::timestamptz
+  `);
+
   const movs = await tx.execute<{ type: string; total: string }>(sql`
     SELECT type, COALESCE(SUM(amount), 0) AS total
     FROM cash_movement
@@ -115,6 +136,7 @@ async function calcularDesglose(
     cashPayments: cashPayments.toFixed(2),
     movementsIn: movementsIn.toFixed(2),
     movementsOut: movementsOut.toFixed(2),
+    cancelledCash: dec(anuladas[0]?.total).toFixed(2),
     expected: (apertura + cashSales + cashPayments + movementsIn - movementsOut).toFixed(2),
     byPaymentMethod: ventas.map((r) => ({
       paymentMethod: r.payment_method,

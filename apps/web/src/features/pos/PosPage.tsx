@@ -142,6 +142,45 @@ export function PosPage() {
     );
   }
 
+  /**
+   * Enter en el buscador: agrega el producto, que es lo que necesita un escáner.
+   *
+   * Este campo YA buscaba por código de barras (ver `searchCatalog`), pero no lo decía y,
+   * sobre todo, no hacía nada al pulsar Enter. Un lector de códigos USB —el que hay en la
+   * mayoría de los mostradores— se comporta como un teclado: escribe el código de golpe y
+   * pulsa Enter. Sin manejarlo, escanear llenaba el buscador y ahí se quedaba: había que
+   * soltar la pistola y tocar la tarjeta con el dedo, que es justo lo que se compró el
+   * lector para no hacer. El botón de la cámara (`ScanLine`) cubría el otro caso, el del
+   * teléfono, y por eso el hueco pasó desapercibido.
+   *
+   * Se agrega cuando NO hay ambigüedad: un código de barras o un SKU identifican a uno
+   * solo. Si el texto da varios resultados —"llanta"— no se elige por él; se deja la
+   * lista, que es lo que quería quien estaba escribiendo.
+   */
+  function alPulsarEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return;
+    const t = search.trim().toLowerCase();
+    if (!t) return;
+
+    const lista = products ?? [];
+    const exacto = lista.find(
+      (p) => (p.barcode ?? '').toLowerCase() === t || p.sku.toLowerCase() === t,
+    );
+    const elegido = exacto ?? (lista.length === 1 ? lista[0] : undefined);
+
+    if (!elegido) {
+      showToast(
+        lista.length === 0 ? `Sin producto para "${search.trim()}"` : 'Hay varios: elige uno',
+        false,
+      );
+      return;
+    }
+    addToCart(elegido);
+    showToast(`Agregado: ${elegido.name}`);
+    // Se vacía para que el siguiente escaneo entre limpio, sin borrar a mano.
+    setSearch('');
+  }
+
   async function onScanned(code: string) {
     const product = await findByBarcode(code);
     setScanOpen(false);
@@ -310,9 +349,10 @@ export function PosPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
             <Input
               className="h-12 pl-10 text-lg"
-              placeholder="Buscar producto por nombre o SKU…"
+              placeholder="Nombre, SKU o código de barras — o escanea"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={alPulsarEnter}
               autoFocus
             />
           </div>

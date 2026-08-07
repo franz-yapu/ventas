@@ -107,6 +107,24 @@ export function CashPage() {
                 <span className="text-2xl font-bold">{money(caja.breakdown.expected)}</span>
               </div>
 
+              {/*
+                Las ventas anuladas, cuando las hay.
+
+                No restan del esperado a propósito: el billete entró al cajón cuando se
+                cobró, y que la venta se anule después no lo saca de ahí — devolver el
+                dinero es un retiro, como cualquier otro. Pero sin decirlo en ninguna
+                parte, anular no producía NINGÚN cambio visible aquí y parecía que no se
+                había registrado. Este aviso es lo que convierte una decisión invisible en
+                una tarea concreta: hay un billete que sacar del cajón.
+              */}
+              {Number(caja.breakdown.cancelledCash) > 0 && (
+                <div className="rounded-theme-sm bg-warning-bg p-3 text-[13px] leading-[1.5] text-warning">
+                  <strong>{money(caja.breakdown.cancelledCash)}</strong> en ventas anuladas siguen
+                  contando en el esperado, porque ese dinero entró al cajón. Si lo devolviste,
+                  regístralo como <strong>retiro</strong>; si no, al cerrar aparecerá como sobrante.
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button variant="outline" onClick={() => setMovimiento(true)}>
                   Registrar movimiento
