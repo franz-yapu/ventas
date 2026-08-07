@@ -33,7 +33,17 @@ const queryClient: QueryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      {/*
+        Las dos banderas de v7 van activadas a propósito.
+        - Silencian los dos avisos de consola que salían en cada arranque, y un aviso
+          que sale siempre es un aviso que nadie lee.
+        - Adelantan el comportamiento de React Router 7, que es donde vive el parche de
+          las dos redirecciones abiertas de la 6.30.4. Hoy no son alcanzables aquí
+          —ningún `navigate()` recibe datos de fuera, todas las rutas son literales, y
+          no hay SSR—, así que la migración no urge; pero cuando toque, con esto ya
+          está medio hecha.
+      */}
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         {/* El modo va por encima de la sesión: el login y la recuperación de
             contraseña también se miran de noche. */}
         <ModoProvider>

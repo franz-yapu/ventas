@@ -1,16 +1,12 @@
 import { crearNegocio, slugDisponible } from '@ventafacil/db';
-import {
-  MENSAJE_SLUG,
-  registerSchema,
-  TRIAL_DAYS,
-  validarSlug,
-} from '@ventafacil/shared';
+import { MENSAJE_SLUG, registerSchema, TRIAL_DAYS, validarSlug } from '@ventafacil/shared';
 import argon2 from 'argon2';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { env } from '../env.js';
 import { emitirToken, limpiarTokensViejos } from '../lib/auth-tokens.js';
 import { enviarCorreo, urlDelNegocio } from '../lib/mailer.js';
+import { violaUnica } from '../lib/pg-errores.js';
 
 /**
  * Registro self-service: un negocio desconocido se da de alta solo.
@@ -93,7 +89,7 @@ export async function registerRoutes(app: FastifyInstance) {
     } catch (e) {
       // Dos altas simultáneas con el mismo slug: la segunda choca contra el índice
       // único. Se traduce a un mensaje que la persona entiende.
-      if (String(e).includes('business_slug_unique')) {
+      if (violaUnica(e, 'business_slug_unique')) {
         return reply
           .code(409)
           .send({ data: null, error: 'Esa dirección ya está ocupada. Prueba con otra.' });

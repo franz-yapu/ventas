@@ -14,6 +14,7 @@ import { randomInt } from 'node:crypto';
 import { z } from 'zod';
 import { env } from '../env.js';
 import { enviarCorreo, urlDelNegocio } from '../lib/mailer.js';
+import { violaUnica } from '../lib/pg-errores.js';
 import { revocarTodo } from '../lib/sessions.js';
 import { invalidateAccess } from '../lib/subscription.js';
 
@@ -91,7 +92,9 @@ const editarOperadorBody = z.object({
  * cuenta el API cuando decide bloquear: dos relojes distintos darían dos verdades, y
  * la que importa es la del servidor. Negativo = ya venció.
  */
-function vencimiento(sub: { status: string; trialEndsAt: Date | null; currentPeriodEnd: Date | null } | null) {
+function vencimiento(
+  sub: { status: string; trialEndsAt: Date | null; currentPeriodEnd: Date | null } | null,
+) {
   if (!sub) return null;
   const enPrueba = sub.status === 'trial';
   const fecha = enPrueba ? sub.trialEndsAt : sub.currentPeriodEnd;
@@ -250,7 +253,10 @@ export async function platformRoutes(app: FastifyInstance) {
         .select({ id: schema.platformAdmin.id })
         .from(schema.platformAdmin)
         .where(
-          and(eq(schema.platformAdmin.email, email), ne(schema.platformAdmin.id, req.platformUser!.sub)),
+          and(
+            eq(schema.platformAdmin.email, email),
+            ne(schema.platformAdmin.id, req.platformUser!.sub),
+          ),
         )
         .limit(1);
       if (ocupado) {
@@ -463,8 +469,7 @@ export async function platformRoutes(app: FastifyInstance) {
 
       // Quedarse sin ningún principal activo deja la administración de operadores
       // cerrada para todos, y sólo se reabre entrando al servidor.
-      const pierdeElRango =
-        before.isOwner && (d.isOwner === false || d.isActive === false);
+      const pierdeElRango = before.isOwner && (d.isOwner === false || d.isActive === false);
       if (pierdeElRango && (await principalesActivos(id)) === 0) {
         return reply.code(400).send({
           data: null,
@@ -534,7 +539,10 @@ export async function platformRoutes(app: FastifyInstance) {
       .leftJoin(schema.plan, eq(schema.plan.code, schema.subscription.planCode))
       .where(
         filtro
-          ? or(ilike(schema.business.name, `%${filtro}%`), ilike(schema.business.slug, `%${filtro}%`))
+          ? or(
+              ilike(schema.business.name, `%${filtro}%`),
+              ilike(schema.business.slug, `%${filtro}%`),
+            )
           : undefined,
       )
       .orderBy(asc(schema.business.name))
@@ -617,7 +625,9 @@ export async function platformRoutes(app: FastifyInstance) {
       };
     });
 
-    const status = sub ? effectiveStatus({ status: sub.status, trialEndsAt: sub.trialEndsAt }) : null;
+    const status = sub
+      ? effectiveStatus({ status: sub.status, trialEndsAt: sub.trialEndsAt })
+      : null;
 
     return reply.send({
       data: {
@@ -691,7 +701,7 @@ export async function platformRoutes(app: FastifyInstance) {
           slug: schema.business.slug,
         });
     } catch (e) {
-      if (String(e).includes('business_slug')) {
+      if (violaUnica(e, 'business_slug')) {
         return reply.code(409).send({ data: null, error: 'Esa dirección ya está ocupada' });
       }
       throw e;
@@ -797,10 +807,7 @@ export async function platformRoutes(app: FastifyInstance) {
       const temporal = contrasenaTemporal();
       const passwordHash = await argon2.hash(temporal);
       await withTenant(id, (tx) =>
-        tx
-          .update(schema.appUser)
-          .set({ passwordHash })
-          .where(eq(schema.appUser.id, usuario.id)),
+        tx.update(schema.appUser).set({ passwordHash }).where(eq(schema.appUser.id, usuario.id)),
       );
       await revocarTodo(id, usuario.id);
 

@@ -4,3 +4,19 @@ packages:
 allowBuilds:
   argon2: true
   esbuild: true
+
+# Versiones forzadas de dependencias que no son nuestras.
+#
+# `fast-uri` y `find-my-way` entran por dentro de Fastify, así que no se arreglan
+# subiendo lo que declaramos: la última Fastify (5.11.2) sigue trayendo las versiones
+# con fallo. Hasta que Fastify las suba, se fuerzan aquí.
+#
+#   fast-uri     confusión de host por barra invertida (alta)
+#   find-my-way  denegación de servicio con HTTP/2 (alta)
+#
+# Se revisa cuando se suba Fastify: si ya trae versiones parcheadas, esto sobra y hay
+# que quitarlo — un override olvidado congela una dependencia y termina estorbando.
+overrides:
+  fast-uri@^3: ^3.1.5
+  fast-uri@^4: ^4.1.2
+  find-my-way: ^9.6.1

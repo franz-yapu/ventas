@@ -54,6 +54,68 @@ function resolveCorsOrigins(): string[] | true {
 }
 
 /**
+ * Los valores que trae `.env.example`. Están escritos en el repositorio, así que como
+ * secreto valen exactamente lo mismo que no tener ninguno: cualquiera que vea el código
+ * puede firmar un token de administrador de cualquier negocio.
+ *
+ * Se listan aquí para poder RECHAZARLOS explícitamente. Comprobar sólo que la variable
+ * "está definida" no basta: copiar el `.env.example` entero y arrancar es justo lo que
+ * hace todo el mundo el primer día.
+ */
+const SECRETOS_DE_EJEMPLO = new Set([
+  'dev_access_secret_cambiame',
+  'dev_refresh_secret_cambiame',
+  'dev_platform_secret_cambiame',
+  'cambia_esto_en_produccion',
+]);
+
+/** Lo mínimo que se acepta en producción. Descarta las claves tecleadas a mano. */
+const LARGO_MINIMO_SECRETO = 32;
+
+/**
+ * Resuelve un secreto de firma, exigiéndolo de verdad en producción.
+ *
+ * Antes `JWT_ACCESS_SECRET` y `JWT_REFRESH_SECRET` caían a un valor por defecto también
+ * en producción, y ese valor es el literal que está en `.env.example`. Un despliegue que
+ * olvidara definirlos firmaba los tokens de TODOS los negocios con una llave pública y
+ * arrancaba en silencio, como si nada. El criterio es el mismo que ya se aplicaba a
+ * `CORS_ORIGINS` y a `JWT_PLATFORM_SECRET`: **un fallo ruidoso al desplegar es preferible
+ * a un agujero callado en marcha**, porque el primero se arregla en un minuto y el
+ * segundo no se descubre hasta que alguien lo usa.
+ *
+ * Fuera de producción se cae al valor de desarrollo para no estorbar.
+ */
+export function resolverSecreto(
+  nombre: string,
+  valor: string | undefined,
+  porDefecto: string,
+  entorno: string = nodeEnv,
+): string {
+  if (entorno !== 'production') return valor || porDefecto;
+
+  if (!valor) {
+    throw new Error(
+      `${nombre} es obligatoria en produccion: con ella se firman los tokens de sesion. ` +
+        'Genera una larga y aleatoria (openssl rand -base64 48).',
+    );
+  }
+  if (SECRETOS_DE_EJEMPLO.has(valor)) {
+    throw new Error(
+      `${nombre} tiene el valor de ejemplo del repositorio, que es publico: con el, ` +
+        'cualquiera puede firmarse un token de administrador de cualquier negocio. ' +
+        'Genera uno propio (openssl rand -base64 48).',
+    );
+  }
+  if (valor.length < LARGO_MINIMO_SECRETO) {
+    throw new Error(
+      `${nombre} es demasiado corta (${valor.length} caracteres, minimo ${LARGO_MINIMO_SECRETO}). ` +
+        'Genera una larga y aleatoria (openssl rand -base64 48).',
+    );
+  }
+  return valor;
+}
+
+/**
  * Secreto con el que se firman los tokens del panel de plataforma.
  *
  * Es DISTINTO del de los negocios a propósito: un token de tenant firmado con el
@@ -64,32 +126,35 @@ function resolveCorsOrigins(): string[] | true {
  * no sería "inseguro por descuido" como en otros sitios: sería una llave maestra
  * pública para ver y suspender los datos de TODOS los clientes.
  */
-function resolvePlatformSecret(): string {
-  const secret = process.env.JWT_PLATFORM_SECRET;
-  if (nodeEnv === 'production') {
-    if (!secret) {
-      throw new Error(
-        'JWT_PLATFORM_SECRET es obligatoria en produccion: firma los tokens del panel ' +
-          'de plataforma, que ve y administra TODOS los negocios. Genera uno largo y ' +
-          'aleatorio (openssl rand -base64 48) y no lo reutilices de JWT_ACCESS_SECRET.',
-      );
-    }
-    if (secret === process.env.JWT_ACCESS_SECRET) {
-      throw new Error(
-        'JWT_PLATFORM_SECRET no puede ser igual a JWT_ACCESS_SECRET: si comparten llave, ' +
-          'la separacion entre el token de un negocio y el de la plataforma desaparece.',
-      );
-    }
-    return secret;
+export function resolvePlatformSecret(entorno: string = nodeEnv): string {
+  const secret = resolverSecreto(
+    'JWT_PLATFORM_SECRET',
+    process.env.JWT_PLATFORM_SECRET,
+    'dev_platform_secret_cambiame',
+    entorno,
+  );
+  if (entorno === 'production' && secret === process.env.JWT_ACCESS_SECRET) {
+    throw new Error(
+      'JWT_PLATFORM_SECRET no puede ser igual a JWT_ACCESS_SECRET: si comparten llave, ' +
+        'la separacion entre el token de un negocio y el de la plataforma desaparece.',
+    );
   }
-  return secret ?? 'dev_platform_secret_cambiame';
+  return secret;
 }
 
 export const env = {
   port: Number(process.env.API_PORT ?? 3000),
   nodeEnv,
-  jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev_access_secret_cambiame',
-  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? 'dev_refresh_secret_cambiame',
+  jwtAccessSecret: resolverSecreto(
+    'JWT_ACCESS_SECRET',
+    process.env.JWT_ACCESS_SECRET,
+    'dev_access_secret_cambiame',
+  ),
+  jwtRefreshSecret: resolverSecreto(
+    'JWT_REFRESH_SECRET',
+    process.env.JWT_REFRESH_SECRET,
+    'dev_refresh_secret_cambiame',
+  ),
   jwtPlatformSecret: resolvePlatformSecret(),
   jwtAccessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
   jwtRefreshTtl: process.env.JWT_REFRESH_TTL ?? '30d',

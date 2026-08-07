@@ -3,6 +3,7 @@ import { cashMovementSchema, closeCashSchema, openCashSchema } from '@ventafacil
 import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { violaUnica } from '../lib/pg-errores.js';
 import { filtroDeUbicacion, viewScope } from '../lib/scope.js';
 import { TZ } from '../lib/zona.js';
 import type { AuthUser } from '../types.js';
@@ -224,7 +225,7 @@ export async function cashRoutes(app: FastifyInstance) {
       return reply.code(201).send({ data: caja, error: null });
     } catch (e) {
       // Lo atrapa el índice parcial único: ya hay un turno abierto en ese cajón.
-      if (String(e).includes('cash_register_una_abierta_uq')) {
+      if (violaUnica(e, 'cash_register_una_abierta_uq')) {
         return reply
           .code(409)
           .send({ data: null, error: 'Ya hay una caja abierta en esta ubicación.' });
@@ -278,7 +279,10 @@ export async function cashRoutes(app: FastifyInstance) {
     if (!row) {
       return reply
         .code(409)
-        .send({ data: null, error: 'No hay una caja abierta. Ábrela antes de registrar movimientos.' });
+        .send({
+          data: null,
+          error: 'No hay una caja abierta. Ábrela antes de registrar movimientos.',
+        });
     }
 
     await app.audit(req, {

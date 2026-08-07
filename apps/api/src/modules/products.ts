@@ -4,6 +4,7 @@ import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { sinCostos, sinCostosEnJson } from '../lib/costos.js';
+import { violaUnica } from '../lib/pg-errores.js';
 import { canActOnLocation, viewScope } from '../lib/scope.js';
 import { permiteCrear } from '../lib/subscription.js';
 
@@ -280,7 +281,7 @@ export async function productRoutes(app: FastifyInstance) {
       await app.audit(req, { action: 'create', entity: 'product', entityId: row.id, after: row });
       return reply.code(201).send({ data: row, error: null });
     } catch (e) {
-      if (String(e).includes('product_business_sku_uq')) {
+      if (violaUnica(e, 'product_business_sku_uq')) {
         return reply.code(409).send({ data: null, error: 'Ya existe un producto con ese SKU' });
       }
       throw e;

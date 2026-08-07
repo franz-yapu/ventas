@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
-import { originPermitido } from '../src/env.js';
+import { originPermitido, resolverSecreto } from '../src/env.js';
 import { createTenant, makeApp, resetDb, type Tenant } from './helpers.js';
 
 /**
@@ -172,6 +172,47 @@ describe('comodín de CORS por subdominio', () => {
   });
 });
 
+describe('los secretos de firma son obligatorios en producción', () => {
+  /**
+   * Antes `JWT_ACCESS_SECRET` caía a 'dev_access_secret_cambiame' también en producción,
+   * y ese literal está escrito en `.env.example`. Un despliegue que se olvidara de la
+   * variable firmaba los tokens de TODOS los negocios con una llave pública y arrancaba
+   * sin decir nada. Estas cinco pruebas son las que impiden que vuelva.
+   */
+  const LARGO = 'un_secreto_largo_y_aleatorio_de_mas_de_32';
+
+  it('sin la variable, el API no arranca', () => {
+    expect(() => resolverSecreto('JWT_ACCESS_SECRET', undefined, 'x', 'production')).toThrow(
+      /obligatoria en produccion/,
+    );
+  });
+
+  it('RECHAZA el valor de ejemplo del repositorio', () => {
+    // El caso real: copiar `.env.example` entero y arrancar.
+    expect(() =>
+      resolverSecreto('JWT_ACCESS_SECRET', 'dev_access_secret_cambiame', 'x', 'production'),
+    ).toThrow(/valor de ejemplo/);
+    expect(() =>
+      resolverSecreto('JWT_REFRESH_SECRET', 'dev_refresh_secret_cambiame', 'x', 'production'),
+    ).toThrow(/valor de ejemplo/);
+  });
+
+  it('RECHAZA una clave tecleada a mano por corta', () => {
+    expect(() => resolverSecreto('JWT_ACCESS_SECRET', 'caranavi2026', 'x', 'production')).toThrow(
+      /demasiado corta/,
+    );
+  });
+
+  it('acepta una larga y aleatoria', () => {
+    expect(resolverSecreto('JWT_ACCESS_SECRET', LARGO, 'x', 'production')).toBe(LARGO);
+  });
+
+  it('fuera de producción sigue cayendo al valor de desarrollo', () => {
+    // Que la exigencia no estorbe en local ni en los tests.
+    expect(resolverSecreto('JWT_ACCESS_SECRET', undefined, 'dev_x', 'development')).toBe('dev_x');
+  });
+});
+
 describe('los errores no cuentan de más', () => {
   it('un fallo no controlado NO filtra el mensaje interno', async () => {
     const solo = await buildApp({ logger: false });
@@ -212,4 +253,4 @@ describe('health check', () => {
     expect(typeof d.dbMs).toBe('number');
     expect(typeof d.uptimeSeg).toBe('number');
   });
-})
+});

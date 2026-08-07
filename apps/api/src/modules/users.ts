@@ -4,6 +4,7 @@ import argon2 from 'argon2';
 import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { violaUnica } from '../lib/pg-errores.js';
 import { NINGUNA_UBICACION } from '../lib/scope.js';
 import { revocarTodo } from '../lib/sessions.js';
 import { permiteCrear } from '../lib/subscription.js';
@@ -103,9 +104,7 @@ export async function userRoutes(app: FastifyInstance) {
       parsed.data.locationId &&
       !(await esUbicacionDelNegocio(businessId, parsed.data.locationId))
     ) {
-      return reply
-        .code(400)
-        .send({ data: null, error: 'Esa ubicación no es de este negocio' });
+      return reply.code(400).send({ data: null, error: 'Esa ubicación no es de este negocio' });
     }
     if (!(await permiteCrear(businessId, 'users', reply))) return reply;
     const passwordHash = await argon2.hash(parsed.data.password);
@@ -133,7 +132,7 @@ export async function userRoutes(app: FastifyInstance) {
       await app.audit(req, { action: 'create', entity: 'app_user', entityId: row!.id, after: row });
       return reply.code(201).send({ data: row, error: null });
     } catch (e) {
-      if (String(e).includes('app_user_business_username_uq')) {
+      if (violaUnica(e, 'app_user_business_username_uq')) {
         return reply.code(409).send({ data: null, error: 'Ese usuario ya existe' });
       }
       throw e;
@@ -193,9 +192,7 @@ export async function userRoutes(app: FastifyInstance) {
         parsed.data.locationId &&
         !(await esUbicacionDelNegocio(req.authUser!.businessId, parsed.data.locationId))
       ) {
-        return reply
-          .code(400)
-          .send({ data: null, error: 'Esa ubicación no es de este negocio' });
+        return reply.code(400).send({ data: null, error: 'Esa ubicación no es de este negocio' });
       }
 
       // Mismo motivo que al crear: dejar a un vendedor sin ubicación lo deja sin app.
@@ -249,7 +246,12 @@ export async function userRoutes(app: FastifyInstance) {
       const bajaDeRango = parsed.data.role !== undefined && parsed.data.role !== actual.role;
       const cambioDeSucursal =
         parsed.data.locationId !== undefined && parsed.data.locationId !== actual.locationId;
-      if (parsed.data.isActive === false || parsed.data.password || bajaDeRango || cambioDeSucursal) {
+      if (
+        parsed.data.isActive === false ||
+        parsed.data.password ||
+        bajaDeRango ||
+        cambioDeSucursal
+      ) {
         await revocarTodo(req.authUser!.businessId, id);
       }
 

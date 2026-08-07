@@ -71,6 +71,19 @@ jobs:
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 
+      # Sólo las dependencias de PRODUCCIÓN, y sólo a partir de "alta".
+      #
+      # Va antes que los tests a propósito: es lo más barato de todo el CI y es lo único
+      # que mira un riesgo que ni el typecheck ni 405 tests pueden ver. La primera vez
+      # que se corrió había 15 vulnerabilidades, 3 de ellas CRÍTICAS y las tres en la
+      # biblioteca que firma los tokens de sesión; llevaban meses ahí sin que nada
+      # chistara.
+      #
+      # Las de desarrollo se dejan fuera: no llegan al servidor, y un aviso que no se
+      # puede accionar sólo enseña a saltarse el paso.
+      - name: Dependencias vulnerables
+        run: pnpm audit --prod --audit-level high
+
       - name: Tipos
         run: pnpm typecheck
 
