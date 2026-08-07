@@ -3,10 +3,23 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 
-/** Conexión de dueño/superusuario: crea la base, migra y administra RLS. */
+/**
+ * Conexión de dueño/superusuario: crea la base, migra y administra RLS.
+ *
+ * `TEST_DB_SUFFIX` permite correr dos suites A LA VEZ sin que se destruyan.
+ *
+ * Este setup BORRA y recrea la base al empezar, y el nombre era fijo: dos corridas
+ * simultáneas —dos agentes trabajando en paralelo, o un `vitest --watch` mientras alguien
+ * lanza `pnpm test`— se tiraban la base la una a la otra a mitad, con fallos que no se
+ * parecen en nada a la causa. Con el sufijo, cada corrida tiene la suya:
+ *
+ *   TEST_DB_SUFFIX=_agente2 pnpm test
+ */
+const SUFIJO = process.env.TEST_DB_SUFFIX ?? '';
+
 export const OWNER_DB_URL =
   process.env.TEST_DATABASE_URL ??
-  'postgres://ventafacil:cambia_esto_en_produccion@localhost:5434/ventafacil_test';
+  `postgres://ventafacil:cambia_esto_en_produccion@localhost:5434/ventafacil_test${SUFIJO}`;
 
 export const APP_ROLE = 'ventafacil_app';
 export const APP_PASSWORD = 'app_test_pw';

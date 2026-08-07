@@ -5,9 +5,11 @@ import { defineConfig } from 'vitest/config';
  * la de desarrollo ni la de producción: el global-setup la recrea desde cero en cada
  * corrida. DATABASE_URL se fija aquí porque @ventafacil/db la lee al importarse.
  */
+// `TEST_DB_SUFFIX` deja correr dos suites a la vez sin que se destruyan la base la una a
+// la otra. Ver la explicación en `test/global-setup.ts`.
 const OWNER_DB_URL =
   process.env.TEST_DATABASE_URL ??
-  'postgres://ventafacil:cambia_esto_en_produccion@localhost:5434/ventafacil_test';
+  `postgres://ventafacil:cambia_esto_en_produccion@localhost:5434/ventafacil_test${process.env.TEST_DB_SUFFIX ?? ''}`;
 
 // La app se conecta con un rol SIN privilegios de superusuario ni de dueño: es el
 // único modo en que las políticas de RLS le aplican. El dueño se reserva para migrar.

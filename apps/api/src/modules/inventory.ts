@@ -50,7 +50,20 @@ export async function inventoryRoutes(app: FastifyInstance) {
       const { id } = req.params as { id: string };
       const parsed = z
         .object({
-          quantity: z.number().int().optional(),
+          /*
+            El ajuste manual no admite negativos.
+
+            Una VENTA sí puede dejar el stock por debajo de cero —se decidió así: vale más
+            una existencia en rojo que una venta invisible—, pero eso es el sistema
+            descontando. Esto otro es una persona contando lo que hay en la estantería, y
+            nadie cuenta menos siete bujías. Aceptarlo sólo servía para convertir un dedo
+            torcido en un descuadre que después nadie sabe explicar.
+          */
+          quantity: z
+            .number()
+            .int()
+            .min(0, 'No se puede ajustar a una cantidad negativa')
+            .optional(),
           minStock: z.number().int().nullable().optional(),
           reason: z.string().min(3, 'El motivo es obligatorio (mín. 3)'),
         })

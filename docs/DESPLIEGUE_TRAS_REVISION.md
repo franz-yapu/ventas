@@ -7,36 +7,51 @@ Todo lo demás de la rama despliega sin ceremonia. Esto no.
 
 ---
 
-## 1. ⛔ El API NO ARRANCARÁ sin dos variables nuevas
+## 1. ⛔ El API NO ARRANCARÁ si no revisas dos variables
 
 Este es el cambio que puede dejar el servicio caído si se despliega sin mirar.
 
-`JWT_ACCESS_SECRET` y `JWT_REFRESH_SECRET` caían a un valor por defecto **también en
-producción**, y ese valor es el literal que está escrito en `.env.example`. Con él,
-cualquiera que vea el repositorio puede firmarse un token de administrador de cualquier
-negocio. Ahora el API se niega a arrancar si faltan, si son el literal de ejemplo, o si
-tienen menos de 32 caracteres — el mismo criterio que ya se aplicaba a `CORS_ORIGINS`.
+### `JWT_ACCESS_SECRET`
 
-**Antes de desplegar**, mirar qué tiene puesto el servidor:
+Caía a un valor por defecto **también en producción**, y ese valor es el literal escrito
+en `.env.example`. Con él, cualquiera que vea el repositorio puede firmarse un token de
+administrador de cualquier negocio. Ahora el API se niega a arrancar si falta, si es el
+literal de ejemplo, o si tiene menos de 32 caracteres — el mismo criterio que ya se
+aplicaba a `CORS_ORIGINS`.
 
 ```bash
-grep -E 'JWT_ACCESS_SECRET|JWT_REFRESH_SECRET' /home/franz/deploy-ventafacil/.env
+grep -E 'JWT_ACCESS_SECRET' /home/franz/deploy-ventafacil/.env
 ```
 
-- **Si son los de `.env.example`** (`dev_access_secret_cambiame` / `dev_refresh_secret_cambiame`),
-  el sistema lleva desde el primer día firmando con una llave pública. Hay que rotarlos:
+- **Si es el de `.env.example`** (`dev_access_secret_cambiame`), el sistema lleva desde el
+  primer día firmando con una llave pública. Hay que rotarlo:
 
   ```bash
-  openssl rand -base64 48   # uno para cada uno
+  openssl rand -base64 48
   ```
 
-  ⚠️ **Rotarlos echa a todo el mundo**: los tokens en circulación dejan de valer y todos
+  ⚠️ **Rotarlo echa a todo el mundo**: los tokens en circulación dejan de valer y todos
   tienen que volver a entrar. Hacerlo **con el negocio cerrado**, no a media tarde.
 
-- **Si son propios pero cortos** (menos de 32 caracteres), el API tampoco arranca. Mismo
+- **Si es propio pero corto** (menos de 32 caracteres), el API tampoco arranca. Mismo
   procedimiento.
 
-- **Si son propios y largos**, no hay nada que hacer: despliega y ya.
+- **Si es propio y largo**, no hay nada que hacer.
+
+### `RESEND_API_KEY`
+
+Pasa a ser obligatoria en producción. Sin ella los correos **no se envían**: se escriben
+en el log del servidor. En desarrollo eso es un buzón cómodo; en producción es una avería
+silenciosa — quien se registra nunca recibe el enlace de verificación y quien olvida su
+contraseña nunca recibe el de restablecimiento, y ninguno de los dos sabe por qué.
+
+### `JWT_REFRESH_SECRET` se puede borrar del `.env`
+
+No firmaba nada. Estaba en la configuración y ni una línea la usaba: los dos tokens de un
+negocio se firman con `JWT_ACCESS_SECRET` y lo que los distingue es un claim que se
+comprueba en las dos direcciones. Se quitó del código — una variable que promete separar
+dos llaves y no separa nada es peor que no tenerla, porque quien la rota cree haber rotado
+algo. Dejarla en el `.env` es inofensivo; el API la ignora.
 
 ## 2. Comprobar si quedaron filas de inventario huérfanas
 

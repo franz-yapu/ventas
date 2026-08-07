@@ -48,6 +48,27 @@
     font-weight: 600;
     color: color-mix(in srgb, var(--color-fg) 78%, transparent);
   }
+  /*
+    Foco de teclado para TODO lo que se puede enfocar.
+
+    `Button`, `Input` y `Select` traían el suyo, pero la aplicación está llena de `<a>` y
+    de `<button>` sueltos —el menú, los iconos de las tablas, los enlaces de los legales—
+    que no pasan por esos componentes y se quedaban sin ninguna marca visible. Quien
+    navega con Tab (o con un teclado porque el táctil de la caja está roto, que pasa)
+    perdía el rastro de dónde estaba.
+    
+    Va por defecto y no componente a componente justamente porque el patrón que falla es
+    el del elemento suelto que nadie se acordó de vestir.
+  */
+  a:focus-visible,
+  button:focus-visible,
+  [tabindex]:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
   /* Item activo del sidebar: tinte suave del color primario (no relleno sólido),
      derivado del tema con color-mix para respetar el white-label. */
   .ds-nav-tint {

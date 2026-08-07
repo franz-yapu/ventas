@@ -64,9 +64,11 @@ function resolveCorsOrigins(): string[] | true {
  */
 const SECRETOS_DE_EJEMPLO = new Set([
   'dev_access_secret_cambiame',
-  'dev_refresh_secret_cambiame',
   'dev_platform_secret_cambiame',
   'cambia_esto_en_produccion',
+  // Sigue en la lista aunque `JWT_REFRESH_SECRET` ya no exista: es un literal público que
+  // anda escrito en los `.env` viejos, y nada impide pegarlo en la variable de al lado.
+  'dev_refresh_secret_cambiame',
 ]);
 
 /** Lo mínimo que se acepta en producción. Descarta las claves tecleadas a mano. */
@@ -161,15 +163,23 @@ function exigirEnProduccion(nombre: string, valor: string | undefined): string {
 export const env = {
   port: Number(process.env.API_PORT ?? 3000),
   nodeEnv,
+  /**
+   * La llave que firma los tokens de un negocio: el de acceso Y el de refresco.
+   *
+   * Hubo un `JWT_REFRESH_SECRET` que no firmaba nada. Estaba en `.env.example`, estaba en
+   * `env`, y ni una sola línea lo usaba: los dos tokens se firman con esta y lo que los
+   * distingue es el claim `typ`, que se comprueba en las dos direcciones —`requireAuth`
+   * rechaza un refresh, y `/auth/refresh` rechaza un access—. Se quitó en vez de
+   * implementarlo: una variable que promete separar dos llaves y no separa nada es peor
+   * que no tenerla, porque quien la rota cree haber rotado algo.
+   *
+   * La separación que SÍ importa —negocio contra plataforma— es real y tiene su propia
+   * llave: ver `resolvePlatformSecret`.
+   */
   jwtAccessSecret: resolverSecreto(
     'JWT_ACCESS_SECRET',
     process.env.JWT_ACCESS_SECRET,
     'dev_access_secret_cambiame',
-  ),
-  jwtRefreshSecret: resolverSecreto(
-    'JWT_REFRESH_SECRET',
-    process.env.JWT_REFRESH_SECRET,
-    'dev_refresh_secret_cambiame',
   ),
   jwtPlatformSecret: resolvePlatformSecret(),
   jwtAccessTtl: process.env.JWT_ACCESS_TTL ?? '15m',

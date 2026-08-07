@@ -88,7 +88,11 @@ export function LoginPage() {
           </p>
           {/* Filete del color de acento: el mismo gesto que lleva el recibo. */}
           <div className="my-[18px] h-[3px] w-16 rounded-sm bg-secondary" />
-          <p className="max-w-[300px] text-sm leading-relaxed opacity-[.88]">
+          {/* Sin `opacity-[.88]`: bajaba el blanco sobre la banda de marca a 4.36:1, por
+              debajo del 4.5 que le toca a un texto de 14px. Es la promesa del producto —
+              lo primero que lee alguien que aún no tiene cuenta— y se leía peor que el
+              resto. La jerarquía ya la da el tamaño. */}
+          <p className="max-w-[300px] text-sm leading-relaxed">
             Tus ventas se guardan en el equipo y se sincronizan solas cuando vuelve la conexión.
           </p>
         </div>

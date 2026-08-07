@@ -191,7 +191,14 @@ export async function authRoutes(app: FastifyInstance) {
     const body = req.body as { refreshToken?: string } | undefined;
     if (body?.refreshToken) {
       try {
-        const payload = app.jwt.verify<AuthUser & { jti?: string }>(body.refreshToken);
+        const payload = app.jwt.verify<AuthUser & { typ?: string; jti?: string }>(
+          body.refreshToken,
+        );
+        // El `typ` se comprueba aquí igual que en `/auth/refresh` y en `requireAuth`: es
+        // lo único que separa los dos tokens, porque comparten llave. Un access token no
+        // trae `jti` y no habría revocado nada, pero dejar el hueco abierto invita a que
+        // el día que algo cambie sí revoque lo que no debe.
+        if (payload.typ !== 'refresh') return reply.send({ data: { ok: true }, error: null });
         if (payload.jti) await revocarSesion(payload.businessId, payload.jti);
       } catch {
         // Un token ilegible ya no sirve para nada: no hay nada que revocar.
