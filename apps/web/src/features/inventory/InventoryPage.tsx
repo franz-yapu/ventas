@@ -36,15 +36,26 @@ export function InventoryPage() {
   // Cuántos están en o por debajo del mínimo. Es el dato por el que se abre esta
   // pantalla, así que va en el encabezado y no escondido entre las filas.
   const bajos = rows?.filter((r) => r.minStock != null && r.quantity <= r.minStock).length ?? 0;
+  /*
+    En negativo = se vendió más de lo que había registrado.
+
+    Se puede vender sin existencias a propósito (ver `PosPage`), así que esto no es un
+    error del sistema sino una tarea pendiente para el dueño: mercadería que entró y
+    nadie dio de alta. Va en el encabezado y por delante de los mínimos porque es lo
+    único que hace que el inventario esté diciendo algo falso.
+  */
+  const negativos = rows?.filter((r) => r.quantity < 0).length ?? 0;
 
   return (
     <Page>
       <PageHeader
         titulo="Inventario"
         descripcion={
-          bajos > 0
-            ? `${bajos} ${bajos === 1 ? 'producto está' : 'productos están'} en su mínimo o por debajo.`
-            : 'Stock por producto y sucursal. Nada por debajo del mínimo.'
+          negativos > 0
+            ? `${negativos} ${negativos === 1 ? 'producto está' : 'productos están'} en negativo: se vendió más de lo registrado. Ajústalo para que las cuentas cuadren.`
+            : bajos > 0
+              ? `${bajos} ${bajos === 1 ? 'producto está' : 'productos están'} en su mínimo o por debajo.`
+              : 'Stock por producto y sucursal. Nada por debajo del mínimo.'
         }
         acciones={
           canTransfer && (
@@ -105,7 +116,10 @@ export function InventoryPage() {
             </thead>
             <tbody>
               {rows?.map((r) => {
-                const low = r.minStock != null && r.quantity <= r.minStock;
+                // Negativo antes que bajo: los dos se pintan en rojo, pero el negativo
+                // lleva además el signo, que es lo que dice cuánto hay que ajustar.
+                const negativo = r.quantity < 0;
+                const low = negativo || (r.minStock != null && r.quantity <= r.minStock);
                 // Fondo de aviso por token: el rosa quemado se veía como un parche
                 // blanco en modo oscuro.
                 return (
@@ -158,7 +172,7 @@ export function InventoryPage() {
       {/* Móvil: tarjetas apiladas; fila baja resaltada en rojo como en el prototipo. */}
       <div className="flex flex-col gap-2.5 md:hidden">
         {rows?.map((r) => {
-          const low = r.minStock != null && r.quantity <= r.minStock;
+          const low = r.quantity < 0 || (r.minStock != null && r.quantity <= r.minStock);
           return (
             <div
               key={r.id}

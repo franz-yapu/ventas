@@ -41,8 +41,19 @@ const dec = (v: unknown) => Number(v ?? 0);
  * servidor tres horas después. Eso sí, una venta que sincronice DESPUÉS del cierre ya
  * no entra — por eso el esperado se congela al cerrar y no se recalcula.
  *
- * Las anuladas quedan fuera (`status = 'completed'`): el dinero se devolvió.
- * El fiado tampoco suma: no entró efectivo.
+ * Las ANULADAS siguen contando, y esa es la parte que costó entender.
+ *
+ * Antes quedaban fuera (`status = 'completed'`), razonando que "el dinero se devolvió".
+ * Pero el sistema no sabe si se devolvió: sólo sabe que alguien marcó la venta como
+ * anulada. Y como el esperado retrocedía con ella, salía un agujero limpio: cobrar 280
+ * en efectivo, anular, quedarse el billete, y cerrar la caja cuadrada. El único control
+ * que tiene el dueño sobre el cajón borraba su propia prueba.
+ *
+ * Ahora el billete que entró se cuenta aunque la venta se anule después, y **devolver el
+ * dinero es un retiro de caja**, como cualquier otra salida: queda registrado, con quién
+ * y por qué. Si se devolvió, el turno cuadra igual; si no, aparece el faltante.
+ *
+ * El fiado no suma: no entró efectivo.
  */
 async function calcularDesglose(
   tx: TenantTx,
@@ -60,7 +71,9 @@ async function calcularDesglose(
     FROM sale s
     WHERE s.business_id = ${businessId}
       AND s.location_id = ${caja.locationId}
-      AND s.status = 'completed'
+      -- 'cancelled' entra a propósito: ver la explicación de arriba. El dinero entró
+      -- al cajón cuando se cobró; que la venta se anule después no lo saca de ahí.
+      AND s.status IN ('completed', 'cancelled')
       AND s.client_created_at >= ${desde}::timestamptz
       AND s.client_created_at < ${finDelTurno}::timestamptz
     GROUP BY s.payment_method
@@ -277,12 +290,10 @@ export async function cashRoutes(app: FastifyInstance) {
     });
 
     if (!row) {
-      return reply
-        .code(409)
-        .send({
-          data: null,
-          error: 'No hay una caja abierta. Ábrela antes de registrar movimientos.',
-        });
+      return reply.code(409).send({
+        data: null,
+        error: 'No hay una caja abierta. Ábrela antes de registrar movimientos.',
+      });
     }
 
     await app.audit(req, {

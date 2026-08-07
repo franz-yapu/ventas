@@ -263,3 +263,49 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   limpieza aparte que no debe mezclarse con cambios de verdad.
 - **El CI sí comprueba que no falte una migración.** El esquema se cambia a mano con
   `db:generate`, y olvidarlo se descubriría al desplegar, con la base ya en producción.
+
+## D19 — Lo que decidió la revisión con tres agentes (7 ago 2026)
+
+- **El catálogo es del NEGOCIO; la existencia, de cada sucursal.** Estaba a medio hacer:
+  `inventory` ya se guardaba por ubicación, pero `/products` filtraba por la ubicación que
+  había dado de alta el producto. Consecuencia: una sucursal con 57 unidades en su bodega
+  recibía una lista vacía y **no podía vender**. `product.location_id` se queda, pero sólo
+  significa quién lo administra. El stock que se enseña es el de quien mira; el admin de la
+  central puede mirar el de cualquier sucursal con `?locationId=`, que es lo que necesita
+  para reponer.
+
+- **Se puede vender sin existencias, pero se ve.** El inventario queda negativo y así se
+  muestra. Rechazar la venta suena más correcto y es peor en el mostrador: una llantería
+  que acaba de recibir mercadería sin registrarla se quedaría sin poder cobrar, con el
+  cliente delante. Lo que no puede pasar es que sea silencioso — que es lo que era.
+
+- **Anular una venta ya no devuelve el efectivo esperado del turno.** Antes las anuladas
+  quedaban fuera del arqueo, razonando que "el dinero se devolvió". Pero el sistema no sabe
+  si se devolvió: sólo sabe que alguien la marcó como anulada. Y como el esperado retrocedía
+  con ella, quedaba una salida limpia — cobrar 280 en efectivo, anular, quedarse el billete y
+  cerrar la caja cuadrada. **El único control que tiene el dueño sobre el cajón borraba su
+  propia prueba.** Ahora lo que entró se cuenta, y devolver el dinero es un retiro de caja
+  como cualquier otro: registrado, con quién y por qué. Si se devolvió, el turno cuadra; si
+  no, sale el faltante — y el API se niega a cerrar sin una explicación.
+
+  No se le quitó al vendedor la capacidad de anular. Corregir un error de tecleo en hora
+  punta sin tener que llamar al encargado es lo que evita que la venta se quede mal puesta.
+
+- **Cambiarse uno la contraseña echa a los demás dispositivos.** Faltaba, y quedaba al revés
+  de lo esperable: cuando otro te la cambiaba sí se revocaba todo, pero cuando te la cambiabas
+  tú —que es lo que se hace al sospechar que alguien entró— el refresh del intruso seguía
+  renovando 30 días. Se devuelve una pareja de tokens nueva para no echar a quien la cambia.
+
+- **Los secretos JWT se exigen en producción.** Caían a un valor por defecto escrito en
+  `.env.example`. Mismo criterio que ya se aplicaba a `CORS_ORIGINS`: un fallo ruidoso al
+  desplegar se arregla en un minuto, un agujero callado no se descubre hasta que se usa.
+
+- **Los errores de la base se reconocen por su CÓDIGO, no por su texto.** Los seis sitios que
+  detectaban un duplicado leían `String(e)`; al subir drizzle-orm dejó de traer ahí el nombre
+  de la restricción y los seis se rompieron a la vez. Sólo uno tenía test. Ahora hay un único
+  `violaUnica()` que mira el `23505` de PostgreSQL, que es contrato de la base y no del
+  cliente que la consulta.
+
+- **`pnpm audit` corre en el CI.** La primera vez que se ejecutó había 15 vulnerabilidades,
+  3 críticas y las tres en la biblioteca que firma los tokens de sesión. No lo veía el
+  typecheck, ni 405 tests, ni nadie.

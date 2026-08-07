@@ -329,9 +329,27 @@ export async function saleRoutes(app: FastifyInstance) {
       action: 'cancel',
       entity: 'sale',
       entityId: id,
-      before: { status: before.status },
+      before: { status: before.status, paymentMethod: before.paymentMethod, total: before.total },
       after: { status: 'cancelled', reason: parsed.data.reason },
     });
-    return reply.send({ data: after, error: null });
+
+    /*
+      Si era en efectivo, hay un billete que sacar del cajón.
+
+      Anular ya NO devuelve el dinero por su cuenta en el arqueo (ver `calcularDesglose`):
+      el efectivo que entró sigue contando y devolverlo es un retiro de caja, registrado
+      como cualquier otro. Eso es lo que impide cuadrar la caja anulando la propia venta.
+
+      El API no crea el retiro solo —hacerlo sería volver al punto de partida, con el
+      esperado cuadrando sin que nadie haya tocado un billete—, pero sí avisa, para que
+      el POS pueda ofrecer el retiro en el mismo gesto en lugar de dejarlo a la memoria
+      de quien está atendiendo.
+    */
+    const devolverEfectivo = before.status === 'completed' && before.paymentMethod === 'cash';
+
+    return reply.send({
+      data: { ...after, devolverEfectivo, montoADevolver: devolverEfectivo ? before.total : null },
+      error: null,
+    });
   });
 }

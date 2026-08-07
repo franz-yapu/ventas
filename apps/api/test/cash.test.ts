@@ -185,7 +185,19 @@ describe('qué cuenta y qué no cuenta como efectivo', () => {
     expect((await actual(t.adminToken)).breakdown.expected).toBe('100.00');
   });
 
-  it('una venta ANULADA no suma: el dinero se devolvió', async () => {
+  it('una venta ANULADA sigue sumando: el billete entró al cajón', async () => {
+    /*
+      Esto decía lo contrario, y era el agujero.
+
+      Se razonaba que una anulada no cuenta porque "el dinero se devolvió". Pero el
+      sistema no sabe si se devolvió: sólo sabe que alguien la marcó como anulada. Y
+      como el esperado retrocedía con ella, quedaba una salida limpia: cobrar en
+      efectivo, anular, quedarse el billete y cerrar la caja cuadrada. El único control
+      que tiene el dueño sobre el cajón borraba su propia prueba.
+
+      Ahora lo que entró se cuenta, y devolverlo es un retiro de caja como cualquier
+      otro: registrado, con quién y por qué. El siguiente test lo recorre entero.
+    */
     await abrir(t.adminToken, '100.00');
     await sembrarVenta({
       tenant: t,
@@ -194,7 +206,7 @@ describe('qué cuenta y qué no cuenta como efectivo', () => {
       status: 'cancelled',
       receipt: 104,
     });
-    expect((await actual(t.adminToken)).breakdown.expected).toBe('100.00');
+    expect((await actual(t.adminToken)).breakdown.expected).toBe('500.00');
   });
 
   it('una venta ANTERIOR a la apertura no entra en este turno', async () => {
@@ -277,6 +289,112 @@ describe('movimientos de efectivo', () => {
     await abrir(t.adminToken, '100.00');
     expect((await movimiento('out', '0.00')).statusCode).toBe(400);
     expect((await movimiento('out', '-5.00')).statusCode).toBe(400);
+  });
+});
+
+describe('un vendedor no cuadra su caja anulando su venta', () => {
+  /**
+   * El recorrido entero del agujero, con la venta y la anulación pasando por el API de
+   * verdad: cobrar 280 en efectivo, anular, y ver qué le queda al dueño.
+   */
+  async function venderPorApi(token: string, total: string) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(token),
+      payload: {
+        id: crypto.randomUUID(),
+        locationId: t.locationId,
+        total,
+        subtotal: total,
+        discount: '0.00',
+        paymentMethod: 'cash',
+        clientCreatedAt: new Date().toISOString(),
+        items: [
+          {
+            productId: t.productId,
+            productNameSnapshot: 'Producto',
+            unitPriceSnapshot: total,
+            quantity: 1,
+            lineTotal: total,
+          },
+        ],
+      },
+    });
+  }
+
+  it('anular NO le devuelve el esperado: si se queda el billete, sale el faltante', async () => {
+    await abrir(vendedorToken, '5410.00');
+    const venta = await venderPorApi(vendedorToken, '280.00');
+    expect(venta.statusCode).toBe(201);
+    const saleId = venta.json().data.saleId;
+
+    expect((await actual(vendedorToken)).breakdown.expected).toBe('5690.00');
+
+    const anula = await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'me equivoqué de producto' },
+    });
+    expect(anula.statusCode).toBe(200);
+
+    // Antes esto volvía a 5410.00 y la caja cerraba cuadrada con el billete en el
+    // bolsillo. Ahora el esperado no se mueve.
+    expect((await actual(vendedorToken)).breakdown.expected).toBe('5690.00');
+
+    /*
+      Y al cerrar contando lo que hay de verdad, el faltante aparece. Tanto, que el
+      propio API se niega a cerrar sin una explicación (`falta_motivo`): antes esto
+      cerraba en silencio con diferencia cero.
+    */
+    const sinMotivo = await cerrar(vendedorToken, '5410.00');
+    expect(sinMotivo.statusCode).toBe(400);
+    expect(sinMotivo.json().code).toBe('falta_motivo');
+
+    const cierre = await cerrar(vendedorToken, '5410.00', 'anulé una venta y no devolví el dinero');
+    expect(cierre.statusCode, cierre.body).toBe(200);
+    expect(cierre.json().data.difference).toBe('-280.00');
+  });
+
+  it('si devuelve el dinero de verdad y lo registra, el turno cuadra', async () => {
+    // La otra mitad: el arreglo no puede castigar a quien hace lo correcto.
+    await abrir(vendedorToken, '5410.00');
+    const venta = await venderPorApi(vendedorToken, '280.00');
+    const saleId = venta.json().data.saleId;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'el cliente se arrepintió' },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/cash/movements',
+      headers: auth(vendedorToken),
+      payload: { type: 'out', amount: '280.00', reason: 'Devolución de la venta anulada' },
+    });
+
+    expect((await actual(vendedorToken)).breakdown.expected).toBe('5410.00');
+    const cierre = await cerrar(vendedorToken, '5410.00');
+    expect(cierre.json().data.difference).toBe('0.00');
+  });
+
+  it('la anulación de una venta en efectivo avisa de que hay que devolver', async () => {
+    // Para que el POS lo ofrezca en el mismo gesto y no dependa de la memoria.
+    await abrir(vendedorToken, '100.00');
+    const venta = await venderPorApi(vendedorToken, '55.00');
+    const saleId = venta.json().data.saleId;
+
+    const anula = await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'producto equivocado' },
+    });
+    expect(anula.json().data.devolverEfectivo).toBe(true);
+    expect(anula.json().data.montoADevolver).toBe('55.00');
   });
 });
 

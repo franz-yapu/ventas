@@ -127,13 +127,16 @@ export function PosPage() {
   function addToCart(p: Product) {
     setCart((c) => {
       const found = c.find((l) => l.product.id === p.id);
-      if (found) return c.map((l) => (l.product.id === p.id ? { ...l, quantity: l.quantity + 1 } : l));
+      if (found)
+        return c.map((l) => (l.product.id === p.id ? { ...l, quantity: l.quantity + 1 } : l));
       return [...c, { product: p, quantity: 1 }];
     });
   }
   function setQty(id: string, delta: number) {
     setCart((c) =>
-      c.map((l) => (l.product.id === id ? { ...l, quantity: l.quantity + delta } : l)).filter((l) => l.quantity > 0),
+      c
+        .map((l) => (l.product.id === id ? { ...l, quantity: l.quantity + delta } : l))
+        .filter((l) => l.quantity > 0),
     );
   }
 
@@ -222,7 +225,9 @@ export function PosPage() {
 
     setReceipt(detail);
     showToast(
-      detail.receiptNumber ? `Venta #${detail.receiptNumber} registrada` : 'Venta guardada · se sincroniza luego',
+      detail.receiptNumber
+        ? `Venta #${detail.receiptNumber} registrada`
+        : 'Venta guardada · se sincroniza luego',
     );
     setCart([]);
     setDiscount('0');
@@ -261,7 +266,13 @@ export function PosPage() {
               autoFocus
             />
           </div>
-          <Button variant="outline" size="lg" className="h-12 px-3" onClick={() => setScanOpen(true)} title="Escanear código">
+          <Button
+            variant="outline"
+            size="lg"
+            className="h-12 px-3"
+            onClick={() => setScanOpen(true)}
+            title="Escanear código"
+          >
             <ScanLine size={22} />
           </Button>
         </div>
@@ -279,7 +290,26 @@ export function PosPage() {
               : low
                 ? 'var(--color-warning)'
                 : 'var(--color-success)';
-            const stockLabel = out ? 'Agotado' : low ? `Bajo · ${remaining}` : `Disp. ${remaining}`;
+            /*
+              Sin existencias se puede vender igual, y se avisa.
+
+              Antes el botón se deshabilitaba. Suena prudente y en el mostrador es peor:
+              una llantería que acaba de recibir mercadería sin registrarla se queda sin
+              poder cobrar, con el cliente delante — y lo que pasa entonces es que se
+              cobra por fuera y la venta no se registra en ninguna parte. Vale más una
+              existencia en rojo que una venta invisible.
+
+              Cuando ya está en negativo se dice cuánto falta, en vez de repetir
+              "Agotado": el número es lo que le dice al dueño cuánto tiene que ajustar.
+            */
+            const stockLabel =
+              remaining != null && remaining < 0
+                ? `Faltan ${Math.abs(remaining)}`
+                : out
+                  ? 'Sin stock'
+                  : low
+                    ? `Bajo · ${remaining}`
+                    : `Disp. ${remaining}`;
             const cardBorder = out
               ? 'border-danger/40'
               : low
@@ -289,19 +319,22 @@ export function PosPage() {
               <button
                 key={p.id}
                 onClick={() => addToCart(p)}
-                disabled={out}
-                className={`flex min-h-[112px] flex-col gap-2 rounded-theme border bg-surface p-3.5 text-left shadow-card transition hover:shadow-card-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-card disabled:active:scale-100 ${cardBorder}`}
+                className={`flex min-h-[112px] flex-col gap-2 rounded-theme border bg-surface p-3.5 text-left shadow-card transition hover:shadow-card-hover active:scale-[0.98] ${cardBorder}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-mono text-[10px] font-medium text-muted">{p.sku}</span>
                   {remaining != null && (
-                    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[10px] font-bold ${textCol}`}>
+                    <span
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[10px] font-bold ${textCol}`}
+                    >
                       <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
                       {stockLabel}
                     </span>
                   )}
                 </div>
-                <span className="line-clamp-2 flex-1 text-[15px] font-semibold leading-tight">{p.name}</span>
+                <span className="line-clamp-2 flex-1 text-[15px] font-semibold leading-tight">
+                  {p.name}
+                </span>
                 <span className="text-[17px] font-bold">{money(p.price)}</span>
               </button>
             );
@@ -314,7 +347,10 @@ export function PosPage() {
 
       {/* Backdrop de la hoja de carrito en móvil. */}
       {mobileCartOpen && (
-        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileCartOpen(false)} />
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileCartOpen(false)}
+        />
       )}
 
       <Card
@@ -338,7 +374,11 @@ export function PosPage() {
               Vaciar
             </button>
           )}
-          <button onClick={() => setMobileCartOpen(false)} className="text-muted md:hidden" title="Cerrar">
+          <button
+            onClick={() => setMobileCartOpen(false)}
+            className="text-muted md:hidden"
+            title="Cerrar"
+          >
             <X size={18} />
           </button>
         </div>
@@ -352,24 +392,37 @@ export function PosPage() {
               </div>
             ) : (
               cart.map((l) => (
-                <div key={l.product.id} className="flex items-center gap-3 border-b border-border/70 py-3">
+                <div
+                  key={l.product.id}
+                  className="flex items-center gap-3 border-b border-border/70 py-3"
+                >
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold">{l.product.name}</div>
                     <div className="text-xs text-muted">{money(l.product.price)} c/u</div>
                   </div>
                   <div className="flex items-center overflow-hidden rounded-[11px] border border-border">
-                    <button onClick={() => setQty(l.product.id, -1)} className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10">
+                    <button
+                      onClick={() => setQty(l.product.id, -1)}
+                      className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10"
+                    >
                       <Minus size={14} />
                     </button>
                     <span className="w-7 text-center text-sm font-semibold">{l.quantity}</span>
-                    <button onClick={() => setQty(l.product.id, 1)} className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10">
+                    <button
+                      onClick={() => setQty(l.product.id, 1)}
+                      className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10"
+                    >
                       <Plus size={14} />
                     </button>
                   </div>
                   <span className="min-w-[64px] text-right text-sm font-bold">
                     {money((Number(l.product.price) * l.quantity).toFixed(2))}
                   </span>
-                  <button onClick={() => setQty(l.product.id, -l.quantity)} className="text-danger" title="Eliminar">
+                  <button
+                    onClick={() => setQty(l.product.id, -l.quantity)}
+                    className="text-danger"
+                    title="Eliminar"
+                  >
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -390,7 +443,9 @@ export function PosPage() {
                     key={m}
                     onClick={() => setPayment(m)}
                     className={`flex flex-col items-center gap-1 rounded-theme border py-2.5 text-[11px] font-semibold transition active:scale-95 ${
-                      active ? 'border-primary-line bg-primary-soft text-primary' : 'border-border bg-surface text-muted hover:bg-fg/[0.06]'
+                      active
+                        ? 'border-primary-line bg-primary-soft text-primary'
+                        : 'border-border bg-surface text-muted hover:bg-fg/[0.06]'
                     }`}
                   >
                     <Icon size={18} />
@@ -404,7 +459,11 @@ export function PosPage() {
           {/* Comprador en la venta (opcional). Sólo con conexión. */}
           {online && (
             <div className="flex items-center gap-2">
-              <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="flex-1">
+              <Select
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                className="flex-1"
+              >
                 <option value="">Comprador (opcional)</option>
                 {customers?.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -440,8 +499,8 @@ export function PosPage() {
 
           {descuentoRecortado && (
             <p className="text-[12px] text-warning">
-              Como vendedor puedes descontar hasta el {topePct}% ({money(topeDescuento)}). Para
-              más, pide a un administrador.
+              Como vendedor puedes descontar hasta el {topePct}% ({money(topeDescuento)}). Para más,
+              pide a un administrador.
             </p>
           )}
           {discountNum > 0 && (
@@ -455,7 +514,12 @@ export function PosPage() {
             <span className="text-[32px] font-extrabold tracking-tight">{money(total)}</span>
           </div>
 
-          <Button size="xl" className="h-14 w-full text-base" disabled={!canCheckout} onClick={checkout}>
+          <Button
+            size="xl"
+            className="h-14 w-full text-base"
+            disabled={!canCheckout}
+            onClick={checkout}
+          >
             {busy ? 'Cobrando…' : `Cobrar · ${money(total)}`}
           </Button>
         </CardContent>
@@ -540,7 +604,8 @@ function NewCustomerModal({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const create = useMutation({
-    mutationFn: () => api.post<Customer>('/customers', { name: name.trim(), phone: phone.trim() || null }),
+    mutationFn: () =>
+      api.post<Customer>('/customers', { name: name.trim(), phone: phone.trim() || null }),
     onSuccess: (cust) => {
       qc.invalidateQueries({ queryKey: ['customers'] });
       onCreated(cust.id);
@@ -553,7 +618,10 @@ function NewCustomerModal({
         <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         <label className="text-sm text-muted">Teléfono (opcional)</label>
         <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <Button disabled={name.trim().length < 1 || create.isPending} onClick={() => create.mutate()}>
+        <Button
+          disabled={name.trim().length < 1 || create.isPending}
+          onClick={() => create.mutate()}
+        >
           {create.isPending ? 'Guardando…' : 'Guardar'}
         </Button>
       </div>
