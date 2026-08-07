@@ -15,17 +15,24 @@ import type { InventoryRow, Location } from '@/lib/types';
 export function InventoryPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const isCentral = !!user?.isCentral;
   const [transferOpen, setTransferOpen] = useState(false);
   const [adjust, setAdjust] = useState<InventoryRow | null>(null);
   const [history, setHistory] = useState<{ productId: string; name: string } | null>(null);
-  const [locationId, setLocationId] = useState('');
+  /**
+   * Arranca en la SUYA, y desde ahí puede mirar las demás.
+   *
+   * El inventario es lo único que se ve de todas las sucursales (ver `inventory.ts`): sin
+   * eso, un vendedor tenía que decirle "no hay" a un cliente cuando en la central había
+   * dos. Pero el orden importa — quien abre esta pantalla nueve de cada diez veces quiere
+   * saber qué tiene ENCIMA, no qué tiene el vecino. Por eso empieza en la propia y mirar
+   * otra es un gesto deliberado.
+   */
+  const [locationId, setLocationId] = useState(user?.locationId ?? '');
 
-  // Sólo la central filtra por ubicación; la sucursal siempre ve la suya.
+  // Todos ven la lista de sucursales: es la que permite mirar el stock de las demás.
   const { data: locations } = useQuery({
     queryKey: ['locations'],
     queryFn: () => api.get<Location[]>('/locations'),
-    enabled: isCentral,
   });
   const { data: rows, isLoading } = useQuery({
     queryKey: ['inventory', locationId],
@@ -66,19 +73,28 @@ export function InventoryPage() {
         }
       />
 
-      {isCentral && (
+      {(locations?.length ?? 0) > 1 && (
         <Select
           filter
           className="max-w-xs"
           value={locationId}
           onChange={(e) => setLocationId(e.target.value)}
+          aria-label="Sucursal"
         >
-          <option value="">Todas las ubicaciones</option>
-          {locations?.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
+          {/* La propia primero, marcada, para que se sepa de dónde se está mirando. */}
+          {user?.locationId && (
+            <option value={user.locationId}>
+              {locations?.find((l) => l.id === user.locationId)?.name ?? 'Mi sucursal'} (la tuya)
             </option>
-          ))}
+          )}
+          <option value="">Todas las ubicaciones</option>
+          {locations
+            ?.filter((l) => l.id !== user?.locationId)
+            .map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
         </Select>
       )}
 

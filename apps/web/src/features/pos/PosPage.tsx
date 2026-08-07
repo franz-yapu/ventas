@@ -422,9 +422,25 @@ export function PosPage() {
                     </span>
                   )}
                 </div>
-                <span className="line-clamp-2 flex-1 text-[15px] font-semibold leading-tight">
+                <span className="line-clamp-2 text-[15px] font-semibold leading-tight">
                   {p.name}
                 </span>
+                {/*
+                  La descripción, cuando la hay.
+
+                  Ya estaba en la base y en la respuesta del catálogo; sólo no se enseñaba.
+                  Es lo que resuelve la pregunta del mostrador cuando dos productos se
+                  llaman casi igual —"Llanta 175/70R13" contra "Llanta 175/70R13 reforzada"—
+                  y quien atiende no es quien compró la mercadería. Una línea, recortada:
+                  la tarjeta tiene que seguir siendo una diana grande para el dedo.
+                */}
+                {p.description ? (
+                  <span className="line-clamp-1 flex-1 text-[12px] leading-tight text-muted">
+                    {p.description}
+                  </span>
+                ) : (
+                  <span className="flex-1" />
+                )}
                 <span className="text-[17px] font-bold">{money(p.price)}</span>
               </button>
             );

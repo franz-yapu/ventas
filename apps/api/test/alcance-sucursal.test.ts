@@ -176,6 +176,71 @@ describe('una sucursal puede vender lo que tiene', () => {
   });
 });
 
+describe('el inventario se ve de todas las sucursales; lo demás, no', () => {
+  /**
+   * La excepción que pidió el mostrador: cuando un cliente pregunta por algo que aquí se
+   * acabó, lo que evita perder la venta es poder decirle "en la central hay dos". Con el
+   * alcance de siempre el vendedor no podía saberlo y la respuesta era "no hay", que es
+   * falsa y cuesta dinero.
+   *
+   * Lo que se abre es SÓLO esa lectura, y estos tests son los que fijan el límite: cuánto
+   * hay en una estantería es del negocio; cuánto vendió el local de al lado, no.
+   */
+  it('el vendedor de Norte ve el stock de la central', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/inventory',
+      headers: auth(vendedorNorte),
+    });
+    expect(res.statusCode).toBe(200);
+    const filas = res.json().data as Array<{ locationId: string }>;
+    expect(
+      filas.some((f) => f.locationId === t.locationId),
+      'no ve la central',
+    ).toBe(true);
+    expect(
+      filas.some((f) => f.locationId === norteId),
+      'no ve la suya',
+    ).toBe(true);
+  });
+
+  it('pero NO puede ajustar el de otra sucursal', async () => {
+    // Mirar no es operar: `canAdjust` sigue saliendo por fila.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/inventory',
+      headers: auth(vendedorNorte),
+    });
+    const ajenas = (res.json().data as Array<{ locationId: string; canAdjust: boolean }>).filter(
+      (f) => f.locationId !== norteId,
+    );
+    expect(ajenas.length).toBeGreaterThan(0);
+    expect(ajenas.every((f) => !f.canAdjust)).toBe(true);
+  });
+
+  it('y sigue sin ver el COSTO de nada', async () => {
+    // Lo que se abrió es la existencia, no el margen del negocio.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/inventory',
+      headers: auth(vendedorNorte),
+    });
+    expect(res.body).not.toContain('"cost"');
+    expect(res.body).not.toContain('costWholesale');
+  });
+
+  it('las VENTAS de otra sucursal siguen cerradas', async () => {
+    // El límite de la excepción. Si esto se cae, se abrió de más.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/sales',
+      headers: auth(vendedorNorte),
+    });
+    const filas = res.json().data.items as Array<{ locationName: string }>;
+    expect(filas.every((f) => f.locationName !== `Central ${t.slug}`)).toBe(true);
+  });
+});
+
 describe('el costo no sale del servidor para un vendedor', () => {
   it('el admin sí ve costo y costo por mayor', async () => {
     const res = await app.inject({
@@ -549,19 +614,37 @@ describe('ver todas las sucursales es cosa de administrar, no de estar en la cen
     expect(ventas.every((v) => v.locationId !== norteId)).toBe(true);
   });
 
-  it('tampoco los productos ni el stock de las otras', async () => {
-    for (const url of ['/api/v1/products', '/api/v1/inventory']) {
-      const res = await app.inject({ method: 'GET', url, headers: auth(vendedorCentral) });
-      expect(res.statusCode, url).toBe(200);
-      const cuerpo = res.json().data;
-      const filas = (Array.isArray(cuerpo) ? cuerpo : cuerpo.items) as Array<{
-        locationId?: string;
-      }>;
-      expect(
-        filas.every((f) => !f.locationId || f.locationId !== norteId),
-        url,
-      ).toBe(true);
-    }
+  it('el EXISTENCIA de las otras sí se ve; su actividad no', async () => {
+    /*
+      Este test decía lo contrario y cambió a propósito.
+
+      Comprobaba que un vendedor no viera nada de otra sucursal, `/inventory` incluido. La
+      parte del inventario se abrió por petición del mostrador: cuando un cliente pregunta
+      por algo que aquí se acabó, poder decirle "en la central hay dos" es lo que evita
+      perder la venta; con el alcance cerrado la respuesta era "no hay", que es falsa.
+
+      El límite se mantiene y es lo que se comprueba ahora: se ve CUÁNTO HAY en la otra
+      estantería —información del negocio— y no lo que allí se hizo —el trabajo de otro—.
+    */
+    const inv = await app.inject({
+      method: 'GET',
+      url: '/api/v1/inventory',
+      headers: auth(vendedorCentral),
+    });
+    const filasInv = inv.json().data as Array<{ locationId: string }>;
+    expect(
+      filasInv.some((f) => f.locationId === norteId),
+      'no ve el stock de Norte',
+    ).toBe(true);
+
+    // Las ventas de Norte, en cambio, siguen fuera de su alcance.
+    const ventas = await app.inject({
+      method: 'GET',
+      url: '/api/v1/sales',
+      headers: auth(vendedorCentral),
+    });
+    const filasVta = ventas.json().data.items as Array<{ locationId?: string }>;
+    expect(filasVta.every((f) => f.locationId !== norteId)).toBe(true);
   });
 
   it('el admin de la central sí las ve todas', async () => {
@@ -573,14 +656,22 @@ describe('ver todas las sucursales es cosa de administrar, no de estar en la cen
     const filas = res.json().data as Array<{ locationId: string }>;
     expect(filas.some((f) => f.locationId === norteId)).toBe(true);
 
-    // Y el vendedor de la central, con ese stock ya existiendo, sigue sin verlo.
+    // El vendedor también lo ve ahora (es el cambio de arriba); lo que no puede es
+    // ajustarlo, y de eso se encarga `canAdjust`.
     const delVendedor = await app.inject({
       method: 'GET',
       url: '/api/v1/inventory',
       headers: auth(vendedorCentral),
     });
-    const suyas = delVendedor.json().data as Array<{ locationId: string }>;
-    expect(suyas.some((f) => f.locationId === norteId)).toBe(false);
+    const suyas = delVendedor.json().data as Array<{ locationId: string; canAdjust: boolean }>;
+    expect(
+      suyas.some((f) => f.locationId === norteId),
+      'ya no ve el stock ajeno',
+    ).toBe(true);
+    expect(
+      suyas.filter((f) => f.locationId === norteId).every((f) => !f.canAdjust),
+      'un vendedor no ajusta nada, ni lo suyo',
+    ).toBe(true);
   });
 });
 

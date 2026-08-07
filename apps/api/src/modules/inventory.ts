@@ -2,7 +2,7 @@ import { schema, withTenant } from '@ventafacil/db';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
-import { canAdjustInventory, esUbicacionDelNegocio, filtroDeUbicacion } from '../lib/scope.js';
+import { canAdjustInventory, esUbicacionDelNegocio } from '../lib/scope.js';
 
 export async function inventoryRoutes(app: FastifyInstance) {
   // GET /inventory — stock por producto y ubicación (alcance por ubicación visible).
@@ -12,11 +12,23 @@ export async function inventoryRoutes(app: FastifyInstance) {
     const user = req.authUser!;
     const businessId = user.businessId;
 
+    /*
+      El inventario se ve de TODAS las sucursales. Mirar no es operar.
+
+      Es la excepción que pidió el mostrador, y tiene un motivo muy concreto: cuando un
+      cliente pregunta por algo que aquí se acabó, lo que evita perder la venta es poder
+      decirle "en la central hay dos, te los traigo mañana". Con el alcance de siempre, el
+      vendedor no podía saberlo y la respuesta era "no hay" — que es falso y cuesta dinero.
+
+      Lo que se abre es SÓLO esta lectura. Ventas, caja y reportes siguen filtrados por
+      `filtroDeUbicacion()`: cuánto hay en una estantería es información del negocio; cuánto
+      vendió el local de al lado, o cuánto le faltó a su cajero, es el trabajo de otro.
+
+      Y ajustar no se toca: `canAdjust` sigue saliendo de `canAdjustInventory` por fila, así
+      que se ve todo y se corrige sólo lo propio.
+    */
     const filters = [eq(schema.inventory.businessId, businessId)];
-    // La sucursal queda fijada a la suya; la central sí puede elegir una por parámetro.
-    const alcance = filtroDeUbicacion(user, schema.inventory.locationId);
-    if (alcance) filters.push(alcance);
-    else if (q.data.locationId) filters.push(eq(schema.inventory.locationId, q.data.locationId));
+    if (q.data.locationId) filters.push(eq(schema.inventory.locationId, q.data.locationId));
 
     const rows = await withTenant(businessId, (tx) =>
       tx

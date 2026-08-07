@@ -7,7 +7,6 @@ import { Page, PageHeader } from '@/components/ui/page';
 import { Input } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/api';
 import { aplicarColorDeMarca, textoSobre } from '@/lib/color';
-import { ModoSelector } from '@/theme/ModoSelector';
 import type { BusinessConfig } from '@/theme/ThemeProvider';
 
 // Tema por defecto = el del diseño (VentaFácil POS). "Restablecer" vuelve aquí.
@@ -274,13 +273,19 @@ export function SettingsPage() {
             />
           </div>
 
-          {/* Modo claro / oscuro. Va aquí, con el resto de la apariencia, pero NO se
-              guarda con el negocio: es del dispositivo (ver theme/modo.ts). El control
-              es compartido porque Mi perfil también lo ofrece: esta ruta es sólo del
-              dueño, y la preferencia es de cada persona. */}
-          <div className="border-t border-border pt-5">
-            <ModoSelector />
-          </div>
+          {/*
+            El modo claro/oscuro NO está aquí, y es deliberado.
+
+            Esta pantalla es del NEGOCIO: el nombre, los colores, el radio, el impuesto.
+            Lo configura el dueño una vez y le aplica a todo el mundo. El modo no es eso —
+            es de cada persona y de cada aparato: dos empleados del mismo local pueden
+            quererlo distinto, y quien atiende de noche con el teléfono en claro quiere el
+            POS oscuro igual.
+
+            Teniéndolo aquí, en una ruta `adminOnly centralOnly`, se leía como una
+            decisión del dueño cuando no lo es. Vive en **Mi perfil**, que es la pantalla
+            que ve todo el mundo, y se guarda en el dispositivo.
+          */}
 
           {/* Radio de bordes. */}
           <div className="flex flex-col gap-2">
