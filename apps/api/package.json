@@ -8,6 +8,7 @@
     "build": "tsup src/index.ts --format esm --target node22 --clean",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:cov": "vitest run --coverage.enabled",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

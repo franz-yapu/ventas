@@ -87,8 +87,15 @@ jobs:
       - name: Tipos
         run: pnpm typecheck
 
-      - name: Tests
-        run: pnpm test
+      # Con cobertura, y los umbrales están en cada `vitest.config.ts`.
+      #
+      # Son un trinquete, no una nota: no sirven para presumir de porcentaje, sirven para
+      # que un módulo nuevo no entre sin ningún test y nadie se entere. Que eso importa lo
+      # demostró la revisión del 7 de agosto — los tres módulos peor cubiertos del API
+      # dieron el hallazgo crítico y dos de los altos. La cobertura no dice que el código
+      # esté bien; dice dónde nadie ha mirado.
+      - name: Tests y cobertura
+        run: pnpm test:cov
 
       - name: Build
         run: pnpm build

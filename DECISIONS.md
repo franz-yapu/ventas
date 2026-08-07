@@ -3,12 +3,14 @@
 Registro de decisiones tomadas durante la implementacion. No cambiar sin justificar aqui.
 
 ## Contexto de despliegue
+
 - **Servidor objetivo:** Hostinger VPS KVM 1 — 1 vCPU, 4 GB RAM, 50 GB NVMe.
 - Regla dura: **nunca compilar en el VPS.** Frontend en Cloudflare Pages; imagen del API compilada en CI/local.
 - Postgres tuneado para 4 GB (ver `docker-compose.yml`). Pool del API = 8 conexiones.
 - Recomendado en el VPS: 2 GB de swap + backups `pg_dump` automaticos fuera del servidor.
 
 ## D1 — Numeracion de recibos vs. offline
+
 - `sale.id` es UUID generado en el cliente (identidad real, idempotencia en sync).
 - `receipt_number` correlativo **por negocio** lo asigna el SERVIDOR al sincronizar, con una
   fila contador por negocio (`business_counter`) usando `SELECT ... FOR UPDATE`.
@@ -17,21 +19,25 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 - No se usa `SERIAL` global (seria correlativo compartido entre negocios = incorrecto).
 
 ## D2 — Aislamiento multi-tenant
+
 - Una sola BD, columna `business_id` en TODAS las tablas.
 - Defensa en profundidad: helper de repositorio que exige `business_id` en toda query.
   (Postgres RLS queda como mejora futura si crece el numero de tenants.)
 - El `business_id` SIEMPRE sale del token JWT, nunca del payload del cliente.
 
 ## D3 — Indices desde el dia 1
+
 - Indices compuestos que empiezan por `business_id` en todas las tablas.
 - Claves para reportes/POS: `sale(business_id, location_id, client_created_at)`,
   `product(business_id, name)`, `product(business_id, sku)`.
 
 ## D4 — Timestamps autoritativos
+
 - El reloj del cliente NO es confiable. `client_created_at` solo se muestra.
 - El servidor pone `synced_at`/orden autoritativo al recibir la venta.
 
 ## D5 — Customizacion generica por rubro (llantas, repuestos, cualquier negocio mediano)
+
 - `product.attributes` (JSONB): campos propios por rubro sin migraciones.
   - Llantas: `{"medida":"205/55R16","marca":"Michelin"}`
   - Repuestos: `{"oem":"90915-YZZE1","compatibilidad":"Toyota Corolla"}`
@@ -39,11 +45,13 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 - White-label por `business.theme_json` y `business.texts_json` (ya en el plan).
 
 ## D6 — UI minimalista (requisito del cliente)
+
 - Principio de diseno: shadcn/ui con estetica neutra, mucho espacio en blanco, sin adornos.
 - POS = una sola pantalla, botones grandes, flujo de venta en el minimo de toques.
 - Mobile-first (el vendedor del pueblo usa celular/tablet).
 
 ## D8 — Costos y ganancia
+
 - `product.cost` = precio de compra UNITARIO (base para la ganancia).
 - `product.cost_wholesale` = precio de compra POR MAYOR (informativo).
 - Ganancia por unidad = precio venta - costo unitario.
@@ -52,6 +60,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 - Reportes exponen ganancia hoy/semana/mes por ubicacion y total (solo ventas completadas).
 
 ## D9 — Dashboard modular por widgets (crecer "a la derecha")
+
 - `WIDGET_REGISTRY` (array de {id, title, size, component}). Agregar un widget =
   crear el componente + una entrada en el registry. El DashboardPage NO se toca.
 - Layout por usuario en `user_dashboard_config.widgets` (lista ordenada de ids activos).
@@ -62,6 +71,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   `.no-print` en nav/botones. Export "Excel" = CSV con BOM (Excel lo abre nativo).
 
 ## D10 — Permisos por ubicación (multi-sucursal)
+
 - `location.is_central` marca la central; `product.location_id` = ubicación dueña del producto.
 - Claim `isCentral` en el JWT (se calcula en login según la ubicación del usuario).
 - **Vista:** usuario de la central ve TODAS las ubicaciones; los demás sólo la suya
@@ -79,10 +89,12 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   Productos, Ventas y Actividad.
 
 ## D7 — Dinero y zona horaria
+
 - Dinero: `numeric` (DECIMAL) en BD, nunca float. Formato `Bs.` con 2 decimales.
 - Guardar UTC, mostrar `America/La_Paz`.
 
 ## D11 — Modelo de cobro del SaaS (4 ago 2026)
+
 - Se cobra **por negocio, con límites incluidos**, no por sucursal ni por usuario.
   Cobrar por usuario castiga justo el uso que se quiere fomentar (dar de alta a cada
   cajero); cobrar por sucursal obliga a recontar en cada ciclo y complica las altas y
@@ -104,6 +116,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 - La **lectura Z nunca depende del plan**: es el cierre de caja, parte del POS.
 
 ## D12 — Panel de plataforma: dos identidades, dos llaves (4 ago 2026)
+
 - El super-admin es una **tabla aparte** (`platform_admin`), no un valor más del enum
   `role`. Si fuera un rol, cualquier fallo que dejara escribir el rol de un usuario —un
   PATCH mal validado, un seed descuidado— ascendería a un cliente a operador de la
@@ -124,6 +137,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   Se muestran las bajas del mes, que es un número cierto, en lugar de una tasa inventada.
 
 ## D13 — Registro self-service y recuperación de contraseña (4 ago 2026)
+
 - **Una sola función de alta** (`crearNegocio`, en `packages/db/src/create-tenant.ts`)
   para el CLI y para la pantalla de registro. Dos implementaciones acabarían divergiendo
   y creando negocios a medias: sin contador de recibos, por ejemplo, la primera venta
@@ -150,6 +164,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   bruta, es usar el endpoint como máquina gratis de correo.
 
 ## D14 — Arqueo de caja (4 ago 2026)
+
 - **El esperado se congela al cerrar** (`expected_amount` guardado, no recalculado). Una
   venta offline que sincroniza mañana, o una anulación posterior, cambiarían el número y
   el arqueo de ayer dejaría de cuadrar solo. Un cierre es una foto de lo que se contó.
@@ -174,6 +189,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   **mientras se teclea lo contado**: es el momento en que todavía se puede volver a contar.
 
 ## D15 — Revocación de sesiones (4 ago 2026)
+
 - El agujero real no era el tenant suspendido (a ése ya lo corta la puerta de suscripción
   en cada petición), sino el **empleado dado de baja**: seguía trabajando hasta que
   caducara su access token y **renovando sesión durante los 30 días** del refresh.
@@ -194,6 +210,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   que tiene todo usuario sin revocaciones: desplegarlo no echa a nadie de golpe.
 
 ## D16 — Legales y exportación de datos (4 ago 2026)
+
 - **Se guarda la VERSIÓN de los términos aceptados**, no sólo la fecha. Los términos
   cambian; sin la versión, dentro de un año no habría forma de saber qué aceptó cada
   negocio, que es justo lo que hace falta poder demostrar.
@@ -209,6 +226,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   Nunca incluye hashes de contraseña. Se arma en UNA transacción para que sea coherente.
 
 ## D17 — Lo que destapó la revisión con dos agentes (4 ago 2026)
+
 - **Un fallo silencioso es peor que uno ruidoso.** `viewScope()` devolvía el centinela
   `'__none__'` para un usuario sin ubicación; comparado contra una columna `uuid`
   reventaba con 22P02, y como el frontend pinta lista vacía cuando la petición falla, el
@@ -241,6 +259,7 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   de 7 días, en vez de dar una cifra exacta y sin margen extrapolada de una tarde.
 
 ## D18 — Operación: CI, salud y capacidad (4 ago 2026)
+
 - **El staging no medía lo que decía medir.** Limitaba memoria pero no CPU, así que usaba
   los 16 núcleos de la máquina de desarrollo y daba cifras de capacidad 3-4× infladas.
   Con `cpuset: "0"` en ambos contenedores —el VPS es 1 vCPU para el stack entero— el
@@ -309,3 +328,16 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
 - **`pnpm audit` corre en el CI.** La primera vez que se ejecutó había 15 vulnerabilidades,
   3 críticas y las tres en la biblioteca que firma los tokens de sesión. No lo veía el
   typecheck, ni 405 tests, ni nadie.
+
+- **No hay linter, y `pnpm lint` se quitó en vez de arreglarse.** El script existía
+  (`packages/shared` declaraba `eslint src`), eslint no estaba instalado y no había
+  configuración en ninguna parte: `pnpm lint` fallaba **siempre**. Un comando que falla
+  siempre es peor que no tenerlo, porque enseña a ignorar los rojos.
+
+  Se quitó en lugar de montar ESLint por el mismo motivo por el que el CI no comprueba
+  formato: añadir hoy una herramienta que escupe cientos de avisos sobre código que
+  funciona no mejora nada y sí gasta la única atención que hay. Lo que de verdad protege
+  —tipos, 481 tests, auditoría de dependencias y las comprobaciones de que no falte una
+  migración ni una ruta sin documentar— ya corre en cada push. Si algún día entra un
+  linter, que entre con una regla concreta que resuelva un problema que hayamos tenido, no
+  con un preset entero.

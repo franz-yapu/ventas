@@ -25,9 +25,7 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
-        icons: [
-          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-        ],
+        icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
       },
     }),
   ],
@@ -38,5 +36,30 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        /**
+         * Partir el paquete de entrada, que pesaba 1.021 kB.
+         *
+         * Importa aquí más que en otros sitios: esto arranca en tabletas baratas y por la
+         * conexión de una tienda, y lo primero que hace alguien al abrir la caja por la
+         * mañana es esperar. El escáner y los widgets del panel ya se cargaban aparte
+         * (`lazy`), pero todo lo demás iba junto — React, el enrutador, react-query,
+         * Dexie y las veinte pantallas en un solo archivo.
+         *
+         * Se separa por VIDA ÚTIL, no por tamaño: estas tres piezas cambian de versión
+         * dos veces al año, mientras que las pantallas cambian cada semana. Con ellas
+         * fuera, publicar un arreglo de una pantalla ya no obliga a volver a bajar React
+         * entero — el navegador y el service worker conservan lo que no cambió.
+         */
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          datos: ['@tanstack/react-query', 'dexie', 'dexie-react-hooks'],
+          iconos: ['lucide-react'],
+        },
+      },
+    },
   },
 });

@@ -303,7 +303,15 @@ export const upsertCustomerSchema = z.object({
 });
 
 export const customerPaymentSchema = z.object({
-  amount: money,
+  /*
+    Mayor que cero, igual que un movimiento de caja.
+
+    `money` ya descarta los negativos, pero aceptaba `0.00`: un abono de nada, que no
+    cambia el saldo y sí ensucia el historial del cliente — la lista contra la que alguien
+    comprueba qué se pagó y cuándo. Lo encontró el test de fiado al escribirse, que es
+    justamente para lo que servía subirle la cobertura a este módulo.
+  */
+  amount: money.refine((v) => Number(v) > 0, 'El abono debe ser mayor que cero'),
   method: z.enum(PAYMENT_METHODS).default('cash'),
   note: z.string().nullable().optional(),
 });

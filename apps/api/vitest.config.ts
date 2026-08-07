@@ -46,6 +46,31 @@ export default defineConfig({
       // con `buildApp({ loginRateLimitMax: 20 })` y comprueba el valor real.
       LOGIN_RATE_LIMIT_MAX: '500',
     },
+    /**
+     * Umbrales de cobertura: un trinquete, no una nota.
+     *
+     * Están un par de puntos por debajo de lo que hay hoy (87,3 % de sentencias, 75,2 %
+     * de ramas) a propósito. No sirven para presumir de porcentaje: sirven para que un
+     * módulo nuevo no entre SIN NINGÚN test y nadie se entere.
+     *
+     * Que esto importa lo demostró la propia revisión: los tres módulos peor cubiertos
+     * del API —`inventory.ts` con 28 %, `sales.ts` con 77 %, `products.ts` con 81 %— son
+     * exactamente de donde salieron el hallazgo crítico y dos de los altos. La cobertura
+     * no dice que el código esté bien; dice dónde nadie ha mirado.
+     *
+     * Subirlos cuando suba la cobertura de verdad. Bajarlos es una decisión, no un
+     * arreglo: si un cambio los rompe, lo que falta son tests.
+     */
+    coverage: {
+      provider: 'v8',
+      include: ['src/**'],
+      thresholds: {
+        statements: 85,
+        branches: 72,
+        functions: 90,
+        lines: 85,
+      },
+    },
     // Las suites comparten la misma BD: en serie para que no se pisen.
     fileParallelism: false,
     testTimeout: 30_000,
