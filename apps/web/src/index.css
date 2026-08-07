@@ -140,6 +140,21 @@
   --color-surface: #ffffff;
   --color-border: #ecebe6;
   /**
+   * El contorno de lo que SE PUEDE TOCAR: campos, desplegables, botones secundarios.
+   *
+   * Separado de `--color-border` a propósito. Ese es un separador decorativo —el filete
+   * entre dos filas, el canto de una tarjeta— y a 1.19:1 cumple su papel de sugerir sin
+   * gritar. Pero se estaba usando también para el contorno de cada `<input>`, y ahí la
+   * norma pide 3:1 por un motivo muy concreto: un campo cuyo borde no se ve no parece un
+   * campo, parece un hueco. En claro estaba en 1.19 y en oscuro en 1.24 — prácticamente
+   * invisibles, y con el test de paleta en verde porque ninguna pareja con `border`
+   * estaba en la lista.
+   *
+   * Subir `--color-border` entero habría dejado la aplicación llena de cajas negras.
+   * Son dos trabajos distintos y ahora son dos tokens.
+   */
+  --color-field: #8e8d8a;
+  /**
    * El texto apagado, oscurecido de #8c8a83 al mínimo que se lee.
    *
    * Venía del diseño original y se quedaba en 3.17 sobre el fondo de la app, 3.31 sobre la
@@ -151,7 +166,7 @@
    * blanco), conservando el gris cálido. Oscurecerlo más aclararía el número y apagaría el
    * aire de la paleta, que es lo que hacía dudar del cambio.
    */
-  --color-muted: #716f6b;
+  --color-muted: #6e6c68;
   --color-fg: #17171a;
 
   /* Tokens semánticos. También cambian en oscuro: el mismo verde sobre un fondo
@@ -226,6 +241,7 @@
   --color-bg: #121211;
   --color-surface: #1b1b19;
   --color-border: #2d2c29;
+  --color-field: #6a6967;
   --color-fg: #f2f0ec;
   --color-muted: #9a978e;
 

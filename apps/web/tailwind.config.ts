@@ -53,6 +53,10 @@ export default {
         bg: token('--color-bg'),
         surface: token('--color-surface'),
         border: token('--color-border'),
+        // El contorno de los controles (campos, selects, botón secundario). Ver el
+        // comentario de `--color-field` en index.css: separador decorativo y contorno
+        // de algo que se toca no son el mismo trabajo ni el mismo contraste.
+        field: token('--color-field'),
         muted: token('--color-muted'),
         fg: token('--color-fg'),
         // `inv` = sobre una superficie invertida (fondo `--color-fg`), donde el

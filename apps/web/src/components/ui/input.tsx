@@ -12,9 +12,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     <input
       ref={ref}
       className={cn(
-        'h-11 w-full rounded-theme border border-border bg-surface px-3 text-base text-fg',
+        'h-11 w-full rounded-theme border border-field bg-surface px-3 text-base text-fg',
         'placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        filter && 'h-[42px] rounded-theme-sm border-border text-[13px] text-fg/80',
+        filter && 'h-[42px] rounded-theme-sm border-field text-[13px] text-fg/80',
         className,
       )}
       {...props}

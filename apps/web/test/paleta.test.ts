@@ -16,10 +16,7 @@ import { contraste } from '../src/lib/color';
  * añadir una pareja nueva pasa por aquí, que es lo único que impide que vuelva a pasar.
  */
 
-const CSS = readFileSync(
-  fileURLToPath(new URL('../src/index.css', import.meta.url)),
-  'utf8',
-);
+const CSS = readFileSync(fileURLToPath(new URL('../src/index.css', import.meta.url)), 'utf8');
 
 /** Las variables de un bloque, quedándonos sólo con las que son un color literal. */
 function tokens(selector: string): Record<string, string> {
@@ -70,16 +67,65 @@ const PAREJAS: Array<[texto: string, fondo: string]> = [
   ['bg', 'fg'],
 ];
 
+/**
+ * El contorno de lo que se puede TOCAR: 3:1, que es lo que se le pide a un componente.
+ *
+ * Faltaba, y el agujero era exactamente el mismo que ya había dejado `--color-muted` en
+ * 3.17 durante meses: el token se afina contra los dos o tres fondos que este archivo
+ * mira, y lo que no está en la lista no se mide. El contorno de cada `<input>`, cada
+ * `<select>` y cada botón secundario estaba en 1.19:1 en claro y 1.24:1 en oscuro —
+ * prácticamente invisible, y con el test en verde.
+ *
+ * Un campo cuyo contorno no se ve no parece un campo: parece un hueco.
+ *
+ * Se mide `--color-field` y NO `--color-border`. Son dos trabajos: el segundo es un
+ * separador decorativo (el filete entre dos filas, el canto de una tarjeta) y a 1.19
+ * cumple el suyo, que es sugerir sin gritar. Exigirle 3:1 dejaría la aplicación llena de
+ * cajas negras — arreglar el contraste no puede consistir en empeorar el diseño.
+ */
+const PAREJAS_BORDE: Array<[borde: string, fondo: string]> = [
+  ['field', 'bg'],
+  ['field', 'surface'],
+  ['field', 'table-head'],
+];
+
+/**
+ * Fondos teñidos que también reciben texto apagado.
+ *
+ * `muted` se midió contra `bg`, `surface` y `table-head`, pero no contra éstos, y en los
+ * tres se quedaba corto en claro: 4.37 sobre `track`, 4.43 sobre `danger-bg`, 4.49 sobre
+ * `info-bg`. Se ven en la inicial del usuario de la barra lateral —presente en TODAS las
+ * pantallas con sesión— y en cualquier chip neutro.
+ */
+const PAREJAS_TEÑIDAS: Array<[texto: string, fondo: string]> = [
+  ['muted', 'track'],
+  ['muted', 'danger-bg'],
+  ['muted', 'info-bg'],
+  ['muted', 'success-bg'],
+  ['muted', 'warning-bg'],
+  ['fg', 'track'],
+  ['fg', 'danger-bg'],
+  ['fg', 'info-bg'],
+];
+
 describe.each([
   ['clara', CLARO],
   ['oscura', OSCURO],
 ])('la paleta %s se lee', (_nombre, paleta) => {
-  it.each(PAREJAS)('%s sobre %s llega a 4.5:1', (texto, fondo) => {
+  it.each([...PAREJAS, ...PAREJAS_TEÑIDAS])('%s sobre %s llega a 4.5:1', (texto, fondo) => {
     const a = paleta[texto];
     const b = paleta[fondo];
     expect(a, `falta --color-${texto}`).toBeTruthy();
     expect(b, `falta --color-${fondo}`).toBeTruthy();
     expect(contraste(a!, b!)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(PAREJAS_BORDE)('%s sobre %s llega a 3:1', (borde, fondo) => {
+    const a = paleta[borde];
+    const b = paleta[fondo];
+    expect(a, `falta --color-${borde}`).toBeTruthy();
+    expect(b, `falta --color-${fondo}`).toBeTruthy();
+    expect(contraste(a!, b!)).toBeGreaterThanOrEqual(3);
   });
 });
 

@@ -9,7 +9,7 @@ const buttonVariants = cva(
       variant: {
         primary: 'bg-primary text-primary-fg font-bold hover:opacity-90',
         secondary: 'bg-secondary text-secondary-fg hover:opacity-90',
-        outline: 'border border-border bg-surface text-fg hover:bg-muted/10',
+        outline: 'border border-field bg-surface text-fg hover:bg-muted/10',
         ghost: 'text-fg hover:bg-muted/10',
         danger: 'border border-danger/30 bg-danger-bg text-danger hover:bg-danger/10',
       },
@@ -24,8 +24,7 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+  extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, ...props }, ref) => (
