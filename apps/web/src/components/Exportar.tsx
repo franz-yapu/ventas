@@ -1,6 +1,6 @@
 import { Download } from 'lucide-react';
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api } from '@/lib/api';
@@ -26,16 +26,20 @@ interface Props {
   className?: string;
 }
 
-/** Ancho de columna aproximado por el contenido: sin esto todo sale en 8 caracteres. */
-function anchos(filas: Array<Record<string, unknown>>): Array<{ wch: number }> {
-  if (filas.length === 0) return [];
-  return Object.keys(filas[0]!).map((col) => {
-    const largo = Math.max(
-      col.length,
-      ...filas.slice(0, 200).map((f) => String(f[col] ?? '').length),
-    );
-    return { wch: Math.min(Math.max(largo + 2, 10), 45) };
-  });
+/**
+ * Ancho de cada columna, aproximado por su contenido.
+ *
+ * Sin esto todo sale en el ancho por defecto y las fechas aparecen como `#####`: quien lo
+ * abre tiene que ensanchar nueve columnas a mano antes de poder leer nada. Se miran las
+ * primeras 200 filas —suficiente para acertar— y se acota entre 10 y 45 para que una nota
+ * larga no deje una columna de tres pantallas.
+ */
+function anchoDe(col: string, filas: Array<Record<string, unknown>>): number {
+  const largo = Math.max(
+    col.length,
+    ...filas.slice(0, 200).map((f) => String(f[col] ?? '').length),
+  );
+  return Math.min(Math.max(largo + 2, 10), 45);
 }
 
 export function Exportar({ seccion, filtros, className }: Props) {
@@ -63,16 +67,36 @@ export function Exportar({ seccion, filtros, className }: Props) {
         return;
       }
 
-      const hoja = XLSX.utils.json_to_sheet(r.filas);
-      hoja['!cols'] = anchos(r.filas);
-      const libro = XLSX.utils.book_new();
+      const libro = new ExcelJS.Workbook();
       // El nombre de la hoja tiene un tope de 31 caracteres en Excel; con secciones de
       // una palabra nunca se llega, pero el recorte evita un archivo corrupto el día que
       // alguien añada una sección con nombre largo.
-      XLSX.utils.book_append_sheet(libro, hoja, seccion.slice(0, 31));
+      const hoja = libro.addWorksheet(seccion.slice(0, 31));
 
+      const columnas = Object.keys(r.filas[0]!);
+      hoja.columns = columnas.map((c) => ({
+        header: c,
+        key: c,
+        width: anchoDe(c, r.filas),
+      }));
+      hoja.addRows(r.filas);
+      // La cabecera en negrita y congelada: con 20.000 filas, saber en qué columna se está
+      // al bajar es la diferencia entre usar el archivo y volver a pedirlo.
+      hoja.getRow(1).font = { bold: true };
+      hoja.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const buf = await libro.xlsx.writeBuffer();
       const hoy = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(libro, `${seccion}-${hoy}.xlsx`);
+      const url = URL.createObjectURL(
+        new Blob([buf], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }),
+      );
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${seccion}-${hoy}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       setError('No se pudo exportar. Inténtalo de nuevo.');
     } finally {

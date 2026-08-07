@@ -222,6 +222,15 @@ export const env = {
   exportRateLimitMax: Number(process.env.EXPORT_RATE_LIMIT_MAX ?? 5),
   exportRateLimitWindow: process.env.EXPORT_RATE_LIMIT_WINDOW ?? '1 hour',
 
+  /**
+   * Dónde se guardan las imágenes que suben los clientes.
+   *
+   * En Docker es un VOLUMEN, no una carpeta dentro del contenedor: si vive dentro, cada
+   * despliegue se lleva por delante las fotos de todos los negocios. Es de las cosas que
+   * sólo se descubren la segunda vez que se despliega.
+   */
+  mediaDir: process.env.MEDIA_DIR ?? './media',
+
   // ── Correo transaccional ─────────────────────────────────────
   /**
    * Sin clave, los correos se escriben en el log en vez de enviarse. Ver `mailer.ts`.

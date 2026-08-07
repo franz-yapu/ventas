@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, Download, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
@@ -61,20 +61,51 @@ export function ImportarProductos({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       const buf = await file.arrayBuffer();
-      // `cellDates` para que una columna de fecha no llegue como número de serie de Excel.
-      const libro = XLSX.read(buf, { cellDates: true });
-      const hoja = libro.Sheets[libro.SheetNames[0]!];
+      const libro = new ExcelJS.Workbook();
+      if (/\.csv$/i.test(file.name)) {
+        // exceljs lee CSV desde un stream de texto.
+        await libro.csv.read(new Blob([buf]).stream() as unknown as NodeJS.ReadableStream);
+      } else {
+        await libro.xlsx.load(buf);
+      }
+      const hoja = libro.worksheets[0];
       if (!hoja) throw new Error('vacío');
-      // `defval: ''` para que una celda vacía sea una celda vacía y no desaparezca de la
-      // fila: si desaparece, las columnas se desalinean y todo lo demás es basura.
-      const datos = XLSX.utils.sheet_to_json<Record<string, unknown>>(hoja, { defval: '' });
-      if (datos.length === 0) throw new Error('sin filas');
 
-      const cols = Object.keys(datos[0]!);
+      /*
+        Se lee a mano y no con un ayudante, para poder decidir dos cosas:
+
+        - Una celda vacía tiene que SEGUIR ahí como cadena vacía. Si desaparece de la fila,
+          las columnas se desalinean y todo lo que venga detrás es basura.
+        - Una fecha llega como `Date` y un número como `number`; los dejamos tal cual y ya
+          los interpreta `importar.ts`, que sabe qué hacer con cada campo.
+      */
+      const fila1 = hoja.getRow(1);
+      const cols: string[] = [];
+      fila1.eachCell({ includeEmpty: false }, (celda, col) => {
+        cols[col - 1] = String(celda.value ?? '').trim();
+      });
+      const cabecerasLimpias = cols.map((c, i) => c || `Columna ${i + 1}`);
+
+      const datos: Array<Record<string, unknown>> = [];
+      hoja.eachRow({ includeEmpty: false }, (fila, n) => {
+        if (n === 1) return;
+        const obj: Record<string, unknown> = {};
+        cabecerasLimpias.forEach((cab, i) => {
+          const v = fila.getCell(i + 1).value;
+          // Una celda con fórmula trae `{ result }`: interesa el resultado, no la fórmula.
+          obj[cab] =
+            v && typeof v === 'object' && 'result' in v
+              ? ((v as { result: unknown }).result ?? '')
+              : (v ?? '');
+        });
+        // Una fila entera vacía es un separador visual de la planilla, no un producto.
+        if (Object.values(obj).some((x) => String(x ?? '').trim() !== '')) datos.push(obj);
+      });
+      if (datos.length === 0) throw new Error('sin filas');
       setNombreArchivo(file.name);
-      setCabeceras(cols);
+      setCabeceras(cabecerasLimpias);
       setFilas(datos);
-      setMapeo(proponerMapeo(cols));
+      setMapeo(proponerMapeo(cabecerasLimpias));
       setPaso('mapear');
       setResultado(null);
       setAbierto(true);
