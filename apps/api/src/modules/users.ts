@@ -5,7 +5,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { violaUnica } from '../lib/pg-errores.js';
-import { NINGUNA_UBICACION } from '../lib/scope.js';
+import { esUbicacionDelNegocio, NINGUNA_UBICACION } from '../lib/scope.js';
 import { revocarTodo } from '../lib/sessions.js';
 import { permiteCrear } from '../lib/subscription.js';
 
@@ -23,29 +23,6 @@ function puedeAdministrarA(
 ): boolean {
   if (admin.isCentral) return true;
   return !!locationId && locationId === admin.locationId;
-}
-
-/**
- * ¿Esa ubicación es de ESTE negocio?
- *
- * `puedeAdministrarA` compara ubicaciones, pero nunca comprobó de quién son, y para un
- * admin de la central devuelve `true` sin mirar: bastaba con mandar el `locationId` de
- * OTRO negocio para que se aceptara. El usuario quedaba con el `business_id` de uno y la
- * ubicación de otro, y al entrar recibía un token con `isCentral: true` heredado de una
- * sucursal ajena.
- *
- * `products.ts` ya comprobaba la tenencia antes de guardar; aquí faltaba. Es la misma
- * pregunta y merece la misma respuesta.
- */
-async function esUbicacionDelNegocio(businessId: string, locationId: string): Promise<boolean> {
-  const [loc] = await withTenant(businessId, (tx) =>
-    tx
-      .select({ id: schema.location.id })
-      .from(schema.location)
-      .where(and(eq(schema.location.id, locationId), eq(schema.location.businessId, businessId)))
-      .limit(1),
-  );
-  return !!loc;
 }
 
 export async function userRoutes(app: FastifyInstance) {

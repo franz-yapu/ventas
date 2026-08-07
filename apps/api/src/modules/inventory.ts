@@ -2,7 +2,7 @@ import { schema, withTenant } from '@ventafacil/db';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
-import { canAdjustInventory, filtroDeUbicacion } from '../lib/scope.js';
+import { canAdjustInventory, esUbicacionDelNegocio, filtroDeUbicacion } from '../lib/scope.js';
 
 export async function inventoryRoutes(app: FastifyInstance) {
   // GET /inventory — stock por producto y ubicación (alcance por ubicación visible).
@@ -124,6 +124,24 @@ export async function inventoryRoutes(app: FastifyInstance) {
         return reply
           .code(403)
           .send({ data: null, error: 'No puedes transferir desde esa ubicación' });
+      }
+
+      /*
+        Las DOS ubicaciones tienen que ser de este negocio.
+        `canAdjustInventory` mira el rol y compara ids, pero no pregunta de quién son, y
+        para un admin de la central devuelve `true` sin mirar. Con sólo esa comprobación,
+        el destino era libre: se podía mandar stock al inventario de otro negocio. La
+        unidad se destruía —ni el dueño ni el receptor podían venderla—, el nombre de la
+        sucursal ajena se filtraba en `GET /inventory`, y las filas fantasma salían en la
+        exportación. Se comprueba el origen también: `canAdjustInventory` acepta cualquier
+        id para un admin central, así que sin esto un origen ajeno daba 500 (o peor).
+      */
+      const [origenEsMio, destinoEsMio] = await Promise.all([
+        esUbicacionDelNegocio(businessId, fromLocationId),
+        esUbicacionDelNegocio(businessId, toLocationId),
+      ]);
+      if (!origenEsMio || !destinoEsMio) {
+        return reply.code(400).send({ data: null, error: 'Esa ubicación no es de este negocio' });
       }
 
       try {

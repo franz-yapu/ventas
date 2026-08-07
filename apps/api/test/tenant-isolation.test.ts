@@ -97,7 +97,12 @@ describe('lectura: el negocio A nunca ve datos del negocio B', () => {
       url: `/api/v1/products/${b.productId}/history`,
       headers: auth(a.adminToken),
     });
-    expectNoLeak(res.body, b, 'GET /products/:id/history ajeno', `/api/v1/products/${b.productId}/history`);
+    expectNoLeak(
+      res.body,
+      b,
+      'GET /products/:id/history ajeno',
+      `/api/v1/products/${b.productId}/history`,
+    );
   });
 
   it('GET /customers/:id de B no devuelve el cliente', async () => {
@@ -126,7 +131,12 @@ describe('lectura: el negocio A nunca ve datos del negocio B', () => {
       url: `/api/v1/sales?locationId=${b.locationId}`,
       headers: auth(a.adminToken),
     });
-    expectNoLeak(res.body, b, 'GET /sales?locationId ajeno', `/api/v1/sales?locationId=${b.locationId}`);
+    expectNoLeak(
+      res.body,
+      b,
+      'GET /sales?locationId ajeno',
+      `/api/v1/sales?locationId=${b.locationId}`,
+    );
   });
 });
 
@@ -207,6 +217,75 @@ describe('escritura: el negocio A nunca modifica datos del negocio B', () => {
       },
     });
     expect(res.statusCode).not.toBe(201);
+  });
+});
+
+describe('escribir en el negocio de otro', () => {
+  /**
+   * Leer lo ajeno se comprueba arriba, endpoint por endpoint. Esto es lo otro: mandar un
+   * id ajeno en el CUERPO de una escritura.
+   *
+   * La transferencia de stock lo permitía. Comprobaba la ubicación de origen y no la de
+   * destino, así que con el token del negocio A se movía inventario a una sucursal del
+   * negocio B: la unidad se destruía —ni A ni B podían venderla—, el nombre de la
+   * sucursal de B se filtraba en `GET /inventory` de A, y las filas fantasma salían en su
+   * exportación. Respondía 200 y "ok".
+   */
+  it('NO se puede transferir stock a una ubicación de otro negocio', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/inventory/transfer',
+      headers: auth(a.adminToken),
+      payload: {
+        productId: a.productId,
+        fromLocationId: a.locationId,
+        toLocationId: b.locationId, // ← la ubicación del OTRO negocio
+        quantity: 1,
+      },
+    });
+    expect(res.statusCode).not.toBe(200);
+    expect([400, 403, 404]).toContain(res.statusCode);
+
+    // Y sobre todo: que no haya quedado rastro en el inventario de nadie.
+    const inv = await app.inject({
+      method: 'GET',
+      url: '/api/v1/inventory',
+      headers: auth(a.adminToken),
+    });
+    expectNoLeak(inv.body, b, 'inventario de A tras intentar transferir a B');
+  });
+
+  it('NO se puede transferir stock DESDE una ubicación de otro negocio', async () => {
+    // El reverso: `canAdjustInventory` acepta cualquier id para un admin de la central,
+    // así que sin comprobar la tenencia el origen ajeno también pasaba el guardia.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/inventory/transfer',
+      headers: auth(a.adminToken),
+      payload: {
+        productId: a.productId,
+        fromLocationId: b.locationId,
+        toLocationId: a.locationId,
+        quantity: 1,
+      },
+    });
+    expect(res.statusCode).not.toBe(200);
+    expect(res.statusCode).not.toBe(500);
+  });
+
+  it('una ubicación inexistente responde 400, no 500', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/inventory/transfer',
+      headers: auth(a.adminToken),
+      payload: {
+        productId: a.productId,
+        fromLocationId: a.locationId,
+        toLocationId: '11111111-1111-1111-1111-111111111111',
+        quantity: 1,
+      },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });
 

@@ -1,4 +1,5 @@
-import { eq, type SQL } from 'drizzle-orm';
+import { schema, withTenant } from '@ventafacil/db';
+import { and, eq, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { AuthUser } from '../types.js';
 
@@ -42,6 +43,42 @@ export function viewScope(user: AuthUser): string | undefined {
 export function filtroDeUbicacion(user: AuthUser, columna: PgColumn): SQL | undefined {
   const scope = viewScope(user);
   return scope === undefined ? undefined : eq(columna, scope);
+}
+
+/**
+ * ¿Esa ubicación es de ESTE negocio?
+ *
+ * La pregunta que hay que hacerse SIEMPRE que un `locationId` llegue de fuera, porque
+ * ninguna de las funciones de aquí abajo la hace: comparan ubicaciones y miran roles,
+ * pero no comprueban de quién son. Para un admin de la central, `canActOnLocation` y
+ * `canAdjustInventory` devuelven `true` sin mirar el id — y eso es correcto dentro de su
+ * negocio y catastrófico fuera de él.
+ *
+ * Ha mordido dos veces por separado:
+ *
+ * 1. `POST /users` aceptaba el `locationId` de otro negocio y dejaba al usuario con el
+ *    `business_id` de uno y la ubicación de otro; al entrar recibía un token con
+ *    `isCentral: true` heredado de una sucursal ajena.
+ * 2. `POST /inventory/transfer` comprobaba el origen y **no el destino**: se podía mandar
+ *    stock al inventario de otro negocio. La unidad se destruía —ni el dueño ni el
+ *    receptor podían venderla—, el nombre de la sucursal ajena se filtraba en
+ *    `GET /inventory`, y las filas fantasma salían en la exportación del negocio.
+ *
+ * Las dos veces la causa fue la misma y el arreglo también, así que vive aquí, junto al
+ * resto de las decisiones de alcance, y no copiada en cada módulo.
+ */
+export async function esUbicacionDelNegocio(
+  businessId: string,
+  locationId: string,
+): Promise<boolean> {
+  const [loc] = await withTenant(businessId, (tx) =>
+    tx
+      .select({ id: schema.location.id })
+      .from(schema.location)
+      .where(and(eq(schema.location.id, locationId), eq(schema.location.businessId, businessId)))
+      .limit(1),
+  );
+  return !!loc;
 }
 
 /**
