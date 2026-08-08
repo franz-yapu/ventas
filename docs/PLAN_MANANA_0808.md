@@ -150,6 +150,77 @@ Todo en `docs/DESPLIEGUE_TRAS_REVISION.md`.
 
 ---
 
+## 8 · De fondo — lo que esta ronda demostró que falta
+
+El bloque 6 de la revisión de la mañana (tests de componentes, umbral de cobertura, fuera
+`pnpm lint`, partir el chunk, formatear el repo) está **hecho**. Pero esta segunda ronda
+enseñó dónde sigue habiendo agujero, y es distinto de lo que se arregló entonces.
+
+### 8.1 · Los tests de estilo miran clases, no lo que se ve
+
+Es la lección más cara de la noche. Escribí un test que comprobaba que
+`focus-visible:ring` estuviera en el `className`… y el anillo no se veía, porque una regla
+de otra capa ganaba por cascada. **El test pasaba y el usuario no veía el foco.**
+
+Lo mismo puede estar pasando con los seis controles que se quedaron con el borde
+decorativo: hay un test que comprueba que `Input` lleve `border-field`, y no dice nada de
+los otros seis sitios que no pasan por `Input`.
+
+**Lo que hace falta:** un test que **mida el estilo calculado** sobre elementos montados,
+como hace `paleta.test.ts` con los tokens del CSS. jsdom no calcula cascada de verdad, así
+que esto probablemente pide un test con navegador (Playwright ya está instalado y los
+agentes lo usan). Sería el primer test de este tipo del proyecto.
+
+**Sin esto, el arreglo de mañana del punto 2 se puede volver a romper igual y nadie lo
+notará.**
+
+### 8.2 · Una función sin pantalla no está hecha, y nada lo detecta
+
+Los `DELETE` de sucursales y usuarios pasaron 14 tests, el typecheck, el CI entero y una
+revisión con tres agentes — y son inalcanzables. Lo mismo la pantalla de Clientes: el API
+está completo y no hay ruta en la web.
+
+**Idea a evaluar:** un comprobante que cruce las rutas del API con lo que la web llama.
+`docs/API.md` ya lista las 79 rutas; un `grep` sobre `apps/web/src` diría cuáles no se usan
+desde ninguna parte. No todas tienen que usarse —hay rutas de plataforma y de sistema— pero
+una lista de "el API ofrece esto y nadie lo pide" habría delatado las dos.
+
+Es media hora de script y evita entregar tres días de backend inalcanzable.
+
+### 8.3 · La cobertura de la web sigue en 7 %
+
+Subió del 3,5 % al **7,3 %**, y el mérito es casi todo de la lógica extraída
+(`importar.ts`, `confirmar.ts`) más que de montar componentes. Las 74 pantallas siguen sin
+red: **8.013 líneas y 582 cubiertas.**
+
+Los umbrales por carpeta que se pusieron protegen lo que ya está probado, que era el
+objetivo. Lo que falta es subir la lista: cada pantalla que se toque mañana debería salir
+con su test de componente, empezando por las dos del punto 1.
+
+### 8.4 · El service worker precarga 2,8 MB
+
+Partir el paquete de entrada funcionó (1.021 → 503 kB), pero el **total precargado subió a
+2.804 KiB** porque el service worker guarda también el trozo de `exceljs` — casi un mega
+para una función que el dueño usa una vez al mes, bajado en la primera visita de cada caja.
+
+**Excluir `exceljs` del precache** y dejar que se descargue al pulsar. Es una línea en
+`vite.config.ts` y devuelve el precache a ~1,9 MB.
+
+### 8.5 · El CI no comprueba lo que esta ronda encontró
+
+Hoy corre: auditoría de dependencias, formato, tipos, tests con umbral de cobertura, build,
+migración pendiente y documentación al día. Es bastante. Lo que **no** mira:
+
+- que las rutas del API tengan quien las llame (8.2),
+- que los estilos se vean de verdad (8.1),
+- el tamaño del paquete (una regresión de 1.021 kB pasó sin que nada chistara; la detecté
+  mirando las métricas a mano).
+
+Un tope de tamaño para el chunk de entrada son tres líneas y habría atrapado lo de
+`exceljs` el mismo día.
+
+---
+
 ## Una cosa sobre cómo lanzar los agentes la próxima vez
 
 Dos correcciones al método, que salieron de esta ronda:
