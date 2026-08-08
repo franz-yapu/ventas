@@ -1,6 +1,5 @@
 import { Download } from 'lucide-react';
 import { useState } from 'react';
-import ExcelJS from 'exceljs';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api } from '@/lib/api';
@@ -67,6 +66,15 @@ export function Exportar({ seccion, filtros, className }: Props) {
         return;
       }
 
+      /*
+        `exceljs` se carga sólo al pulsar, no al abrir la aplicación.
+
+        Importándola arriba se metía en el paquete de entrada y lo llevaba de 489 kB a
+        1.421 kB — casi un mega más que baja TODO el mundo al abrir la caja por la mañana,
+        para una función que usa el dueño una vez al mes. En una tablet barata por la
+        conexión de una tienda, eso son varios segundos de pantalla en blanco.
+      */
+      const { default: ExcelJS } = await import('exceljs');
       const libro = new ExcelJS.Workbook();
       // El nombre de la hoja tiene un tope de 31 caracteres en Excel; con secciones de
       // una palabra nunca se llega, pero el recorte evita un archivo corrupto el día que

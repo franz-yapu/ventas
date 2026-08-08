@@ -1021,6 +1021,102 @@ describe('contratación por más de un mes', () => {
     expect(d.devolucion).toBe('3129.00');
   });
 
+  it('CONTRATAR ACTIVA la suscripción: el que paga no puede quedarse bloqueado', async () => {
+    /*
+      El peor fallo posible de esta función, y le tocaba al mejor cliente.
+
+      `effectiveStatus` sólo mira `status` y `trialEndsAt` — `currentPeriodEnd` no lo
+      consulta nadie. Un negocio EN PRUEBA que pagaba cinco años seguía con `status:
+      'trial'` y su prueba venciendo en quince días, así que al día quince la caja se le
+      paraba con un 402 con 6.258 Bs pagados encima.
+    */
+    // Se le deja en prueba a punto de vencer, que es el caso real: se paga porque se
+    // acaba la prueba.
+    await db
+      .update(schema.subscription)
+      .set({
+        status: 'trial',
+        trialEndsAt: new Date(Date.now() + 86_400_000),
+        billingMonths: 1,
+        cycleStartedAt: null,
+      })
+      .where(eq(schema.subscription.businessId, a.businessId));
+    clearAccessCache();
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${a.businessId}/subscription`,
+      headers: auth(token()),
+      payload: { planCode: 'basico', billingMonths: 12 },
+    });
+
+    const [sub] = await db
+      .select()
+      .from(schema.subscription)
+      .where(eq(schema.subscription.businessId, a.businessId));
+
+    expect(sub!.status, 'pagó un año y sigue en prueba').toBe('active');
+    expect(sub!.trialEndsAt, 'quedó una fecha de prueba en una suscripción pagada').toBeNull();
+  });
+
+  it('reenviar el MISMO ciclo no regala años', async () => {
+    /*
+      Un doble clic, o un reintento tras un timeout, movía `cycleStartedAt` a hoy y el
+      vencimiento un año más allá: años regalados y una devolución calculada sobre un
+      tiempo que el cliente no ha esperado.
+    */
+    const antes = (
+      await db
+        .select()
+        .from(schema.subscription)
+        .where(eq(schema.subscription.businessId, a.businessId))
+    )[0]!;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${a.businessId}/subscription`,
+      headers: auth(token()),
+      payload: { planCode: 'basico', billingMonths: 12 },
+    });
+
+    const [despues] = await db
+      .select()
+      .from(schema.subscription)
+      .where(eq(schema.subscription.businessId, a.businessId));
+
+    expect(despues!.cycleStartedAt?.getTime()).toBe(antes.cycleStartedAt?.getTime());
+    expect(despues!.currentPeriodEnd?.getTime()).toBe(antes.currentPeriodEnd?.getTime());
+  });
+
+  it('cambiar de plan sin ciclo borra lo cobrado en vez de mentir', async () => {
+    /*
+      `billedAmount` es la foto de lo que se pagó POR ESE plan. Al bajar de Ilimitado a
+      Básico sin tocar el ciclo, la foto seguía diciendo lo del plan caro y la devolución
+      salía mayor que un año entero del plan nuevo. Mejor no poder calcularla —y tener que
+      preguntar— que calcularla mal y pagarla.
+    */
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/platform/tenants/${a.businessId}/subscription`,
+      headers: auth(token()),
+      payload: { planCode: 'pro' },
+    });
+
+    const [sub] = await db
+      .select()
+      .from(schema.subscription)
+      .where(eq(schema.subscription.businessId, a.businessId));
+
+    expect(sub!.billedAmount).toBeNull();
+
+    const dev = await app.inject({
+      method: 'GET',
+      url: `/api/v1/platform/tenants/${a.businessId}/devolucion`,
+      headers: auth(token()),
+    });
+    expect(dev.json().data).toBeNull();
+  });
+
   it('un ciclo inventado se rechaza', async () => {
     const res = await app.inject({
       method: 'PATCH',

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "location_una_central_uq" ON "location" USING btree ("business_id") WHERE "location"."is_central";

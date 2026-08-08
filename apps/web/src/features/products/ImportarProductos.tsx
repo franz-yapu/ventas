@@ -1,6 +1,5 @@
 import { AlertTriangle, Check, Download, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-import ExcelJS from 'exceljs';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
@@ -61,6 +60,9 @@ export function ImportarProductos({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       const buf = await file.arrayBuffer();
+      // Igual que en `Exportar`: la librería pesa casi un mega y sólo hace falta aquí.
+      // Cargarla arriba se la haría bajar a cada caja al abrir la aplicación.
+      const { default: ExcelJS } = await import('exceljs');
       const libro = new ExcelJS.Workbook();
       if (/\.csv$/i.test(file.name)) {
         // exceljs lee CSV desde un stream de texto.
@@ -132,22 +134,41 @@ export function ImportarProductos({ onDone }: { onDone: () => void }) {
       try {
         const r = await api.post<Resultado & { created: number; skipped: number }>(
           '/products/import',
-          {
-            rows: lote.map((f) => f.valores),
-            // La fila del ARCHIVO con la que empieza este lote: sin esto, el lote 7
-            // informaría de un error "en la fila 3" y quien corrige no lo encontraría.
-            desdeFila: lote[0]!.fila,
-          },
+          { rows: lote.map((f) => f.valores) },
         );
         creados += r.created;
-        errores.push(...(r.errores ?? []));
+        /*
+          La fila del archivo se traduce AQUÍ, no en el servidor.
+
+          El servidor numera su lote de forma densa (1, 2, 3…), pero `buenas` está
+          filtrado: si las filas buenas del archivo son la 2, la 3 y la 5, un error en la
+          tercera del lote se informaría como "fila 4" — una que en el archivo está bien,
+          mientras la que de verdad falló no aparece. Quien corrige va a la 4, no ve nada
+          raro, y deja de fiarse del informe entero.
+
+          Antes se mandaba `desdeFila` al servidor, que sólo funciona si no falta ninguna.
+        */
+        for (const e of r.errores ?? []) {
+          const real = lote[e.fila - 1];
+          errores.push({ ...e, fila: real?.fila ?? e.fila });
+        }
       } catch (e) {
-        // Si un lote entero se cae, se para: seguir subiendo a ciegas deja al cliente sin
-        // saber qué entró y qué no, que es peor que un error claro a mitad.
+        /*
+          Un lote que se cae NO se traga las filas que quedan.
+
+          Antes se hacía `break` y la pantalla enseñaba el visto verde igual: las filas
+          restantes desaparecían sin que nadie supiera cuáles eran. Ahora se paran los
+          envíos —seguir a ciegas contra un servidor que acaba de fallar no ayuda— pero
+          todo lo que no llegó a subirse entra en el informe, así que sale en el CSV de
+          rechazadas y se puede reintentar.
+        */
+        const motivo =
+          e instanceof Error && e.message ? e.message : 'Se cortó la subida en esta fila.';
+        for (const f of buenas.slice(i)) {
+          errores.push({ fila: f.fila, nombre: String(f.valores.name ?? ''), motivo });
+        }
         setError(
-          e instanceof Error && e.message
-            ? e.message
-            : 'Se cortó la subida. Lo que ya entró está guardado; puedes reintentar el resto.',
+          `${motivo} Lo que ya había entrado está guardado; el resto está en el archivo de rechazadas.`,
         );
         break;
       }

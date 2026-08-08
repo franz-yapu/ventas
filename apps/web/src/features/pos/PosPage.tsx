@@ -32,8 +32,9 @@ import { cn } from '@/lib/utils';
 import { printReceipt } from '@/lib/print';
 import type { Customer, Location, Product, SaleDetail } from '@/lib/types';
 import { getCachedLocations } from '@/offline/db';
-import { findByBarcode, searchCatalog, syncCatalog } from '@/offline/catalog';
+import { findByBarcode, findByCode, searchCatalog, syncCatalog } from '@/offline/catalog';
 import { enqueueSale, syncPending } from '@/offline/sync';
+import { motivoParaConfirmar } from '@/features/pos/confirmar';
 import { useBusiness } from '@/theme/ThemeProvider';
 
 // El escáner (html5-qrcode) se carga sólo al abrirlo.
@@ -157,28 +158,39 @@ export function PosPage() {
    * solo. Si el texto da varios resultados —"llanta"— no se elige por él; se deja la
    * lista, que es lo que quería quien estaba escribiendo.
    */
-  function alPulsarEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+  async function alPulsarEnter(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return;
-    const t = search.trim().toLowerCase();
-    if (!t) return;
+    const texto = search.trim();
+    if (!texto) return;
 
-    const lista = products ?? [];
-    const exacto = lista.find(
-      (p) => (p.barcode ?? '').toLowerCase() === t || p.sku.toLowerCase() === t,
-    );
-    const elegido = exacto ?? (lista.length === 1 ? lista[0] : undefined);
+    /*
+      Se consulta la BASE, no la lista pintada.
 
-    if (!elegido) {
-      showToast(
-        lista.length === 0 ? `Sin producto para "${search.trim()}"` : 'Hay varios: elige uno',
-        false,
-      );
+      `products` viene de `useLiveQuery`, que mientras la consulta nueva corre sigue
+      devolviendo el resultado de la ANTERIOR. Un lector USB teclea el código de golpe y
+      pulsa Enter en el mismo instante, así que la lista todavía no se ha enterado: el
+      primer escaneo de cada producto no agregaba nada y había que volver a pasar la
+      pistola. Con las prisas del mostrador, eso es peor que no tener la función.
+    */
+    const exacto = await findByCode(texto);
+    if (exacto) {
+      addToCart(exacto);
+      showToast(`Agregado: ${exacto.name}`);
+      // Se vacía para que el siguiente escaneo entre limpio, sin borrar a mano.
+      setSearch('');
       return;
     }
-    addToCart(elegido);
-    showToast(`Agregado: ${elegido.name}`);
-    // Se vacía para que el siguiente escaneo entre limpio, sin borrar a mano.
-    setSearch('');
+
+    // Sin coincidencia exacta esto no fue un escaneo sino alguien escribiendo, y ahí la
+    // lista pintada sí es lo que esa persona está mirando.
+    const lista = products ?? [];
+    if (lista.length === 1) {
+      addToCart(lista[0]!);
+      showToast(`Agregado: ${lista[0]!.name}`);
+      setSearch('');
+      return;
+    }
+    showToast(lista.length === 0 ? `Sin producto para "${texto}"` : 'Hay varios: elige uno', false);
   }
 
   async function onScanned(code: string) {
@@ -282,47 +294,21 @@ export function PosPage() {
   const canCheckout = cart.length > 0 && !!activeLocation && !busy;
 
   /**
-   * Umbral a partir del cual una venta se confirma por el monto.
+   * La regla de cuándo se pregunta vive en `confirmar.ts`, fuera del componente.
    *
-   * No es una cifra sagrada: es "esto ya no es la compra de siempre" para una tienda de
-   * barrio. Si algún día molesta, el sitio para volverlo configurable es Configuración,
-   * junto al tope de descuento.
+   * Es una decisión de producto, no un detalle de esta pantalla, y aquí dentro no se podía
+   * probar: quedaba atrapada en una clausura que lee media docena de estados. El test que
+   * se le escribió acabó probando una COPIA de la lógica —cero líneas del código real—,
+   * que es la peor clase de test porque da confianza sin dar nada.
    */
-  const MONTO_QUE_MERECE_CONFIRMAR = 1000;
-
-  /**
-   * ¿Esta venta merece una confirmación antes de registrarse?
-   *
-   * "Cobrar" no pedía ninguna: un roce y la venta quedaba hecha —así apareció la venta
-   * #104 durante la revisión, sin que nadie la quisiera—. Pero confirmar SIEMPRE tampoco
-   * sirve: es el gesto más repetido del día, y un diálogo que se pulsa doscientas veces
-   * deja de leerse en una semana, justo cuando haría falta.
-   *
-   * Así que se pregunta sólo cuando algo se sale de lo normal, que es donde el error sale
-   * caro y no se descubre hasta el arqueo:
-   *   - hay descuento (dinero que se deja de cobrar),
-   *   - es fiado (no entra efectivo y queda alguien debiendo),
-   *   - o el total es alto para el mostrador.
-   */
-  function motivoParaConfirmar(): string | null {
-    if (discountNum > 0) {
-      return `Vas a cobrar ${money(total)} con ${money(discountNum)} de descuento.`;
-    }
-    if (payment === 'credit') {
-      const cliente = customers?.find((c) => c.id === customerId)?.name;
-      return cliente
-        ? `Vas a fiar ${money(total)} a ${cliente}. Quedará como deuda suya.`
-        : `Vas a fiar ${money(total)}.`;
-    }
-    if (total >= MONTO_QUE_MERECE_CONFIRMAR) {
-      return `Vas a cobrar ${money(total)}, que es una venta grande.`;
-    }
-    return null;
-  }
-
   /** Lo que pulsa el botón: confirma si toca, y si no cobra directo. */
   function alPulsarCobrar() {
-    const motivo = motivoParaConfirmar();
+    const motivo = motivoParaConfirmar({
+      total,
+      descuento: discountNum,
+      metodoDePago: payment,
+      cliente: customers?.find((c) => c.id === customerId)?.name,
+    });
     if (motivo) setConfirmar(motivo);
     else void checkout();
   }
@@ -352,7 +338,7 @@ export function PosPage() {
               placeholder="Nombre, SKU o código de barras — o escanea"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={alPulsarEnter}
+              onKeyDown={(e) => void alPulsarEnter(e)}
               autoFocus
             />
           </div>

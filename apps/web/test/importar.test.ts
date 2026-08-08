@@ -81,6 +81,31 @@ describe('leer los números como los escribe la gente', () => {
     expect(aMoneda('45,90')).toBe('45.90');
   });
 
+  it('un separador SOLO: tres dígitos detrás son miles', () => {
+    /*
+      El caso difícil. `"1.234"` puede ser mil doscientos treinta y cuatro o uno con
+      doscientos treinta y cuatro, y el texto no lo dice. Antes ganaba `Number`, que lo
+      leía como 1,23: un precio de Bs 1.234 entraba como Bs 1,23 y se vendía así.
+
+      Desempata contar los dígitos: tres detrás es de miles, porque nadie escribe tres
+      decimales en un precio.
+    */
+    expect(aMoneda('1.234')).toBe('1234.00');
+    expect(aMoneda('1,234')).toBe('1234.00');
+    expect(aMoneda('45.9')).toBe('45.90');
+    expect(aMoneda('45,90')).toBe('45.90');
+  });
+
+  it('varios separadores iguales sólo pueden ser miles', () => {
+    expect(aMoneda('1.234.567')).toBe('1234567.00');
+    expect(aMoneda('1,234,567')).toBe('1234567.00');
+  });
+
+  it('con punto Y coma, el último es el decimal', () => {
+    expect(aMoneda('1.234,50')).toBe('1234.50');
+    expect(aMoneda('1,234.50')).toBe('1234.50');
+  });
+
   it('lo que no es un número devuelve null, no cero', () => {
     // Cero sería peor que fallar: se importaría un producto a precio 0 y se vendería así.
     expect(aMoneda('consultar')).toBeNull();

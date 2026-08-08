@@ -4,6 +4,7 @@ import { montar, screen, userEvent } from './montar';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { money } from '@/lib/format';
+import { motivoParaConfirmar } from '@/features/pos/confirmar';
 
 /**
  * El primer test que MONTA algo. Vale la pena decir por qué éste y no otro.
@@ -18,46 +19,24 @@ import { money } from '@/lib/format';
  *
  * Se prueba la DECISIÓN (`motivoParaConfirmar`) y el diálogo por separado, no `PosPage`
  * entera: montarla arrastra Dexie, react-query, el escáner y el proveedor de tema, y un
- * test que necesita media aplicación en pie se rompe por motivos que no son el que
- * vigila. La lógica se extrae y se prueba; el envoltorio se mira con capturas.
- */
-
-/**
- * La misma regla que aplica el POS, escrita aquí como contrato.
+ * test que necesita media aplicación en pie se rompe por motivos que no son el que vigila.
  *
- * Duplicarla es deliberado y tiene un límite: si algún día divergen, este test no lo
- * nota. A cambio, fija en un sitio legible CUÁNDO se pregunta y cuándo no, que es la
- * decisión de producto — el código de `PosPage` la implementa entre el carrito, el
- * descuento y los métodos de pago, donde no se lee de un vistazo.
+ * ⚠️ La primera versión de este archivo **copiaba** la regla aquí dentro "como contrato" y
+ * la probaba sobre la copia: cero líneas del código real. Pasó a la primera, que debería
+ * haber sido la señal. Por eso la regla se extrajo a `features/pos/confirmar.ts` y ahora
+ * se importa la de verdad — si alguien cambia el umbral en el POS, estos tests se enteran.
  */
-function motivoParaConfirmar(v: {
-  total: number;
-  descuento: number;
-  metodo: string;
-  cliente?: string;
-}): string | null {
-  if (v.descuento > 0) {
-    return `Vas a cobrar ${money(v.total)} con ${money(v.descuento)} de descuento.`;
-  }
-  if (v.metodo === 'credit') {
-    return v.cliente
-      ? `Vas a fiar ${money(v.total)} a ${v.cliente}. Quedará como deuda suya.`
-      : `Vas a fiar ${money(v.total)}.`;
-  }
-  if (v.total >= 1000) return `Vas a cobrar ${money(v.total)}, que es una venta grande.`;
-  return null;
-}
 
 describe('cuándo se pregunta antes de cobrar', () => {
   it('la venta de todos los días NO pregunta', () => {
     // Lo más importante del diseño: cobrar es el gesto más repetido de la jornada, y un
     // diálogo que se pulsa doscientas veces al día deja de leerse en una semana.
-    expect(motivoParaConfirmar({ total: 45, descuento: 0, metodo: 'cash' })).toBeNull();
-    expect(motivoParaConfirmar({ total: 999.99, descuento: 0, metodo: 'card' })).toBeNull();
+    expect(motivoParaConfirmar({ total: 45, descuento: 0, metodoDePago: 'cash' })).toBeNull();
+    expect(motivoParaConfirmar({ total: 999.99, descuento: 0, metodoDePago: 'card' })).toBeNull();
   });
 
   it('con descuento pregunta, y dice cuánto se está dejando de cobrar', () => {
-    const motivo = motivoParaConfirmar({ total: 90, descuento: 10, metodo: 'cash' });
+    const motivo = motivoParaConfirmar({ total: 90, descuento: 10, metodoDePago: 'cash' });
     expect(motivo).toContain('10.00');
     expect(motivo).toContain('descuento');
   });
@@ -66,7 +45,7 @@ describe('cuándo se pregunta antes de cobrar', () => {
     const motivo = motivoParaConfirmar({
       total: 300,
       descuento: 0,
-      metodo: 'credit',
+      metodoDePago: 'credit',
       cliente: 'Doña Rosa',
     });
     expect(motivo).toContain('Doña Rosa');
@@ -74,7 +53,7 @@ describe('cuándo se pregunta antes de cobrar', () => {
   });
 
   it('una venta grande pregunta por el monto', () => {
-    expect(motivoParaConfirmar({ total: 1000, descuento: 0, metodo: 'cash' })).toContain(
+    expect(motivoParaConfirmar({ total: 1000, descuento: 0, metodoDePago: 'cash' })).toContain(
       'venta grande',
     );
   });

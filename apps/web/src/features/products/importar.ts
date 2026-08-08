@@ -120,15 +120,49 @@ export interface FilaInterpretada {
   original: Record<string, unknown>;
 }
 
-/** Convierte "1.234,50", "Bs 1234.5" o 1234.5 a "1234.50". `null` si no es un número. */
+/**
+ * Convierte "1.234,50", "Bs 1234.5" o 1234.5 a "1234.50". `null` si no es un número.
+ *
+ * El caso difícil es un separador SOLO: `"1.234"` puede ser mil doscientos treinta y
+ * cuatro (punto de miles) o uno con doscientos treinta y cuatro (punto decimal), y el
+ * texto no lo dice. Antes se resolvía dejándoselo a `Number`, que lo leía como 1,23 — un
+ * precio de Bs 1.234 entraba como Bs 1,23 y se vendía así hasta que alguien lo notara.
+ *
+ * La regla que desempata es contar los dígitos que siguen al separador:
+ *
+ * - **exactamente 3** → es de MILES. Nadie escribe tres decimales en un precio, y "1.234"
+ *   en una planilla boliviana es mil doscientos treinta y cuatro.
+ * - **1 o 2** → es decimal: "45.9", "45,90".
+ * - **más de 3, o varios separadores** → miles: "1.234.567".
+ *
+ * No es infalible —un precio de Bs 1,234 existe en teoría— pero acierta en lo que la gente
+ * escribe de verdad, y el caso que falla es el raro en vez del común.
+ */
 export function aMoneda(v: unknown): string | null {
   if (v == null || v === '') return null;
   if (typeof v === 'number') return Number.isFinite(v) ? v.toFixed(2) : null;
+
   let t = String(v).replace(/[^\d.,-]/g, '');
   if (!t) return null;
-  // Formato boliviano/europeo: el punto separa miles y la coma decimales.
-  if (t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(',', '.');
-  else if (t.includes(',')) t = t.replace(',', '.');
+
+  const puntos = (t.match(/\./g) ?? []).length;
+  const comas = (t.match(/,/g) ?? []).length;
+
+  if (puntos && comas) {
+    // Con los dos, el ÚLTIMO que aparece es el decimal: "1.234,50" y "1,234.50".
+    const decimal = t.lastIndexOf(',') > t.lastIndexOf('.') ? ',' : '.';
+    const miles = decimal === ',' ? '.' : ',';
+    t = t.split(miles).join('').replace(decimal, '.');
+  } else if (puntos + comas === 1) {
+    const sep = puntos ? '.' : ',';
+    const detras = t.length - t.indexOf(sep) - 1;
+    // Tres dígitos detrás = separador de miles. Uno o dos = decimales.
+    t = detras === 3 ? t.replace(sep, '') : t.replace(sep, '.');
+  } else if (puntos + comas > 1) {
+    // Varios separadores iguales sólo pueden ser miles: "1.234.567".
+    t = t.replace(/[.,]/g, '');
+  }
+
   const n = Number(t);
   if (!Number.isFinite(n) || n < 0) return null;
   return n.toFixed(2);

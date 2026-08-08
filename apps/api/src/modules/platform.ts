@@ -1081,12 +1081,59 @@ export async function platformRoutes(app: FastifyInstance) {
         if (!planFila) {
           return reply.code(400).send({ data: null, error: 'No se sabe qué plan cotizar' });
         }
-        const q = cotizar(planFila.priceMonthly, d.billingMonths);
-        const desde = new Date();
-        patch.billingMonths = q.meses;
-        patch.billedAmount = q.total;
-        patch.cycleStartedAt = desde;
-        patch.currentPeriodEnd = new Date(new Date(desde).setMonth(desde.getMonth() + q.meses));
+
+        /*
+          Contratar un ciclo ACTIVA la suscripción. Sin esto, el que más paga es el
+          primero que deja de vender.
+
+          `effectiveStatus` sólo mira `status` y `trialEndsAt`; `currentPeriodEnd` no lo
+          consulta nadie. Así que un negocio en prueba que pagaba cinco años seguía con
+          `status: 'trial'` y su prueba venciendo en quince días — y al día quince la caja
+          se le paraba con un 402, con 6.258 Bs pagados encima. El peor escenario posible,
+          y le tocaba justo al mejor cliente.
+
+          Se limpia `trialEndsAt` a la vez: dejar una fecha de prueba en una suscripción
+          pagada es una bomba con temporizador esperando a que alguien vuelva a mirar
+          `effectiveStatus`.
+        */
+        patch.status = 'active';
+        patch.trialEndsAt = null;
+        patch.suspendedReason = null;
+        patch.cancelledAt = null;
+
+        /*
+          Reenviar el MISMO ciclo no reinicia nada.
+
+          Guardar dos veces "5 años" —un doble clic, un reintento tras un timeout— movía
+          `cycleStartedAt` a hoy y el vencimiento cinco años más allá: años regalados, y
+          una devolución calculada sobre un tiempo que el cliente no ha esperado. El ciclo
+          se reinicia cuando CAMBIA algo: el plazo o el plan.
+        */
+        const mismoCiclo =
+          before?.billingMonths === d.billingMonths &&
+          before?.cycleStartedAt != null &&
+          (d.planCode === undefined || d.planCode === before?.planCode);
+
+        if (!mismoCiclo) {
+          const q = cotizar(planFila.priceMonthly, d.billingMonths);
+          const desde = new Date();
+          patch.billingMonths = q.meses;
+          patch.billedAmount = q.total;
+          patch.cycleStartedAt = desde;
+          patch.currentPeriodEnd = new Date(new Date(desde).setMonth(desde.getMonth() + q.meses));
+        }
+      } else if (d.planCode !== undefined && d.planCode !== before?.planCode) {
+        /*
+          Cambiar de plan sin decir el ciclo deja lo cobrado sin sentido.
+
+          `billedAmount` es la foto de lo que se pagó POR ESE plan. Al bajar de Ilimitado a
+          Básico sin tocar el ciclo, la foto seguía diciendo lo del plan caro y la
+          devolución salía mayor que un año entero del plan nuevo. Se borra: mejor no poder
+          calcular la devolución —y tener que preguntar— que calcularla mal y pagarla.
+        */
+        patch.billedAmount = null;
+        patch.cycleStartedAt = null;
+        patch.billingMonths = 1;
       }
 
       let after;

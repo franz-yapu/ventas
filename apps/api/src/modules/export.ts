@@ -9,8 +9,8 @@ import {
 } from '@ventafacil/shared';
 import { z } from 'zod';
 import { env } from '../env.js';
-import { sinCostosLista } from '../lib/costos.js';
 import { filtroDeUbicacion } from '../lib/scope.js';
+import { desfaseDe, TZ } from '../lib/zona.js';
 
 /**
  * Exportación de los datos de un negocio.
@@ -258,7 +258,21 @@ export async function exportRoutes(app: FastifyInstance) {
       const soloFecha = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
       const aFecha = (v: string | undefined, finDelDia: boolean): Date | null => {
         if (!v) return null;
-        const d = new Date(soloFecha(v) ? `${v}T${finDelDia ? '23:59:59.999' : '00:00:00'}` : v);
+        /*
+          Una fecha pelada se interpreta en la zona del NEGOCIO, no en la del servidor.
+
+          `new Date('2026-08-09T00:00:00')` usa la zona del proceso, y el contenedor corre
+          en UTC mientras la tienda está en Bolivia (UTC−4). El informe salía corrido
+          cuatro horas: se perdía la última tarde del último día y se colaban las últimas
+          horas del anterior. El informe se genera igual, sólo que mal — que es la peor
+          forma de fallar, porque nadie lo revisa.
+
+          `TZ` es la misma constante que ya usa el arqueo para decidir a qué día pertenece
+          una venta; si algún día hay negocios en varias zonas, se cambia en un sitio.
+        */
+        const d = soloFecha(v)
+          ? new Date(`${v}T${finDelDia ? '23:59:59.999' : '00:00:00.000'}${desfaseDe(TZ, v)}`)
+          : new Date(v);
         return Number.isNaN(d.getTime()) ? null : d;
       };
       const desde = aFecha(q.data.from, false);
@@ -397,15 +411,23 @@ export async function exportRoutes(app: FastifyInstance) {
       }
 
       /*
-        El COSTO se quita igual que en las pantallas.
+        El COSTO se quita a mano, y no con `sinCostosLista`.
 
-        Esta ruta la protege `requireCentralAdmin`, así que hoy sólo llega quien puede ver
-        costos. Pasa por `sinCostosLista` de todas formas: el día que se abra a un
-        encargado de sucursal —que es una petición razonable— el filtro ya está puesto, y
-        no dependerá de que alguien se acuerde. Ocho puertas cerradas y una abierta dan el
-        mismo resultado que ninguna cerrada.
+        Ese ayudante busca las claves `cost` y `costWholesale`; aquí las columnas se llaman
+        `Costo` en español, porque van directas a la primera fila de un Excel. Llamarlo
+        parecía una red y no lo era: no habría quitado nada, y el comentario prometía una
+        protección inexistente — que es peor que no tener ninguna, porque el siguiente que
+        pase lo lee y se queda tranquilo.
+
+        Hoy sólo llega aquí quien puede ver costos (`requireCentralAdmin`). Esto es para el
+        día que se abra a un encargado de sucursal, que es una petición razonable.
       */
-      const limpias = sinCostosLista(filas as Array<Record<string, unknown>>, user);
+      const puedeVerCostos = user.role === 'admin';
+      const limpias = (filas as Array<Record<string, unknown>>).map((f) => {
+        if (puedeVerCostos) return f;
+        const { Costo: _c, ...resto } = f;
+        return resto;
+      });
 
       /*
         Los códigos se traducen aquí, no en la pantalla.

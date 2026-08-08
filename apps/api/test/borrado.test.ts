@@ -44,6 +44,41 @@ async function crearSucursal(nombre: string): Promise<string> {
   return res.json().data.id;
 }
 
+/**
+ * Vuelve a entrar y actualiza el token del admin.
+ *
+ * Hace falta porque mover el cargo de sucursal principal REVOCA las sesiones de los
+ * afectados —`isCentral` viaja dentro del token—, así que después de cada cambio el token
+ * anterior ya no vale. Que los tests tengan que hacer esto es, en sí, la prueba de que la
+ * revocación funciona.
+ */
+/** Sucursal con un admin dentro: es lo que exige poder hacerla principal. */
+async function crearSucursalConAdmin(nombre: string, usuario: string): Promise<string> {
+  const id = await crearSucursal(nombre);
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/users',
+    headers: auth(t.adminToken),
+    payload: {
+      name: `Admin de ${nombre}`,
+      username: usuario,
+      password: 'secreto123',
+      role: 'admin',
+      locationId: id,
+    },
+  });
+  return id;
+}
+
+async function reentrar(): Promise<void> {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { username: 'admin', password: 'secreto123', business: t.slug },
+  });
+  t.adminToken = res.json().data.accessToken;
+}
+
 async function existeSucursal(id: string): Promise<boolean> {
   const [r] = await db.select().from(schema.location).where(eq(schema.location.id, id));
   return !!r;
@@ -143,8 +178,25 @@ describe('eliminar una sucursal', () => {
 });
 
 describe('mover el cargo de sucursal principal', () => {
+  it('NO se puede hacer principal una sucursal sin administrador', async () => {
+    /*
+      Salió escribiendo el test de concurrencia, y es un callejón sin salida de verdad:
+      sólo un admin DE LA CENTRAL administra el negocio, así que mover el cargo a una
+      sucursal sin ninguno deja al negocio sin quien cree usuarios, abra sucursales, toque
+      la configuración… ni deshaga este mismo cambio. Sólo se sale llamando a soporte.
+    */
+    const huerfana = await crearSucursal('Sin nadie a cargo');
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/locations/${huerfana}/principal`,
+      headers: auth(t.adminToken),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe('sin_admin_en_destino');
+  });
+
   it('marca la nueva, desmarca la anterior y no deja dos', async () => {
-    const id = await crearSucursal('La nueva central');
+    const id = await crearSucursalConAdmin('La nueva central', 'admin.nueva');
     const res = await app.inject({
       method: 'PATCH',
       url: `/api/v1/locations/${id}/principal`,
@@ -280,5 +332,85 @@ describe('eliminar un usuario', () => {
       headers: auth(suyo),
     });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('mover el cargo, con su propio negocio', () => {
+  /**
+   * Negocio aparte, y no es pereza: mover el cargo de central **revoca las sesiones** y
+   * deja al admin original sin alcance sobre el negocio. Hacerlo sobre el negocio
+   * compartido rompía los tres casos siguientes por un motivo que no tenía nada que ver
+   * con lo que probaban. Es la tercera vez hoy que aparece la misma lección: **el test que
+   * muta estado compartido se trae el suyo.**
+   */
+  let otro: Tenant;
+  let sucursalA = '';
+  let sucursalB = '';
+
+  beforeAll(async () => {
+    otro = await createTenant(app, 'cargo-central');
+    for (const [nombre, usuario] of [
+      ['Candidata A', 'admin.a'],
+      ['Candidata B', 'admin.b'],
+    ] as const) {
+      const loc = await app.inject({
+        method: 'POST',
+        url: '/api/v1/locations',
+        headers: auth(otro.adminToken),
+        payload: { name: nombre },
+      });
+      const id = loc.json().data.id;
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/users',
+        headers: auth(otro.adminToken),
+        payload: {
+          name: `Admin de ${nombre}`,
+          username: usuario,
+          password: 'secreto123',
+          role: 'admin',
+          locationId: id,
+        },
+      });
+      if (nombre === 'Candidata A') sucursalA = id;
+      else sucursalB = id;
+    }
+  });
+
+  it('la BASE impide una segunda central, pase lo que pase por encima', async () => {
+    /*
+      Esto es lo concluyente, y por eso se prueba contra la base y no por el endpoint.
+
+      El handler desmarca y marca en la misma transacción, pero eso no basta contra dos
+      peticiones a la vez: las dos leen que hay una central, las dos la desmarcan y las dos
+      marcan la suya. A partir de ahí `isCentral` deja de significar nada — dos personas
+      mandarían en el mismo negocio.
+
+      Un test que llame al endpoint dos veces en paralelo pasa igual **con y sin** el
+      índice, porque no siempre consigue que las dos transacciones se solapen. Insertar la
+      segunda central a mano sí demuestra qué es lo que lo impide.
+    */
+    await expect(
+      db.insert(schema.location).values({
+        businessId: otro.businessId,
+        name: 'Central colada por la puerta de atrás',
+        isCentral: true,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('y dos cambios simultáneos por el endpoint dejan sólo una', async () => {
+    const pedir = (id: string) =>
+      app.inject({
+        method: 'PATCH',
+        url: `/api/v1/locations/${id}/principal`,
+        headers: auth(otro.adminToken),
+      });
+    await Promise.allSettled([pedir(sucursalA), pedir(sucursalB)]);
+
+    const centrales = (
+      await db.select().from(schema.location).where(eq(schema.location.businessId, otro.businessId))
+    ).filter((l) => l.isCentral);
+    expect(centrales, 'quedaron dos centrales').toHaveLength(1);
   });
 });

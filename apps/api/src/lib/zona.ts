@@ -10,3 +10,29 @@
  * Bolivia. El día que haya uno fuera, esto es el único sitio que hay que mirar.
  */
 export const TZ = 'America/La_Paz';
+
+/**
+ * El desfase de una zona en una fecha dada, como `-04:00`.
+ *
+ * Sirve para construir un instante a partir de una fecha SIN hora: `2026-08-09` no es un
+ * momento, es un día en algún sitio, y ese sitio es el negocio. Sin esto, `new Date()` lo
+ * interpreta en la zona del proceso —el contenedor corre en UTC— y un informe "del 1 al 9"
+ * sale corrido cuatro horas: pierde la última tarde y añade la anterior. Sale igual, sólo
+ * que mal, que es la peor forma de fallar porque nadie lo revisa.
+ *
+ * Se calcula con `Intl` para el día concreto, no con un número fijo: Bolivia no cambia de
+ * hora, pero el día que haya un negocio donde sí, un `-04:00` escrito a mano fallaría dos
+ * veces al año y nadie sabría por qué.
+ */
+export function desfaseDe(zona: string, fechaISO: string): string {
+  const base = new Date(`${fechaISO}T12:00:00Z`);
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: zona,
+    timeZoneName: 'longOffset',
+  });
+  const parte =
+    fmt.formatToParts(base).find((p) => p.type === 'timeZoneName')?.value ?? 'GMT+00:00';
+  // "GMT-04:00" -> "-04:00"; "GMT" (UTC) -> "+00:00"
+  const m = /GMT([+-]\d{2}:\d{2})/.exec(parte);
+  return m?.[1] ?? '+00:00';
+}

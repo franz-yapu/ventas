@@ -28,7 +28,12 @@ import { and, count, eq, ne } from 'drizzle-orm';
  * - `product`, `app_user`, `audit_log` → SET NULL. No se pierden, pero quedan huérfanos.
  *
  * **De un usuario:**
- * - `sale` y `cash_register` → RESTRICT. Bien.
+ * - `sale.user_id` y `cash_register.user_id` → RESTRICT. Bien.
+ * - `cash_register.closed_by` y `sale.cancelled_by` → **SET NULL**. Un turno cerrado sin
+ *   saber quién lo cerró, y una venta anulada sin saber quién la anuló. Precisamente las
+ *   dos acciones sobre las que un dueño querría preguntar. Y no las cubren los RESTRICT de
+ *   arriba, porque quien cierra un turno no suele ser quien lo abrió — que es justamente
+ *   el caso interesante.
  * - `customer_payment` y `cash_movement` → **SET NULL**. El abono o el retiro sobreviven
  *   pero **pierden quién los hizo**, que es justo el dato por el que existe el registro.
  * - `audit_log` → SET NULL. La bitácora se queda sin autor: es el único control contra el
@@ -120,11 +125,34 @@ export async function colgandoDeUsuario(businessId: string, userId: string): Pro
       .from(schema.auditLog)
       .where(eq(schema.auditLog.userId, userId));
 
+    /*
+      Los dos que faltaban, y son los que peor se pierden.
+
+      `cash_register.closed_by` y `sale.cancelled_by` cuelgan también en SET NULL, así que
+      un borrado físico dejaba turnos cerrados sin saber QUIÉN los cerró y ventas anuladas
+      sin saber QUIÉN las anuló. Justo esas dos: firmar un descuadre y anular una venta son
+      las dos acciones sobre las que un dueño querría preguntar, y el nombre es la respuesta.
+
+      No los cubrían los RESTRICT de `user_id` porque quien cierra un turno o anula una
+      venta no suele ser quien la abrió o la hizo — de hecho, ése es justamente el caso
+      interesante.
+    */
+    const [cerroTurnos] = await tx
+      .select({ n: count() })
+      .from(schema.cashRegister)
+      .where(eq(schema.cashRegister.closedBy, userId));
+
+    const [anulo] = await tx
+      .select({ n: count() })
+      .from(schema.sale)
+      .where(eq(schema.sale.cancelledBy, userId));
+
     const n = {
       ventas: ventas?.n ?? 0,
-      turnos: turnos?.n ?? 0,
+      turnos: (turnos?.n ?? 0) + (cerroTurnos?.n ?? 0),
       abonos: abonos?.n ?? 0,
       movimientos: movimientos?.n ?? 0,
+      anuladas: anulo?.n ?? 0,
       bitacora: bitacora?.n ?? 0,
     };
 
@@ -134,12 +162,13 @@ export async function colgandoDeUsuario(businessId: string, userId: string): Pro
     if (n.abonos) detalle.push(plural(n.abonos, 'abono cobrado', 'abonos cobrados'));
     if (n.movimientos)
       detalle.push(plural(n.movimientos, 'movimiento de caja', 'movimientos de caja'));
+    if (n.anuladas) detalle.push(plural(n.anuladas, 'venta anulada', 'ventas anuladas'));
     if (n.bitacora)
       detalle.push(plural(n.bitacora, 'acción en la bitácora', 'acciones en la bitácora'));
 
     return {
       detalle,
-      total: n.ventas + n.turnos + n.abonos + n.movimientos + n.bitacora,
+      total: n.ventas + n.turnos + n.abonos + n.movimientos + n.anuladas + n.bitacora,
     };
   });
 }

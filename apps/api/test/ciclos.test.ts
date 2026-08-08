@@ -37,18 +37,32 @@ describe('cotizar un ciclo', () => {
     expect(q.ahorro).toBe('2682.00');
   });
 
-  it('las cuentas cuadran solas: total + ahorro = sin descuento', () => {
-    // La comprobación que atrapa un redondeo torcido en cualquier ciclo y cualquier
-    // precio, sin tener que escribir a mano el resultado de cada combinación.
+  it('el descuento aplicado es EXACTAMENTE el que anuncia el ciclo', () => {
+    /*
+      La primera versión comprobaba que `total + ahorro === sinDescuento`, que es cierto
+      por construcción —`ahorro` se calcula restando— y por tanto no comprobaba nada.
+      Pasaba igual con cualquier descuento equivocado.
+
+      Esto sí muerde: contrasta el total contra la cuenta hecha por otro camino, precio
+      mensual × meses × (100−descuento)/100, y comprueba que el porcentaje que se cobra es
+      el que dice el catálogo. Si alguien cambia un descuento y se olvida del otro sitio,
+      aquí se ve.
+    */
     for (const ciclo of CICLOS) {
       for (const precio of ['149.00', '299.00', '599.00', '99.99', '0.01']) {
         const q = cotizar(precio, ciclo.meses);
-        expect(
-          (Number(q.total) + Number(q.ahorro)).toFixed(2),
-          `${precio} × ${ciclo.meses} meses`,
-        ).toBe(q.sinDescuento);
+        const bruto = Math.round(Number(precio) * 100) * ciclo.meses;
+        const esperado = (Math.round((bruto * (100 - ciclo.descuentoPct)) / 100) / 100).toFixed(2);
+        expect(q.total, `${precio} × ${ciclo.meses} meses`).toBe(esperado);
+        expect(q.descuentoPct).toBe(ciclo.descuentoPct);
       }
     }
+  });
+
+  it('el ahorro es la diferencia real, no un número decorativo', () => {
+    const q = cotizar('149.00', 60);
+    expect((Number(q.total) + Number(q.ahorro)).toFixed(2)).toBe(q.sinDescuento);
+    expect(Number(q.ahorro)).toBeGreaterThan(0);
   });
 
   it('un número de meses inventado cae al mensual, no revienta', () => {

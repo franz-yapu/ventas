@@ -103,6 +103,31 @@ export async function locationRoutes(app: FastifyInstance) {
         if (!nueva.isActive) return 'inactiva' as const;
         if (nueva.isCentral) return 'ya' as const;
 
+        /*
+          La nueva central necesita tener un ADMIN, o el negocio se queda sin dueño.
+
+          Salió escribiendo el test de concurrencia y es peor de lo que parece: sólo un
+          admin DE LA CENTRAL puede administrar el negocio, así que mover el cargo a una
+          sucursal donde no hay ninguno deja el negocio sin nadie que pueda crear usuarios,
+          abrir sucursales, tocar la configuración… **ni deshacer este mismo cambio**. Es un
+          callejón sin salida que sólo se abre llamando a soporte.
+
+          Es la misma familia que la guarda del "último administrador" de `users.ts`: no se
+          permite la acción que deja al negocio sin quien lo gobierne.
+        */
+        const [conAdmin] = await tx
+          .select({ n: count() })
+          .from(schema.appUser)
+          .where(
+            and(
+              eq(schema.appUser.businessId, businessId),
+              eq(schema.appUser.locationId, id),
+              eq(schema.appUser.role, 'admin'),
+              eq(schema.appUser.isActive, true),
+            ),
+          );
+        if ((conAdmin?.n ?? 0) === 0) return 'sin-admin' as const;
+
         const anteriores = await tx
           .select({ id: schema.location.id })
           .from(schema.location)
@@ -136,6 +161,16 @@ export async function locationRoutes(app: FastifyInstance) {
         return reply
           .code(400)
           .send({ data: null, error: 'No puedes hacer principal a una sucursal desactivada' });
+      }
+      if (resultado === 'sin-admin') {
+        return reply.code(409).send({
+          data: null,
+          error:
+            'Esa sucursal no tiene ningún administrador activo. Nombra a uno allí antes de ' +
+            'hacerla principal, o el negocio se quedaría sin quien lo administre — y sin ' +
+            'poder deshacerlo desde dentro.',
+          code: 'sin_admin_en_destino',
+        });
       }
       if (resultado === 'ya') {
         return reply.send({ data: { ok: true, sinCambios: true }, error: null });

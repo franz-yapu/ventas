@@ -54,17 +54,22 @@ describe('el foco de teclado', () => {
     expect(screen.getByRole('button').className).toContain('focus-visible:ring');
   });
 
-  it('un botón deshabilitado no se puede pulsar', async () => {
-    // `disabled:pointer-events-none` va junto a la opacidad: sin él, el elemento sigue
-    // recibiendo clics aunque se vea apagado.
-    let pulsado = false;
-    montar(
-      <Button disabled onClick={() => (pulsado = true)}>
-        Cobrar
-      </Button>,
-    );
-    await userEvent.click(screen.getByRole('button'), { pointerEventsCheck: 0 });
-    expect(pulsado).toBe(false);
+  it('un botón deshabilitado trae las DOS defensas, no sólo la nativa', () => {
+    /*
+      La primera versión de este test hacía clic con `pointerEventsCheck: 0` y comprobaba
+      que no se disparara el `onClick` — pero eso lo garantiza el atributo `disabled`
+      nativo del navegador, que no es lo que este test dice vigilar. Pasaba igual con la
+      clase quitada.
+      
+      Lo que hay que fijar es la CLASE, porque es lo que protege el caso que el atributo no
+      cubre: un elemento que se ve apagado pero sigue recibiendo el clic, que es lo que
+      pasa en cuanto alguien envuelve el botón en algo o lo cambia por un `<div>`.
+    */
+    montar(<Button disabled>Cobrar</Button>);
+    const boton = screen.getByRole('button');
+    expect(boton.className).toContain('disabled:pointer-events-none');
+    expect(boton.className).toContain('disabled:opacity-70');
+    expect(boton).toHaveProperty('disabled', true);
   });
 });
 

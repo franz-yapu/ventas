@@ -378,15 +378,6 @@ export async function productRoutes(app: FastifyInstance) {
         .object({
           rows: z.array(upsertProductSchema).max(1000),
           locationId: z.string().uuid().optional(),
-          /**
-           * Número de la primera fila de este lote EN EL ARCHIVO original.
-           *
-           * Un archivo de 5.000 productos se sube por lotes —una sola petición se pasa de
-           * cualquier tiempo de espera razonable—, así que sin esto el lote 7 informaría
-           * de un error "en la fila 3" y quien corrige, mirando su hoja de cálculo, no
-           * encontraría nada ahí.
-           */
-          desdeFila: z.number().int().min(1).optional(),
         })
         .safeParse(req.body);
       if (!body.success) return reply.code(400).send({ data: null, error: 'Filas invalidas' });
@@ -432,7 +423,12 @@ export async function productRoutes(app: FastifyInstance) {
 
       for (const [i, row] of body.data.rows.entries()) {
         const { locationId: _l, initialStock, minStock, ...productData } = row;
-        const fila = (body.data.desdeFila ?? 1) + i;
+        /*
+          Posición DENTRO DEL LOTE, base 1. La traducción a la fila del archivo la hace
+          quien envía: es el único que sabe qué filas se saltó por venir mal, y por tanto
+          el único que puede acertar. El servidor no puede inventarse esa correspondencia.
+        */
+        const fila = i + 1;
         try {
           await withTenant(user.businessId, async (tx) => {
             const sku = productData.sku ?? (await nextProductSku(tx, user.businessId));

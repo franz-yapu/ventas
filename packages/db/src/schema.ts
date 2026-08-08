@@ -209,7 +209,23 @@ export const location = pgTable(
     isCentral: boolean('is_central').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
   },
-  (t) => [index('location_business_idx').on(t.businessId)],
+  (t) => [
+    index('location_business_idx').on(t.businessId),
+    /**
+     * UNA sola central por negocio, garantizado por la base.
+     *
+     * El endpoint que mueve el cargo desmarca la anterior y marca la nueva en la misma
+     * transacción, pero eso no basta contra dos peticiones a la vez: las dos leen que hay
+     * una central, las dos la desmarcan, y las dos marcan la suya — el negocio termina con
+     * DOS, y a partir de ahí `isCentral` deja de significar nada. Un índice parcial único
+     * lo hace imposible sin depender de que nadie haga doble clic.
+     *
+     * Parcial (`where is_central`) porque las NO centrales son muchas por negocio.
+     */
+    uniqueIndex('location_una_central_uq')
+      .on(t.businessId)
+      .where(sql`${t.isCentral}`),
+  ],
 );
 
 export const appUser = pgTable(
