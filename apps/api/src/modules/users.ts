@@ -232,6 +232,12 @@ export async function userRoutes(app: FastifyInstance) {
         });
       }
 
+      // Un cuerpo vacío no es un error del servidor: es una petición sin nada dentro.
+      // Sin esto, `{}` reventaba con un 500 — y cada 500 manda un aviso por correo.
+      if (Object.keys(parsed.data).length === 0) {
+        return reply.code(400).send({ data: null, error: 'No hay nada que cambiar' });
+      }
+
       const patch: Record<string, unknown> = { ...parsed.data };
       if (parsed.data.password) {
         patch.passwordHash = await argon2.hash(parsed.data.password);

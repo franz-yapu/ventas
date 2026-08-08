@@ -137,10 +137,17 @@ export async function colgandoDeUsuario(businessId: string, userId: string): Pro
       venta no suele ser quien la abrió o la hizo — de hecho, ése es justamente el caso
       interesante.
     */
+    /*
+      Un turno que esta persona abrió Y cerró es UN turno, no dos.
+
+      Contar las dos columnas por separado y sumarlas decía "2 turnos de caja" donde había
+      uno — y el mensaje que devuelve esta función es lo único que le explica a alguien por
+      qué no puede borrar. Un número inflado hace dudar de todo el mensaje.
+    */
     const [cerroTurnos] = await tx
       .select({ n: count() })
       .from(schema.cashRegister)
-      .where(eq(schema.cashRegister.closedBy, userId));
+      .where(and(eq(schema.cashRegister.closedBy, userId), ne(schema.cashRegister.userId, userId)));
 
     const [anulo] = await tx
       .select({ n: count() })

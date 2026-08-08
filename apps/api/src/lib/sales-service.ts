@@ -83,11 +83,30 @@ export async function persistSale(
     }
   }
 
+  /*
+    La sucursal tiene que ser de este negocio Y estar ACTIVA.
+
+    Faltaba lo segundo, y hacía falso lo que el sistema promete al desactivar: "deja de
+    usarse y su historial se conserva". No dejaba de usarse — el vendedor asignado seguía
+    entrando y grabando ventas con normalidad en un local que el dueño creía cerrado. Y
+    peor: `POST /cash/open` SÍ rechaza una sucursal inactiva, así que ese efectivo no
+    tenía ningún turno al que colgarse. Ventas reales, dinero real, y ni arqueo ni
+    descuadre que lo delatara.
+
+    Se responde con el mismo error de alcance a propósito: para quien está en el mostrador,
+    "aquí no se puede vender" es la misma respuesta, y afinar el mensaje aquí obligaría a
+    tocar `errorDeVenta` y la cola offline por un caso que dura lo que tarda alguien en
+    llamar al dueño.
+  */
   const [loc] = await tx
     .select({ id: schema.location.id })
     .from(schema.location)
     .where(
-      and(eq(schema.location.id, input.locationId), eq(schema.location.businessId, ctx.businessId)),
+      and(
+        eq(schema.location.id, input.locationId),
+        eq(schema.location.businessId, ctx.businessId),
+        eq(schema.location.isActive, true),
+      ),
     )
     .limit(1);
   if (!loc) throw new Error('LOCATION_SCOPE');

@@ -50,6 +50,54 @@ export async function locationRoutes(app: FastifyInstance) {
         .partial()
         .safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ data: null, error: 'Datos invalidos' });
+      if (Object.keys(parsed.data).length === 0) {
+        return reply.code(400).send({ data: null, error: 'No hay nada que cambiar' });
+      }
+
+      /*
+        Desactivar tiene las MISMAS guardas que eliminar.
+
+        `DELETE` se negaba a tocar la central y a dejar el negocio sin ninguna sucursal
+        activa, pero este `PATCH` genérico rodeaba las dos: `{"isActive": false}` sobre la
+        central respondía 200 tan campante, y después ni su propio admin podía abrir caja.
+        Ocho puertas cerradas y una abierta dan el mismo resultado que ninguna cerrada.
+      */
+      if (parsed.data.isActive === false) {
+        const businessId = req.authUser!.businessId;
+        const [actual] = await withTenant(businessId, (tx) =>
+          tx
+            .select()
+            .from(schema.location)
+            .where(and(eq(schema.location.id, id), eq(schema.location.businessId, businessId)))
+            .limit(1),
+        );
+        if (!actual) return reply.code(404).send({ data: null, error: 'Ubicacion no encontrada' });
+
+        if (actual.isCentral) {
+          return reply.code(409).send({
+            data: null,
+            error:
+              'Es la sucursal principal. Nombra principal a otra antes de desactivarla, o el ' +
+              'negocio se queda sin quien lo administre.',
+            code: 'es_principal',
+          });
+        }
+        const [activas] = await withTenant(businessId, (tx) =>
+          tx
+            .select({ n: count() })
+            .from(schema.location)
+            .where(
+              and(eq(schema.location.businessId, businessId), eq(schema.location.isActive, true)),
+            ),
+        );
+        if ((activas?.n ?? 0) <= 1) {
+          return reply.code(409).send({
+            data: null,
+            error: 'Es la única sucursal activa: sin ella no se puede vender.',
+          });
+        }
+      }
+
       const [row] = await withTenant(req.authUser!.businessId, (tx) =>
         tx
           .update(schema.location)

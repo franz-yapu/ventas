@@ -157,6 +157,23 @@ async function registrar(
   });
 }
 
+/**
+ * Cuántos meses de calendario han pasado enteros entre dos fechas.
+ *
+ * Se cuenta con el calendario y no con una media de días porque es lo que se puede
+ * explicar por teléfono: "contrataste el 7 de agosto, hoy es 7 de agosto de dos años
+ * después, llevas 24 meses". Con 30,44 días el segundo aniversario da 23,96 y el cliente
+ * recibe una cuenta que no cuadra con el ejemplo que leyó al firmar.
+ */
+export function mesesCumplidos(desde: Date, hasta: Date): number {
+  let n = (hasta.getFullYear() - desde.getFullYear()) * 12 + (hasta.getMonth() - desde.getMonth());
+  // Aún no se ha llegado al día del mes: ese mes no está cumplido.
+  const diaDestino = new Date(desde);
+  diaDestino.setMonth(desde.getMonth() + n);
+  if (diaDestino.getTime() > hasta.getTime()) n -= 1;
+  return Math.max(0, n);
+}
+
 export async function platformRoutes(app: FastifyInstance) {
   // ── Sesión ───────────────────────────────────────────────────
 
@@ -994,7 +1011,20 @@ export async function platformRoutes(app: FastifyInstance) {
         return reply.send({ data: null, error: null });
       }
 
-      const meses = (Date.now() - sub.cycleStartedAt.getTime()) / (30.44 * 24 * 60 * 60 * 1000);
+      /*
+        Meses de CALENDARIO cumplidos, no días entre 30,44.
+
+        Dividir por la media daba 23,96 en el segundo aniversario exacto, que al redondear
+        hacia abajo son 23: un mes de menos, 52 Bs de más devueltos, y —peor— una cuenta
+        que contradice el ejemplo que se le enseñó al cliente al firmar ("te vas a los 2
+        años, quedan 3"). Discutir eso con alguien que ya se está yendo es exactamente lo
+        que la regla venía a evitar.
+
+        Un mes se cumple cuando llega el MISMO DÍA del mes siguiente. Si ese día no existe
+        —el 31 en un mes de 30— cuenta el último del mes, que es lo que hace cualquiera con
+        un calendario delante.
+      */
+      const meses = mesesCumplidos(sub.cycleStartedAt, new Date());
       const d = calcularDevolucion(sub.billedAmount, sub.billingMonths, meses);
 
       return reply.send({
@@ -1009,9 +1039,14 @@ export async function platformRoutes(app: FastifyInstance) {
     },
   );
 
+  /** El plan y la suspensión son decisiones comerciales: del principal, con su motivo. */
+  const soloPrincipalComercial = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!(await esPrincipal(req, reply, 'cambiar el plan o suspender a un cliente'))) return reply;
+  };
+
   app.patch(
     '/platform/tenants/:id/subscription',
-    { preHandler: [app.requirePlatform, soloPrincipal] },
+    { preHandler: [app.requirePlatform, soloPrincipalComercial] },
     async (req, reply) => {
       const { id } = req.params as { id: string };
       const parsed = updateSubBody.safeParse(req.body);

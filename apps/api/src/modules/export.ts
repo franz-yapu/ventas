@@ -255,9 +255,38 @@ export async function exportRoutes(app: FastifyInstance) {
        * un día entero de ventas sin que nadie lo notara — el informe saldría, sólo que
        * mal, que es la peor forma de fallar.
        */
+      /*
+        Validar la fecha de verdad, porque `new Date` es demasiado amable.
+
+        Dos trampas que dejaban pasar basura como si fuera una fecha:
+
+        - `2026-02-30` **no falla**: JavaScript la RUEDA al 2 de marzo. Alguien pide hasta
+          fin de febrero y recibe marzo, sin ningún aviso.
+        - `01-08-2026` tampoco: lo interpreta como el 8 de ENERO. Quien escribe la fecha al
+          modo de aquí (día-mes-año) recibe un informe de otro mes y no tiene forma de
+          saberlo.
+
+        Por eso se comprueba que los números vuelvan a salir iguales: si el mes o el día
+        cambiaron al construir la fecha, es que no existía.
+      */
       const soloFecha = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+      const existeDeVerdad = (v: string): boolean => {
+        const [a, m, d] = v.split('-').map(Number) as [number, number, number];
+        const prueba = new Date(Date.UTC(a, m - 1, d));
+        return (
+          prueba.getUTCFullYear() === a &&
+          prueba.getUTCMonth() === m - 1 &&
+          prueba.getUTCDate() === d
+        );
+      };
       const aFecha = (v: string | undefined, finDelDia: boolean): Date | null => {
         if (!v) return null;
+        // O es una fecha pelada válida, o es un instante ISO completo. Nada más.
+        if (soloFecha(v)) {
+          if (!existeDeVerdad(v)) return null;
+        } else if (!/^\d{4}-\d{2}-\d{2}T/.test(v)) {
+          return null;
+        }
         /*
           Una fecha pelada se interpreta en la zona del NEGOCIO, no en la del servidor.
 
@@ -277,6 +306,22 @@ export async function exportRoutes(app: FastifyInstance) {
       };
       const desde = aFecha(q.data.from, false);
       const hasta = aFecha(q.data.to, true);
+
+      /*
+        Una fecha que no se entiende se RECHAZA, no se ignora.
+
+        `aFecha` devolvía `null` tanto para "no vino" como para "no se entiende", así que
+        `?from=2026-02-30` o `?from=01-08-2026` daban 200 con el informe COMPLETO. Alguien
+        pide las ventas de una semana, recibe las de dos años y no tiene forma de notarlo:
+        el archivo llega, sólo que con todo dentro. Fallar en silencio con datos es peor
+        que fallar ruidosamente.
+      */
+      if ((q.data.from && !desde) || (q.data.to && !hasta)) {
+        return reply.code(400).send({
+          data: null,
+          error: 'Esa fecha no se entiende. Usa el formato 2026-08-09.',
+        });
+      }
 
       const filas = await withTenant(businessId, async (tx) => {
         switch (seccion) {

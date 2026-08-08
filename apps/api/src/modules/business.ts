@@ -110,6 +110,13 @@ export async function businessRoutes(app: FastifyInstance) {
         .where(eq(schema.business.id, businessId))
         .limit(1);
 
+      // Un cuerpo vacío no es un error del servidor: es una petición sin nada dentro. Sin
+      // esto, `{}` producía un UPDATE sin columnas y reventaba con un 500 — que además
+      // manda un aviso por correo a operación.
+      if (Object.keys(parsed.data).length === 0) {
+        return reply.code(400).send({ data: null, error: 'No hay nada que cambiar' });
+      }
+
       const patch: Record<string, unknown> = {};
       const d = parsed.data;
       if (d.name !== undefined) patch.name = d.name;

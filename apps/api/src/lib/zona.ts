@@ -26,6 +26,17 @@ export const TZ = 'America/La_Paz';
  */
 export function desfaseDe(zona: string, fechaISO: string): string {
   const base = new Date(`${fechaISO}T12:00:00Z`);
+  /*
+    Una fecha imposible (`2026-08-32`, `2026-13-01`) casa el patrón `AAAA-MM-DD` pero da
+    un `Invalid Date`, y `Intl.formatToParts` lanza `RangeError` con él. Sin esta guarda,
+    `?from=2026-08-32` reventaba con un 500 — y cada 500 escribe "error no controlado" en
+    el log Y manda un aviso por correo, así que bastaba un rastreador probando URLs para
+    llenar el buzón de operación con avisos de algo que no está roto.
+
+    Se devuelve UTC y quien llama decide qué hacer: aquí la fecha ya no vale, y el valor
+    devuelto no se llega a usar.
+  */
+  if (Number.isNaN(base.getTime())) return '+00:00';
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: zona,
     timeZoneName: 'longOffset',
