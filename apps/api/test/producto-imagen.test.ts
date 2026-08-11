@@ -244,3 +244,54 @@ describe('la ruta pública no es una puerta al disco', () => {
     expect(res.statusCode).toBeGreaterThanOrEqual(400);
   });
 });
+
+/**
+ * Las fotos no pueden gastar el cupo con el que se cobra.
+ *
+ * El tope global por IP se dimensionó cuando este servicio «sólo respondía JSON, nunca
+ * HTML»: 600 peticiones por minuto son muchísimas para un puñado de cajas llamando al API.
+ * Dejaron de serlo el día que empezó a servir imágenes, porque una tienda entera sale por
+ * UNA IP y una rejilla de POS pide una foto por producto.
+ *
+ * El desenlace es el peor posible: el cupo se gasta mirando fotos y el `POST /sales`
+ * siguiente vuelve con un 429 — el cajero no puede cobrarle al cliente que tiene delante,
+ * y como los 429 de las fotos se ven como imágenes rotas, nada en pantalla lo explica.
+ */
+describe('el cupo de las fotos va aparte del cupo del API', () => {
+  /** Lo que le queda al cubo del API, leído de la cabecera de una petición cualquiera. */
+  const restanteDelApi = async (): Promise<number> => {
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    return Number(res.headers['x-ratelimit-remaining']);
+  };
+
+  it('pedir imágenes no le quita cupo al cobro', async () => {
+    const antes = await restanteDelApi();
+
+    // Veinte miniaturas, lo que carga una sola pantalla del POS.
+    for (let i = 0; i < 20; i++) {
+      await app.inject({ method: 'GET', url: `/media/no-existe-${i}.webp` });
+    }
+
+    const despues = await restanteDelApi();
+    /*
+      Entre las dos lecturas sólo han pasado las dos peticiones a `/health`, así que el
+      cubo del API tiene que haber bajado exactamente 1 (la primera lectura ya se contó a
+      sí misma). Si las fotos compartieran cubo, habrían bajado 21.
+    */
+    expect(antes - despues, 'las imágenes están gastando el cupo del API').toBe(1);
+  });
+
+  it('las fotos siguen teniendo SU tope, no barra libre', async () => {
+    // Quitarles el límite del todo dejaría una puerta sin contador en el único sitio que
+    // sirve archivos. Lo que se quiere es un cubo aparte, no ninguno.
+    //
+    // Se mide sobre una foto que EXISTE: un 404 lo resuelve el manejador global, que vive
+    // fuera de este ámbito y no pasa por su tope.
+    const url = (await subir(t.productId, webp())).json().data.imageUrl as string;
+    const res = await app.inject({ method: 'GET', url });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.headers['x-ratelimit-limit'], '/media quedó sin ningún tope').toBeDefined();
+    // Y su cubo es el suyo: diez veces el del API, no el mismo número.
+    expect(Number(res.headers['x-ratelimit-limit'])).toBeGreaterThan(600);
+  });
+});

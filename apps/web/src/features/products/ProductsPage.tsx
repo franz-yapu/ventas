@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { History, Package, Pencil, Plus, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Exportar } from '@/components/Exportar';
 import { FotoDeProducto, Miniatura } from '@/features/products/FotoDeProducto';
@@ -339,6 +339,18 @@ function ProductForm({
   const margin = Number(form.price || 0) - Number(form.cost || 0);
   const marginPct = Number(form.price) > 0 ? (margin / Number(form.price)) * 100 : 0;
 
+  /**
+   * Lo que YA se creó en un intento anterior de este mismo formulario.
+   *
+   * Guardar son dos peticiones —el producto y su foto— y sólo la segunda puede fallar
+   * dejando la primera hecha. Sin esta referencia, pulsar Guardar otra vez volvía a hacer
+   * el POST: como el SKU se genera solo cuando se deja vacío, no hay ningún 409 que lo
+   * detenga y la tienda acababa con **dos productos idénticos** —y dos filas de
+   * inventario— contando los dos contra el cupo del plan. Con esto, el segundo intento
+   * corrige el que ya existe en vez de crear otro.
+   */
+  const yaCreado = useRef<Product | null>(null);
+
   const save = useMutation({
     mutationFn: async () => {
       const base = {
@@ -349,14 +361,19 @@ function ProductForm({
         costWholesale: form.costWholesale || null,
         attributes: form.attributes,
       };
-      const guardado = product
-        ? await api.patch<Product>(`/products/${product.id}`, base)
+      // Editando, o reintentando algo que ya se creó: en los dos casos se corrige, no se
+      // crea. Va con los datos del formulario de AHORA, por si se cambió algo antes de
+      // volver a pulsar Guardar.
+      const existente = product ?? yaCreado.current;
+      const guardado = existente
+        ? await api.patch<Product>(`/products/${existente.id}`, base)
         : await api.post<Product>('/products', {
             ...base,
             locationId: form.locationId || undefined,
             initialStock: form.initialStock ? Number(form.initialStock) : 0,
             minStock: form.minStock ? Number(form.minStock) : null,
           });
+      if (!product) yaCreado.current = guardado;
 
       /*
         La foto va DESPUÉS y en su propia petición, no dentro del formulario.
@@ -367,14 +384,26 @@ function ProductForm({
         un fallo de red con la foto tiraría también el nombre y el precio.
       */
       if (foto) {
-        await api.postBinary(`/products/${guardado.id}/image`, foto.blob);
+        try {
+          await api.postBinary(`/products/${guardado.id}/image`, foto.blob);
+        } catch (e) {
+          /*
+            Que el mensaje diga lo que de verdad pasó.
+
+            Con «Error al guardar» a secas, quien lo lee entiende que no se guardó nada y
+            vuelve a intentarlo creyendo que empieza de cero. El producto está guardado; lo
+            único que falta es la foto.
+          */
+          const causa = e instanceof ApiError ? e.message : 'no se pudo subir';
+          throw new Error(`El producto se guardó, pero la foto ${causa}. Vuelve a intentarlo.`);
+        }
       } else if (quitarFoto && product?.imageUrl) {
         await api.del(`/products/${product.id}/image`);
       }
       return guardado;
     },
     onSuccess: onSaved,
-    onError: (e) => setError(e instanceof ApiError ? e.message : 'Error al guardar'),
+    onError: (e) => setError(e instanceof ApiError ? e.message : (e as Error).message),
   });
 
   return (

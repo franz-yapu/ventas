@@ -90,17 +90,38 @@ que sólo se descubren la segunda vez que se despliega.
 `product.image_url` guarda la **ruta**, no el archivo. Restaurar sólo el volcado de
 Postgres dejaría cada producto apuntando a una foto que no existe.
 
-`scripts/backup.sh` saca desde hoy un `media-<fecha>.tar.gz` junto al `.dump`, leyendo el
-volumen desde el contenedor del API. Dos cosas que comprobar la primera vez:
+`scripts/backup.sh` saca un `media-<fecha>.tar.gz` junto al `.dump`, leyendo el volumen
+desde el contenedor del API.
 
-- Que el nombre del contenedor coincide. Por defecto busca `vf-api`; si el tuyo se llama
-  de otro modo, `API_CONTAINER=<nombre> ./scripts/backup.sh …`.
+> **Corregido el 11 de agosto tras la revisión.** Tal como estaba escrito, este paso **no
+> se ejecutaba nunca**: buscaba un contenedor llamado `vf-api`, que el `docker-compose.yml`
+> de producción no crea —no fija `container_name`, así que Docker lo llama
+> `<carpeta-del-stack>-api-1`—, se iba por la rama de «no hay contenedor» y **terminaba con
+> código 0**. Un cron normal (`0 3 * * * …`) sólo manda correo cuando el código no es cero,
+> así que habría informado de un respaldo limpio cada noche con las fotos sin copiar. Y como
+> el `tar` de un directorio vacío también sale con 0, un volumen sin montar producía un
+> archivo de 45 bytes anunciado como OK que además **disparaba la rotación** y se llevaba por
+> delante los respaldos buenos anteriores.
+
+Ahora el contenedor **se descubre** por la etiqueta de compose, el archivo se verifica
+contando las fotos dentro contra las que hay en el volumen, y **no se rota nada** si el
+respaldo de fotos no salió bien. Códigos de salida:
+
+| Código | Significa                                                |
+| ------ | -------------------------------------------------------- |
+| `0`    | Base y fotos respaldadas.                                |
+| `1`    | **No hay respaldo**: el volcado de la base falló.        |
+| `2`    | La base está a salvo, **las fotos no**. Hay que mirarlo. |
+
+- Si conviven varios stacks (staging y producción), el script **se planta** en vez de elegir:
+  `API_CONTAINER=<nombre> ./scripts/backup.sh …`. Respaldar el stack equivocado es peor que
+  no respaldar, porque el archivo existe y pesa.
+- En una instalación sin fotos, `SIN_FOTOS=1` silencia el código 2.
 - Que el `.tar.gz` **se copia fuera del servidor** igual que el `.dump`. Un respaldo en el
   mismo disco no protege del caso más probable, que es perder el disco.
 
-Si el paso de fotos falla, el script avisa por `stderr` y **sigue**: la base se respalda
-igual. Esa prioridad es deliberada, pero significa que un aviso ignorado deja las fotos sin
-copia sin que nada más lo diga.
+Probado en local contra contenedores de prueba en los cuatro casos: con fotos, con el
+volumen vacío, sin contenedor de API y con dos a la vez.
 
 ### Lo que NO hace falta
 

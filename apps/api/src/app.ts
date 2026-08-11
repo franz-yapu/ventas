@@ -83,10 +83,25 @@ export async function buildApp(
     credentials: true,
   });
 
-  // Tope global por IP. Los límites finos van por ruta (ver /auth/login).
+  /*
+    Tope global por IP. Los límites finos van por ruta (ver /auth/login).
+
+    `/media` queda FUERA de este cubo y tiene el suyo, más abajo. El motivo: estas 600 por
+    minuto se dimensionaron cuando este servicio «sólo respondía JSON, nunca HTML», y una
+    tienda entera —las tabletas y la caja— sale por UNA sola IP. Desde que se sirven fotos,
+    una rejilla de POS pide una imagen por producto y un admin navegando el catálogo
+    recién fotografiado dispara cientos: el cupo se gastaba mirando fotos y el `POST /sales`
+    siguiente volvía con un 429. O sea, el cajero sin poder cobrar por culpa de unas
+    miniaturas — y como los 429 de las imágenes se ven como fotos rotas, nada en pantalla
+    lo explicaba.
+  */
   await app.register(rateLimit, {
     max: env.rateLimitMax,
     timeWindow: env.rateLimitWindow,
+    allowList: (req) => {
+      const url = req.raw.url ?? '';
+      return url === '/media' || url.startsWith('/media/');
+    },
     // Mensaje en el formato { data, error } que usa el resto del API.
     errorResponseBuilder: (_req, context) => ({
       statusCode: 429,
@@ -188,6 +203,28 @@ export async function buildApp(
    *   el navegador quiera interpretar, que no pueda cargar ni ejecutar nada.
    */
   await app.register(async (media) => {
+    /*
+      Su propio cubo, no barra libre.
+
+      Quedan fuera del tope global (ver `allowList` arriba) porque no pueden competir con
+      el cobro, pero dejarlas sin ningún contador abriría la única puerta del servicio que
+      sirve archivos. Se les da diez veces el cupo del API: sobra para la ráfaga real —una
+      pantalla de POS son ~24 miniaturas, y el `immutable` de abajo hace que sólo se pidan
+      la primera vez— y sigue habiendo un techo.
+    */
+    media.addHook(
+      'onRequest',
+      app.rateLimit({
+        max: env.rateLimitMax * 10,
+        timeWindow: env.rateLimitWindow,
+        // `allowList: () => false` no es redundante: un limitador creado con
+        // `app.rateLimit()` HEREDA las opciones globales, incluida la lista de exenciones
+        // — que es justo la que deja fuera a `/media`. Sin esta línea, este tope se
+        // eximía a sí mismo y las fotos se quedaban sin ningún contador.
+        allowList: () => false,
+      }),
+    );
+
     /*
       La CSP va en un hook y no en `setHeaders` del plugin: esa opción está tipada como si
       recibiera un `FastifyReply` cuando en tiempo de ejecución recibe la respuesta cruda de

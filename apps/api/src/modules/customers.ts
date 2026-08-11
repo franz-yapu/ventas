@@ -3,6 +3,7 @@ import { patchCustomerSchema, upsertCustomerSchema } from '@ventafacil/shared';
 import { and, count, desc, eq, max, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { colgandoDeComprador, mensajeDesactivado } from '../lib/borrado.js';
+import { filtroDeUbicacion } from '../lib/scope.js';
 
 /**
  * Compradores: a quién se le vendió.
@@ -24,9 +25,21 @@ import { colgandoDeComprador, mensajeDesactivado } from '../lib/borrado.js';
  * **Editar y eliminar: sólo administrador.** Son las dos que pueden hacer daño a un
  * registro que ya está enlazado desde ventas cerradas.
  *
- * **Sin alcance por sucursal**, porque la tabla no tiene ubicación: un comprador es del
- * negocio. Quien compró en Norte puede volver por la Central, y obligarle a estar dado de
- * alta dos veces daría dos historiales de la misma persona.
+ * **El COMPRADOR no tiene alcance por sucursal**, porque la tabla no tiene ubicación: un
+ * comprador es del negocio. Quien compró en Norte puede volver por la Central, y obligarle
+ * a estar dado de alta dos veces daría dos historiales de la misma persona.
+ *
+ * **Sus COMPRAS sí lo tienen.** Una venta ocurre en una sucursal, y ahí manda la misma
+ * regla que en `GET /sales`: un vendedor vende donde está, no supervisa a nadie. Por eso
+ * cada consulta que toca `sale` lleva `filtroDeUbicacion`.
+ *
+ * ⚠️ Esa separación se perdió al quitar el fiado, y conviene entender cómo para no
+ * repetirlo. Aquí había una excepción al alcance escrita a propósito y justificada por
+ * escrito —«lo que se fía se le fía AL NEGOCIO, no a una sucursal»—, pero quien la
+ * sostenía de verdad era el `payment_method = 'credit'` de la consulta: sin él, la
+ * excepción dejó de proteger nada y cualquier vendedor pudo leer el historial de ventas de
+ * las demás sucursales. **Un comentario que justifica una excepción deja de justificarla
+ * cuando cambia lo que hay debajo**, y el comentario no se entera.
  */
 export async function customerRoutes(app: FastifyInstance) {
   /**
@@ -41,7 +54,8 @@ export async function customerRoutes(app: FastifyInstance) {
    * los filtra, porque ahí lo que se ofrece es a quién vender hoy.
    */
   app.get('/customers', { preHandler: app.requireAuth }, async (req, reply) => {
-    const businessId = req.authUser!.businessId;
+    const user = req.authUser!;
+    const businessId = user.businessId;
     const rows = await withTenant(businessId, (tx) =>
       tx
         .select({
@@ -54,7 +68,21 @@ export async function customerRoutes(app: FastifyInstance) {
           ultimaCompra: max(schema.sale.clientCreatedAt),
         })
         .from(schema.customer)
-        .leftJoin(schema.sale, eq(schema.sale.customerId, schema.customer.id))
+        /*
+          El alcance va en el ON del JOIN, no en el WHERE.
+
+          En el WHERE se llevaría por delante el LEFT: los compradores que no han comprado
+          nunca en mi sucursal desaparecerían de la lista, y quien acaba de dar de alta a
+          uno pensaría que no se guardó. En el ON, siguen saliendo — con la cuenta en cero,
+          que es la verdad desde donde se mira.
+        */
+        .leftJoin(
+          schema.sale,
+          and(
+            eq(schema.sale.customerId, schema.customer.id),
+            filtroDeUbicacion(user, schema.sale.locationId),
+          ),
+        )
         .where(eq(schema.customer.businessId, businessId))
         .groupBy(schema.customer.id)
         .orderBy(schema.customer.name),
@@ -89,7 +117,12 @@ export async function customerRoutes(app: FastifyInstance) {
    */
   app.get('/customers/:id', { preHandler: app.requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const businessId = req.authUser!.businessId;
+    const user = req.authUser!;
+    const businessId = user.businessId;
+    // Una sola vez, para las dos consultas de ventas: si el historial se filtra y el total
+    // no, la puerta queda cerrada y la ventana abierta — el total es un número, pero dice
+    // cuánto factura la otra sucursal con ese cliente.
+    const alcance = filtroDeUbicacion(user, schema.sale.locationId);
 
     // Las dos consultas en la MISMA transacción: una foto coherente del comprador y de
     // sus compras, y una sola ida y vuelta de BEGIN/COMMIT.
@@ -113,7 +146,7 @@ export async function customerRoutes(app: FastifyInstance) {
         })
         .from(schema.sale)
         .leftJoin(schema.location, eq(schema.location.id, schema.sale.locationId))
-        .where(and(eq(schema.sale.customerId, id), eq(schema.sale.businessId, businessId)))
+        .where(and(eq(schema.sale.customerId, id), eq(schema.sale.businessId, businessId), alcance))
         .orderBy(desc(schema.sale.clientCreatedAt))
         .limit(50);
 
@@ -130,6 +163,7 @@ export async function customerRoutes(app: FastifyInstance) {
             eq(schema.sale.customerId, id),
             eq(schema.sale.businessId, businessId),
             eq(schema.sale.status, 'completed'),
+            alcance,
           ),
         );
 

@@ -301,3 +301,79 @@ describe('el alta rápida del mostrador', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+/**
+ * El alcance por sucursal del HISTORIAL.
+ *
+ * El comprador es del negocio —quien compró en Norte puede volver por la Central— y por eso
+ * esta pantalla no filtra por ubicación. Pero sus COMPRAS sí son de una sucursal, y ahí
+ * manda la misma regla que en `GET /sales`: un vendedor vende donde está, no supervisa a
+ * nadie.
+ *
+ * Esto se rompió al quitar el fiado, y de la peor manera: la excepción al alcance estaba
+ * escrita a propósito y justificada por escrito («lo que se fía se le fía AL NEGOCIO»),
+ * pero quien la sostenía era el filtro `payment_method = 'credit'`. Al irse el fiado se fue
+ * el filtro y **se quedó la excepción**, ya sin nada que la justificara. La lección: un
+ * comentario que justifica una excepción deja de justificarla cuando cambia lo que hay
+ * debajo.
+ */
+describe('el historial no cruza sucursales', () => {
+  let norteToken = '';
+  let compradorId = '';
+
+  beforeAll(async () => {
+    const [norte] = await db
+      .insert(schema.location)
+      .values({ businessId: t.businessId, name: 'Norte', isCentral: false })
+      .returning();
+
+    await db.insert(schema.appUser).values({
+      businessId: t.businessId,
+      locationId: norte!.id,
+      name: 'Vendedor del Norte',
+      username: 'vendedor.norte',
+      passwordHash: await argon2.hash('secreto123'),
+      role: 'seller',
+    });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { username: 'vendedor.norte', password: 'secreto123', business: 'compradores-a' },
+    });
+    norteToken = login.json().data.accessToken;
+
+    // Un comprador con DOS ventas en la Central y ninguna en Norte.
+    compradorId = await crearComprador('Cliente de la Central');
+    await venderle(compradorId, '500.00', 9001);
+    await venderle(compradorId, '300.00', 9002);
+  });
+
+  it('el vendedor de otra sucursal no ve las compras hechas en la Central', async () => {
+    const res = await detalle(compradorId, norteToken);
+    expect(res.statusCode, res.body).toBe(200);
+    const d = res.json().data;
+    // El comprador SÍ se ve —es del negocio, y lo necesita para venderle hoy—, pero su
+    // historial de otra sucursal no.
+    expect(d.name).toBe('Cliente de la Central');
+    expect(d.compras, 'se filtraron ventas de otra sucursal').toHaveLength(0);
+  });
+
+  it('tampoco se le escapa por el total gastado', async () => {
+    // El total es un solo número, pero dice cuánto factura la otra sucursal con ese
+    // cliente. Filtrar la lista y dejar la suma sería cerrar la puerta y abrir la ventana.
+    const d = (await detalle(compradorId, norteToken)).json().data;
+    expect(Number(d.totalGastado), 'el total delata las ventas de otra sucursal').toBe(0);
+  });
+
+  it('ni por la cuenta de compras de la lista', async () => {
+    const fila = (await lista(norteToken)).find((c: any) => c.id === compradorId);
+    expect(fila, 'el comprador desapareció de la lista').toBeTruthy();
+    expect(fila.compras, 'la cuenta incluye ventas de otra sucursal').toBe(0);
+  });
+
+  it('el admin de la central sigue viéndolo todo', async () => {
+    const d = (await detalle(compradorId)).json().data;
+    expect(d.compras).toHaveLength(2);
+    expect(Number(d.totalGastado)).toBe(800);
+  });
+});
