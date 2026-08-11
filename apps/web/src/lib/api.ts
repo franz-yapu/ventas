@@ -1,6 +1,24 @@
 import { API_PREFIX } from '@ventafacil/shared';
 
-const BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000') + API_PREFIX;
+const ORIGEN_API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const BASE = ORIGEN_API + API_PREFIX;
+
+/**
+ * La URL completa de una foto de producto.
+ *
+ * `product.imageUrl` se guarda como ruta relativa —`/media/<negocio>/<uuid>.webp`— porque
+ * es lo que el servidor sabe de sí mismo, y porque así el día que las fotos se muden a otro
+ * sitio no hay que reescribir una columna entera.
+ *
+ * Pero un `<img src="/media/…">` se resuelve contra el origen de la WEB, que no es el del
+ * API: en producción son dominios distintos, y en local son puertos distintos. Sin esto,
+ * todas las fotos son un icono roto — y encima sólo en el navegador, así que ningún test
+ * de servidor lo vería.
+ */
+export function urlDeMedia(ruta: string | null | undefined): string | undefined {
+  if (!ruta) return undefined;
+  return /^https?:\/\//.test(ruta) ? ruta : ORIGEN_API + ruta;
+}
 
 const ACCESS_KEY = 'vf_access';
 const REFRESH_KEY = 'vf_refresh';
@@ -53,9 +71,16 @@ async function desenvolver<T>(res: Response): Promise<T> {
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
-  // Sólo con cuerpo: Fastify rechaza con 400 una petición que declara JSON y llega
-  // vacía. Pasaba en los POST sin datos ("cerrar en todos", "reenviar correo").
-  if (init.body !== undefined) headers.set('Content-Type', 'application/json');
+  /*
+    Sólo con cuerpo, y sólo si nadie puso ya el tipo. Lo primero porque Fastify rechaza con
+    400 una petición que declara JSON y llega vacía (pasaba en los POST sin datos: "cerrar
+    en todos", "reenviar correo"). Lo segundo por las fotos de producto, que viajan como
+    bytes con su propio `Content-Type`: sin la comprobación, esto lo pisaría con
+    `application/json` y el servidor no sabría ni cómo leerlas.
+  */
+  if (init.body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (tokens.access) headers.set('Authorization', `Bearer ${tokens.access}`);
 
   const res = await fetch(BASE + path, { ...init, headers });
@@ -133,4 +158,14 @@ export const api = {
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /**
+   * Subir bytes en crudo: hoy, la foto de un producto.
+   *
+   * Va por `request` y no por un `fetch` suelto para heredar lo que ya está resuelto ahí:
+   * la cabecera de sesión y el reintento con el token refrescado. Subir una foto por una
+   * conexión de tienda tarda, y es justo cuando más probable es que el token caduque en
+   * medio — con un `fetch` aparte, eso sería un error inexplicable después de esperar.
+   */
+  postBinary: <T>(path: string, blob: Blob) =>
+    request<T>(path, { method: 'POST', body: blob, headers: { 'Content-Type': blob.type } }),
 };

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Miniatura } from '@/features/products/FotoDeProducto';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -82,6 +83,14 @@ export function PosPage() {
 
   // Búsqueda reactiva sobre el catálogo local -> funciona offline.
   const products = useLiveQuery(() => searchCatalog(search), [search], [] as Product[]);
+  /*
+    ¿Este negocio usa fotos? La respuesta decide la rejilla ENTERA (ver la tarjeta abajo).
+
+    Se mira sobre lo que hay en pantalla y no sobre el catálogo completo a propósito: es una
+    consulta que ya está hecha, y con ella la banda aparece en cuanto se sube la primera
+    foto en vez de esperar a que se recargue el catálogo local.
+  */
+  const hayFotos = useMemo(() => (products ?? []).some((p) => p.imageUrl), [products]);
 
   // Compradores (a quién se le vendió): sólo con conexión.
   const { data: customers } = useQuery({
@@ -402,6 +411,21 @@ export function PosPage() {
                     </span>
                   )}
                 </div>
+                {/*
+                  La foto, sólo si en este catálogo hay fotos.
+
+                  Reservarle sitio siempre dejaría una banda gris de 80 px en cada tarjeta
+                  de un negocio que no ha subido ninguna —que hoy son todos—, y eso es una
+                  pantalla peor a cambio de nada. Reservarlo sólo en las que tienen foto
+                  daría tarjetas de dos alturas distintas, y una rejilla desigual es más
+                  difícil de recorrer con el dedo que una sin fotos.
+
+                  Así que la banda entra o no entra para TODA la rejilla, y quien nunca suba
+                  una foto seguirá viendo exactamente el POS que tiene hoy.
+                */}
+                {hayFotos && (
+                  <Miniatura url={p.imageUrl} className="h-20 w-full rounded-theme" icono={20} />
+                )}
                 <span className="line-clamp-2 text-[15px] font-semibold leading-tight">
                   {p.name}
                 </span>

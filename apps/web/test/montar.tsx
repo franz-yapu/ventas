@@ -18,6 +18,6 @@ import { afterEach } from 'vitest';
  */
 afterEach(cleanup);
 
-export { screen, within, waitFor } from '@testing-library/react';
+export { screen, within, waitFor, fireEvent } from '@testing-library/react';
 export { default as userEvent } from '@testing-library/user-event';
 export const montar = render;

@@ -70,7 +70,45 @@ Si devuelve filas, cada una es stock que se evaporó: ni el dueño ni el recepto
 venderlo. Lo correcto es devolverlo a la ubicación de origen, no borrarlo — es mercadería
 que existe en una estantería.
 
-## 3. Nada más
+## 3. ⛔ Las fotos de producto necesitan un VOLUMEN, y no las salva `pg_dump`
+
+Las fotos entraron el 11 de agosto de 2026. Traen dos cosas que hay que hacer en el
+servidor **antes** de que alguien suba la primera, porque después ya es tarde.
+
+### `MEDIA_DIR` tiene que apuntar a un volumen
+
+`docker-compose.yml` ya lo trae montado (`media:/datos/media`) y el `.env.example` explica
+la variable. Lo que hay que comprobar en el servidor es que el compose que corre allí sea
+éste, con su sección `volumes`.
+
+**Si la carpeta vive dentro del contenedor, cada despliegue borra las fotos de todos los
+negocios.** No hay aviso ni vuelta atrás: la imagen se reemplaza entera. Es de las cosas
+que sólo se descubren la segunda vez que se despliega.
+
+### El respaldo ya no basta con la base
+
+`product.image_url` guarda la **ruta**, no el archivo. Restaurar sólo el volcado de
+Postgres dejaría cada producto apuntando a una foto que no existe.
+
+`scripts/backup.sh` saca desde hoy un `media-<fecha>.tar.gz` junto al `.dump`, leyendo el
+volumen desde el contenedor del API. Dos cosas que comprobar la primera vez:
+
+- Que el nombre del contenedor coincide. Por defecto busca `vf-api`; si el tuyo se llama
+  de otro modo, `API_CONTAINER=<nombre> ./scripts/backup.sh …`.
+- Que el `.tar.gz` **se copia fuera del servidor** igual que el `.dump`. Un respaldo en el
+  mismo disco no protege del caso más probable, que es perder el disco.
+
+Si el paso de fotos falla, el script avisa por `stderr` y **sigue**: la base se respalda
+igual. Esa prioridad es deliberada, pero significa que un aviso ignorado deja las fotos sin
+copia sin que nada más lo diga.
+
+### Lo que NO hace falta
+
+No hay cupo de imágenes por plan —lo acota el límite de productos—, así que no hay nada que
+configurar por negocio. El número a vigilar es el espacio libre del disco: con ~60 kB por
+foto, 5.000 productos son unos 300 MB.
+
+## 4. Nada más
 
 El resto de la rama (aislamiento, caja, catálogo por sucursal, cola offline, contraste) es
 código y migraciones normales. **No hay migraciones nuevas de base de datos** en esta
@@ -81,7 +119,8 @@ tanda: los seis commits no tocan el esquema.
 ## Sigue pendiente de antes, y esto no lo cambia
 
 1. **Backup diario copiado FUERA del servidor.** Lo único cuyo coste, si sale mal, no se
-   recupera con código. Los scripts están hechos y probados; falta el cron.
+   recupera con código. Los scripts están hechos y probados; falta el cron. Desde que hay
+   fotos de producto son **dos archivos** los que hay que llevarse, no uno.
 2. **Activar RLS** (`ENABLE_RLS=1`), tras un backup con restauración probada.
 3. **Monitor de uptime** externo apuntando a `/health`.
 4. Que un abogado revise los legales, y **los cinco datos de la empresa** para cerrar los

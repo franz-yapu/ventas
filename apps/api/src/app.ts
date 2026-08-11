@@ -1,8 +1,10 @@
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import { API_PREFIX } from '@ventafacil/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { resolve } from 'node:path';
 import { db } from '@ventafacil/db';
 import { sql } from 'drizzle-orm';
 import { env, originPermitido } from './env.js';
@@ -53,8 +55,18 @@ export async function buildApp(
   app.decorate('loginRateLimitMax', opts.loginRateLimitMax ?? env.loginRateLimitMax);
   app.decorate('exportRateLimitMax', opts.exportRateLimitMax ?? env.exportRateLimitMax);
 
-  // Cabeceras de seguridad. Se desactiva CSP: este servicio sólo responde JSON, nunca
-  // HTML, así que una política de contenido no protege nada y sí puede estorbar.
+  /*
+    Cabeceras de seguridad. Se desactiva la CSP global: este servicio responde JSON y, desde
+    que hay fotos de producto, imágenes — nunca HTML, así que una política de contenido
+    global no protege nada y sí puede estorbar.
+
+    Lo que SÍ importa de helmet aquí es `X-Content-Type-Options: nosniff`, y ahora más que
+    antes: `/media` sirve archivos que suben los clientes. Sin nosniff, un archivo que
+    empiece como imagen y siga como HTML podría acabar interpretado por el navegador desde
+    NUESTRO dominio. La otra mitad de esa defensa vive en `lib/almacen.ts`, que comprueba
+    los primeros bytes en vez de fiarse del `Content-Type` que declara quien sube; y la
+    tercera, en la CSP propia que `/media` se pone abajo.
+  */
   await app.register(helmet, { contentSecurityPolicy: false });
 
   // Con un subdominio por cliente, los orígenes no se pueden enumerar: `CORS_ORIGINS`
@@ -157,6 +169,62 @@ export async function buildApp(
         uptimeSeg: Math.round(process.uptime()),
       },
       error: null,
+    });
+  });
+
+  /**
+   * Las fotos de producto, servidas desde el disco.
+   *
+   * Va FUERA del prefijo `/api/v1` a propósito: son archivos, no una API, y la URL que se
+   * guarda en `product.image_url` es la que acaba en un `<img src>` — cuanto más corta y
+   * más estable, mejor.
+   *
+   * - **Caché para siempre.** El nombre lleva un uuid y cambia al reemplazar la foto (ver
+   *   `lib/almacen.ts`), así que el archivo bajo una URL dada nunca cambia. Sin esto, cada
+   *   apertura del POS volvería a pedir las mismas veinte imágenes por la conexión de una
+   *   tienda.
+   * - **Sin listado de directorio**: la carpeta de un negocio no es asunto de otro.
+   * - **CSP propia**, aunque la global esté apagada: si algún día se cuela un archivo que
+   *   el navegador quiera interpretar, que no pueda cargar ni ejecutar nada.
+   */
+  await app.register(async (media) => {
+    /*
+      La CSP va en un hook y no en `setHeaders` del plugin: esa opción está tipada como si
+      recibiera un `FastifyReply` cuando en tiempo de ejecución recibe la respuesta cruda de
+      Node, así que lo que compila no es lo que corre. Un hook no tiene esa ambigüedad.
+
+      `nosniff` no se repite aquí: lo pone helmet para todas las respuestas, y este plugin
+      cuelga del mismo servidor.
+    */
+    media.addHook('onSend', async (_req, reply) => {
+      reply.header('Content-Security-Policy', "default-src 'none'; sandbox");
+      /*
+        `cross-origin` aquí, y no es un descuido de seguridad: es lo que hace que las fotos
+        se vean.
+
+        Helmet pone `Cross-Origin-Resource-Policy: same-origin` para todo, que es el valor
+        correcto para una API que devuelve datos del negocio. Pero la web y el API son
+        orígenes DISTINTOS —dominios distintos en producción, puertos distintos en local—,
+        así que con ese valor el navegador bloquea cada `<img>` con
+        `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` y el catálogo entero sale sin fotos.
+
+        No lo vio ningún test —`app.inject` no aplica políticas de navegador, y ahí las
+        cabeceras eran perfectas— ni el typecheck. Se descubrió abriendo la pantalla.
+
+        Lo que se abre es sólo esto: archivos que ya son públicos por diseño (cualquiera
+        con la URL los ve; la URL lleva un uuid y no se puede adivinar). Las respuestas de
+        `/api/v1` siguen con el `same-origin` de helmet.
+      */
+      reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    });
+    await media.register(fastifyStatic, {
+      root: resolve(env.mediaDir),
+      prefix: '/media/',
+      index: false,
+      list: false,
+      cacheControl: true,
+      maxAge: '365d',
+      immutable: true,
     });
   });
 

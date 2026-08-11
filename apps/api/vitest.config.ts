@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 /**
@@ -45,6 +47,15 @@ export default defineConfig({
       // El limitador de verdad se prueba en security.test.ts, que levanta su PROPIA app
       // con `buildApp({ loginRateLimitMax: 20 })` y comprueba el valor real.
       LOGIN_RATE_LIMIT_MAX: '500',
+      /*
+        Las fotos de producto van a un temporal, no a `apps/api/media`.
+
+        Sin esto, cada corrida de la suite dejaba archivos dentro del repositorio —y el
+        `.gitignore` no los tenía—, así que antes o después uno acababa commiteado. La ruta
+        se resuelve al IMPORTAR `lib/almacen.ts`, o sea que tiene que estar puesta antes de
+        que arranque cualquier test: aquí, y no en un `beforeAll`.
+      */
+      MEDIA_DIR: join(tmpdir(), `ventafacil-test-media${process.env.TEST_DB_SUFFIX ?? ''}`),
     },
     /**
      * Umbrales de cobertura: un trinquete, no una nota.

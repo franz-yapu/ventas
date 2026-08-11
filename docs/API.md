@@ -51,7 +51,7 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 
 ---
 
-## Endpoints (81)
+## Endpoints (83)
 
 ### Actividad
 
@@ -81,6 +81,8 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 | `POST`   | `/api/v1/products`             | requerida |
 | `PATCH`  | `/api/v1/products/:id`         | requerida |
 | `GET`    | `/api/v1/products/:id/history` | requerida |
+| `POST`   | `/api/v1/products/:id/image`   | requerida |
+| `DELETE` | `/api/v1/products/:id/image`   | requerida |
 | `POST`   | `/api/v1/products/import`      | requerida |
 
 ### Clientes y fiado

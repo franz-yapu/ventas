@@ -3,6 +3,7 @@ import { History, Package, Pencil, Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Exportar } from '@/components/Exportar';
+import { FotoDeProducto, Miniatura } from '@/features/products/FotoDeProducto';
 import { ImportarProductos } from '@/features/products/ImportarProductos';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import { HistoryModal } from '@/features/inventory/HistoryModal';
 import { api, ApiError } from '@/lib/api';
 import { money } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import type { ImagenLista } from '@/lib/imagen';
 import type { Location, Product } from '@/lib/types';
 import { useInfiniteList } from '@/lib/useInfinite';
 import { useBusiness } from '@/theme/ThemeProvider';
@@ -169,7 +171,12 @@ export function ProductsPage() {
               {items.map((p) => (
                 <tr key={p.id} className="border-b border-border last:border-0">
                   <td className="p-3 font-mono text-xs">{p.sku}</td>
-                  <td className="p-3">{p.name}</td>
+                  <td className="p-3">
+                    <span className="flex items-center gap-2.5">
+                      <Miniatura url={p.imageUrl} />
+                      {p.name}
+                    </span>
+                  </td>
                   <td className="p-3 text-muted">{p.locationName ?? '—'}</td>
                   <td className="p-3 text-right font-medium">{money(p.price)}</td>
                   {isAdmin && (
@@ -192,6 +199,7 @@ export function ProductsPage() {
                         onClick={() => setHistory({ id: p.id, name: p.name })}
                         className="text-muted hover:text-primary"
                         title="Historial"
+                        aria-label={`Historial de ${p.name}`}
                       >
                         <History size={16} />
                       </button>
@@ -200,6 +208,7 @@ export function ProductsPage() {
                           onClick={() => setEditing(p)}
                           className="text-muted hover:text-primary"
                           title="Editar"
+                          aria-label={`Editar ${p.name}`}
                         >
                           <Pencil size={16} />
                         </button>
@@ -220,14 +229,19 @@ export function ProductsPage() {
             key={p.id}
             className="rounded-[14px] border border-border bg-surface p-[15px] shadow-card"
           >
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-[14px] font-semibold">{p.name}</span>
-              <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">
-                {money(p.price)}
-              </span>
-            </div>
-            <div className="mt-1 text-[12px] leading-[1.5] text-muted">
-              <span className="font-mono">{p.sku}</span> · {p.locationName ?? '—'}
+            <div className="flex items-start gap-3">
+              <Miniatura url={p.imageUrl} className="h-12 w-12" icono={16} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[14px] font-semibold">{p.name}</span>
+                  <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.02em]">
+                    {money(p.price)}
+                  </span>
+                </div>
+                <div className="mt-1 text-[12px] leading-[1.5] text-muted">
+                  <span className="font-mono">{p.sku}</span> · {p.locationName ?? '—'}
+                </div>
+              </div>
             </div>
             {isAdmin && p.cost && (
               <div className="mt-1 text-[12px] text-muted">
@@ -319,12 +333,14 @@ function ProductForm({
     minStock: '',
   });
   const [error, setError] = useState<string | null>(null);
+  const [foto, setFoto] = useState<ImagenLista | null>(null);
+  const [quitarFoto, setQuitarFoto] = useState(false);
 
   const margin = Number(form.price || 0) - Number(form.cost || 0);
   const marginPct = Number(form.price) > 0 ? (margin / Number(form.price)) * 100 : 0;
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const base = {
         sku: form.sku.trim() || undefined,
         name: form.name,
@@ -333,13 +349,29 @@ function ProductForm({
         costWholesale: form.costWholesale || null,
         attributes: form.attributes,
       };
-      if (product) return api.patch(`/products/${product.id}`, base);
-      return api.post('/products', {
-        ...base,
-        locationId: form.locationId || undefined,
-        initialStock: form.initialStock ? Number(form.initialStock) : 0,
-        minStock: form.minStock ? Number(form.minStock) : null,
-      });
+      const guardado = product
+        ? await api.patch<Product>(`/products/${product.id}`, base)
+        : await api.post<Product>('/products', {
+            ...base,
+            locationId: form.locationId || undefined,
+            initialStock: form.initialStock ? Number(form.initialStock) : 0,
+            minStock: form.minStock ? Number(form.minStock) : null,
+          });
+
+      /*
+        La foto va DESPUÉS y en su propia petición, no dentro del formulario.
+
+        Al crear no hay más remedio —el producto no tiene identificador hasta que existe—,
+        y al editar se hace igual por coherencia. El orden importa: si la subida falla, el
+        producto ya está guardado con todo lo demás, que es lo que costó escribir. Al revés,
+        un fallo de red con la foto tiraría también el nombre y el precio.
+      */
+      if (foto) {
+        await api.postBinary(`/products/${guardado.id}/image`, foto.blob);
+      } else if (quitarFoto && product?.imageUrl) {
+        await api.del(`/products/${product.id}/image`);
+      }
+      return guardado;
     },
     onSuccess: onSaved,
     onError: (e) => setError(e instanceof ApiError ? e.message : 'Error al guardar'),
@@ -374,6 +406,15 @@ function ProductForm({
         />
         <label className="text-sm text-muted">Nombre</label>
         <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+
+        <FotoDeProducto
+          actual={product?.imageUrl}
+          nueva={foto}
+          onNueva={setFoto}
+          quitar={quitarFoto}
+          onQuitar={setQuitarFoto}
+        />
+
         <label className="text-sm text-muted">Precio de venta</label>
         <Input
           inputMode="decimal"

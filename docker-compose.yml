@@ -55,8 +55,16 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       DB_POOL_MAX: ${DB_POOL_MAX:-8}
+      # Dentro del contenedor siempre esta ruta; lo que cambia es el volumen de abajo.
+      MEDIA_DIR: /datos/media
     ports:
       - "3000:3000"
+    # ⚠️ Las fotos de producto van a un VOLUMEN, no al sistema de archivos del
+    # contenedor. Sin esto, cada despliegue reemplaza la imagen entera y se lleva por
+    # delante las fotos de TODOS los negocios, sin aviso y sin vuelta atras: no es un
+    # dato que este en la base ni en el backup de Postgres.
+    volumes:
+      - media:/datos/media
     deploy:
       resources:
         limits:
@@ -64,3 +72,7 @@ services:
 
 volumes:
   pgdata:
+  # Las fotos de producto. OJO: esto NO está en el volcado de Postgres, así que es el
+  # único dato del sistema que un `pg_dump` no salva. Lo respalda `scripts/backup.sh`,
+  # que desde hoy saca también un tar de esta carpeta.
+  media:

@@ -143,7 +143,19 @@ export const upsertProductSchema = z.object({
   // cost = precio de compra unitario; costWholesale = precio de compra por mayor.
   cost: money.nullable().optional(),
   costWholesale: money.nullable().optional(),
-  imageUrl: z.string().url().nullable().optional(),
+  /*
+    `imageUrl` NO se acepta aquí, y es a propósito por dos motivos.
+
+    El primero es que no funcionaba: estaba declarado como `z.string().url()`, que exige
+    una URL completa, y lo que devuelve el almacén es una ruta relativa —`/media/<negocio>/
+    <uuid>.webp`—. Cualquier intento de guardarla por aquí habría sido un 400.
+
+    El segundo es el que importa. La foto se pone SUBIÉNDOLA (`POST /products/:id/image`) y
+    de ninguna otra forma. Dejar que el cliente escriba el campo a mano permitiría apuntarlo
+    a la carpeta de otro negocio o a un dominio ajeno, y sobre todo saltarse la contabilidad:
+    quien reemplaza una foto tiene que borrar la anterior, o el disco del VPS se llena de
+    archivos que ya no enseña nadie.
+  */
   /** Campos custom por rubro (llantas: medida; repuestos: OEM). */
   attributes: z.record(z.unknown()).default({}),
   isActive: z.boolean().default(true),

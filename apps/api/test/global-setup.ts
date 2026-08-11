@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import { PLAN_CATALOG } from '@ventafacil/shared';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -43,6 +44,14 @@ if (!/test/i.test(testDbName)) {
 
 /** Recrea la base de tests, aplica migraciones y prepara el rol de aplicación. */
 export async function setup() {
+  /*
+    Y vacía la carpeta de fotos, por el mismo motivo por el que se recrea la base: una
+    corrida no puede empezar con lo que dejó la anterior. Si no, un test que cuenta cuántos
+    archivos hay pasa la primera vez y falla la segunda — el peor tipo de test intermitente,
+    porque falla en el CI y no en la máquina de quien lo escribió.
+  */
+  await rm(process.env.MEDIA_DIR ?? '', { recursive: true, force: true });
+
   const adminUrl = new URL(OWNER_DB_URL);
   adminUrl.pathname = '/postgres';
   const admin = postgres(adminUrl.toString(), { max: 1 });

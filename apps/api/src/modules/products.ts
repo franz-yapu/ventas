@@ -3,6 +3,7 @@ import { upsertProductSchema } from '@ventafacil/shared';
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { borrar as borrarArchivo, ErrorDeArchivo, guardar, MAX_BYTES } from '../lib/almacen.js';
 import { sinCostos, sinCostosEnJson } from '../lib/costos.js';
 import { violaUnica } from '../lib/pg-errores.js';
 import { canActOnLocation, NINGUNA_UBICACION, viewScope } from '../lib/scope.js';
@@ -468,6 +469,143 @@ export async function productRoutes(app: FastifyInstance) {
         data: { created, skipped: errores.length, errores },
         error: null,
       });
+    },
+  );
+
+  /**
+   * La foto del producto.
+   *
+   * ## Por qué el cuerpo va en crudo y no como formulario
+   *
+   * Sube los bytes tal cual, con el `Content-Type` de la imagen. Lo normal sería
+   * `multipart/form-data`, que aquí significaría añadir `@fastify/multipart`: una
+   * dependencia más, y encima de las que parsean archivos que llegan de fuera —justo la
+   * clase de librería por la que hace cuatro días se echó `xlsx` de este repositorio.
+   *
+   * No hace falta. Lo que sube el navegador es UN blob, no un formulario con campos, y
+   * mandarlo como cuerpo es más simple en los dos lados. El precio es el analizador de
+   * contenido de abajo, que son cuatro líneas.
+   *
+   * ## Lo que protege
+   *
+   * El `Content-Type` lo elige quien sube, así que por sí solo no vale nada: `lib/almacen.ts`
+   * comprueba los primeros bytes del archivo antes de escribir nada. Y el tope de cuerpo va
+   * a nivel de ruta porque el de Fastify son 1 MB y el nuestro son 2.
+   */
+  const TIPOS_DE_IMAGEN = ['image/webp', 'image/jpeg', 'image/png'];
+  app.addContentTypeParser(TIPOS_DE_IMAGEN, { parseAs: 'buffer' }, (_req, body, done) =>
+    done(null, body),
+  );
+
+  app.post(
+    '/products/:id/image',
+    {
+      preHandler: [app.requireAuth, app.requireAdmin],
+      // Un poco por encima del tope real, para que el mensaje que explica el límite salga
+      // de `almacen.ts` —que dice cuántos MB son— en vez del 413 pelado de Fastify.
+      bodyLimit: MAX_BYTES + 1024,
+    },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const user = req.authUser!;
+
+      const tipo = (req.headers['content-type'] ?? '').split(';')[0]!.trim();
+      const datos = req.body;
+      if (!Buffer.isBuffer(datos) || datos.byteLength === 0) {
+        return reply.code(400).send({ data: null, error: 'No llegó ninguna imagen.' });
+      }
+
+      const antes = await withTenant(user.businessId, async (tx) => {
+        const [p] = await tx
+          .select()
+          .from(schema.product)
+          .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
+          .limit(1);
+        return p ?? null;
+      });
+      if (!antes) return reply.code(404).send({ data: null, error: 'Producto no encontrado' });
+      if (!canActOnLocation(user, antes.locationId)) {
+        return reply
+          .code(403)
+          .send({ data: null, error: 'Sólo puedes editar productos de tu propia ubicación' });
+      }
+
+      let guardada: { url: string; bytes: number };
+      try {
+        guardada = await guardar(user.businessId, datos, tipo);
+      } catch (e) {
+        if (e instanceof ErrorDeArchivo)
+          return reply.code(400).send({ data: null, error: e.message });
+        throw e;
+      }
+
+      const [after] = await withTenant(user.businessId, (tx) =>
+        tx
+          .update(schema.product)
+          .set({ imageUrl: guardada.url })
+          .where(eq(schema.product.id, id))
+          .returning(),
+      );
+
+      /*
+        La anterior se borra DESPUÉS de que la nueva esté escrita y apuntada.
+
+        Al revés —borrar y luego guardar— un fallo en medio deja el producto apuntando a un
+        archivo que ya no existe: un hueco roto en la rejilla del POS, y sin forma de
+        recuperarlo. Así, lo peor que puede pasar es un archivo huérfano ocupando 60 kB.
+      */
+      await borrarArchivo(user.businessId, antes.imageUrl);
+
+      await app.audit(req, {
+        action: 'update',
+        entity: 'product',
+        entityId: id,
+        before: { imageUrl: antes.imageUrl },
+        after: { imageUrl: guardada.url, bytes: guardada.bytes },
+      });
+      return reply.send({ data: after, error: null });
+    },
+  );
+
+  app.delete(
+    '/products/:id/image',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const user = req.authUser!;
+
+      const antes = await withTenant(user.businessId, async (tx) => {
+        const [p] = await tx
+          .select()
+          .from(schema.product)
+          .where(and(eq(schema.product.id, id), eq(schema.product.businessId, user.businessId)))
+          .limit(1);
+        return p ?? null;
+      });
+      if (!antes) return reply.code(404).send({ data: null, error: 'Producto no encontrado' });
+      if (!canActOnLocation(user, antes.locationId)) {
+        return reply
+          .code(403)
+          .send({ data: null, error: 'Sólo puedes editar productos de tu propia ubicación' });
+      }
+
+      const [after] = await withTenant(user.businessId, (tx) =>
+        tx
+          .update(schema.product)
+          .set({ imageUrl: null })
+          .where(eq(schema.product.id, id))
+          .returning(),
+      );
+      await borrarArchivo(user.businessId, antes.imageUrl);
+
+      await app.audit(req, {
+        action: 'update',
+        entity: 'product',
+        entityId: id,
+        before: { imageUrl: antes.imageUrl },
+        after: { imageUrl: null },
+      });
+      return reply.send({ data: after, error: null });
     },
   );
 }

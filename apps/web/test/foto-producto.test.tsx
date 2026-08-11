@@ -1,0 +1,150 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, montar, screen, userEvent, waitFor } from './montar';
+import { FotoDeProducto, Miniatura } from '@/features/products/FotoDeProducto';
+import { ahorro, type ImagenLista } from '@/lib/imagen';
+
+/**
+ * La foto de producto en la pantalla.
+ *
+ * `lib/imagen.ts` (recorte y redimensionado) y `lib/almacen.ts` (dónde se escribe)
+ * llevaban días escritos y **sin que nada los llamara**. Esto cubre el trozo que los une
+ * con lo que ve una persona.
+ *
+ * Lo que se fija aquí es sobre todo la **caída al hueco cuando la imagen no carga**. No es
+ * un detalle cosmético: esto es un POS offline-first, el catálogo vive en el navegador y
+ * las fotos no —el service worker precachea la aplicación, no `/media`—. Sin señal, la URL
+ * está guardada y la imagen no llega. Con el icono roto del navegador, el catálogo parece
+ * averiado justo cuando alguien vende con el móvil sin cobertura.
+ *
+ * El recorte a 800×800 no se prueba aquí: necesita un `<canvas>` de verdad, y jsdom no lo
+ * tiene. Se comprueba en el navegador.
+ */
+
+function imagenFalsa(bytes = 61_000, original = 3_800_000): ImagenLista {
+  return {
+    blob: new Blob([new Uint8Array(8)], { type: 'image/webp' }),
+    url: 'blob:falsa',
+    bytes,
+    bytesOriginal: original,
+  };
+}
+
+beforeEach(() => {
+  // jsdom no las implementa, y el componente las usa para la vista previa.
+  URL.createObjectURL = vi.fn(() => 'blob:falsa');
+  URL.revokeObjectURL = vi.fn();
+});
+
+describe('la miniatura de una lista', () => {
+  it('enseña la foto cuando la hay, apuntando al origen del API', () => {
+    // `imageUrl` se guarda como ruta relativa; un `<img src="/media/…">` se resolvería
+    // contra el origen de la WEB, que no es el del API. En producción son dominios
+    // distintos y en local, puertos distintos: sin prefijo, todas las fotos rotas.
+    montar(<Miniatura url="/media/negocio-1/abc.webp" />);
+    const img = screen.getByRole('presentation', { hidden: true }) as HTMLImageElement;
+    expect(img.getAttribute('src')).toMatch(/^https?:\/\/.+\/media\/negocio-1\/abc\.webp$/);
+  });
+
+  it('sin foto no deja un hueco vacío ni un icono roto', () => {
+    const { container } = montar(<Miniatura url={null} />);
+    expect(container.querySelector('img')).toBeNull();
+    // El recuadro sigue estando, para que la fila no baile entre productos con y sin foto.
+    expect(container.querySelector('svg')).toBeTruthy();
+  });
+
+  it('si la imagen NO CARGA cae al mismo hueco: es el caso de vender sin señal', () => {
+    const { container } = montar(<Miniatura url="/media/negocio-1/abc.webp" />);
+    // `fireEvent` y no `dispatchEvent(new Event('error'))`: el evento `error` de una imagen
+    // NO burbujea, y React escucha en la raíz. Lanzado a mano nunca llegaba al `onError`,
+    // así que el test fallaba por el montaje y no por el componente.
+    fireEvent.error(container.querySelector('img')!);
+
+    expect(container.querySelector('img'), 'se quedó el icono roto del navegador').toBeNull();
+    expect(container.querySelector('svg')).toBeTruthy();
+  });
+});
+
+describe('elegir la foto en el formulario', () => {
+  function montarControl(props: Partial<Parameters<typeof FotoDeProducto>[0]> = {}) {
+    const onNueva = vi.fn();
+    const onQuitar = vi.fn();
+    montar(
+      <FotoDeProducto
+        actual={null}
+        nueva={null}
+        onNueva={onNueva}
+        quitar={false}
+        onQuitar={onQuitar}
+        {...props}
+      />,
+    );
+    return { onNueva, onQuitar };
+  }
+
+  it('sin nada todavía, invita a elegir y dice el tope', () => {
+    montarControl();
+    expect(screen.getByRole('button', { name: /Elegir foto/ })).toBeTruthy();
+    expect(screen.getByText(/Se recorta al cuadro/)).toBeTruthy();
+  });
+
+  it('con una preparada, enseña el AHORRO y avisa de que se sube al guardar', () => {
+    /*
+      El «3,8 MB → 61 kB» no es un adorno técnico: explica la espera que acaba de pasar y
+      le dice a alguien con mala conexión que esto va a subir. Sin ese número, el
+      redimensionado es trabajo invisible que sólo se nota cuando falla.
+    */
+    const foto = imagenFalsa();
+    montarControl({ nueva: foto });
+    // Se compara contra `ahorro()` de verdad y no contra un texto escrito a mano: al
+    // escribirlo a mano puse "3,8 MB → 61 kB" calculando los megas en decimal, y la
+    // función los calcula en binario ("3.6 MB → 60 kB"). Un test que copia el resultado
+    // esperado en vez de derivarlo sólo prueba que sé multiplicar.
+    expect(screen.getByText(ahorro(foto))).toBeTruthy();
+    expect(screen.getByText(/Se subirá al guardar/)).toBeTruthy();
+  });
+
+  it('con una ya guardada, el botón dice CAMBIAR y aparece el de quitar', () => {
+    montarControl({ actual: '/media/negocio-1/abc.webp' });
+    expect(screen.getByRole('button', { name: /Cambiar/ })).toBeTruthy();
+    expect(screen.getByLabelText('Quitar la foto')).toBeTruthy();
+  });
+
+  it('quitar una GUARDADA pide borrarla; quitar una recién elegida, no', async () => {
+    // La diferencia importa: una que nunca se subió no tiene nada que borrar en el
+    // servidor, y pedirlo sería una petición que sobra y un 404 en el log.
+    const a = montarControl({ actual: '/media/negocio-1/abc.webp' });
+    await userEvent.click(screen.getByLabelText('Quitar la foto'));
+    expect(a.onQuitar).toHaveBeenCalledWith(true);
+    expect(a.onNueva).toHaveBeenCalledWith(null);
+  });
+
+  it('el selector sólo ofrece imágenes', async () => {
+    /*
+      La primera defensa, y la que evita el 99 % de los casos: el `accept` del input. Se
+      comprueba porque el test de abajo tiene que SALTÁRSELA a propósito, y conviene que
+      quede claro que existe.
+    */
+    montarControl();
+    const input = document.querySelector('input[type=file]') as HTMLInputElement;
+    expect(input.accept).toBe('image/*');
+  });
+
+  it('y aun así, un archivo que no es imagen se rechaza sin llamar a nadie', async () => {
+    /*
+      Se usa `fireEvent` y no `userEvent.upload` porque éste RESPETA el `accept` del input
+      y ni siquiera dispara el cambio — o sea que con él este test pasaba sin ejecutar una
+      sola línea de la comprobación que dice vigilar. La segunda defensa importa porque el
+      `accept` es una sugerencia: en el diálogo del sistema se puede elegir «todos los
+      archivos», y en algunos móviles ni se respeta.
+    */
+    const { onNueva } = montarControl();
+    const input = document.querySelector('input[type=file]') as HTMLInputElement;
+    const archivo = new File(['no soy una foto'], 'notas.txt', { type: 'text/plain' });
+
+    fireEvent.change(input, { target: { files: [archivo] } });
+
+    await waitFor(() => expect(screen.getByText(/no parece una imagen/i)).toBeTruthy());
+    expect(onNueva).not.toHaveBeenCalled();
+  });
+});

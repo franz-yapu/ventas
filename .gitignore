@@ -20,3 +20,6 @@ backups/
 # Se ignora por nombre, no la carpeta: .claude/settings.json y las skills del
 # proyecto SI deberian versionarse si algun dia se añaden.
 .claude/settings.local.json
+
+# Fotos de producto subidas en desarrollo (MEDIA_DIR). En el VPS esto es un volumen.
+media/
