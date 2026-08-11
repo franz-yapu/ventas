@@ -258,5 +258,26 @@ Segundo negocio con otros colores/logo y aislamiento total de datos.
 ## Estado global
 
 Fases 0–6 completas y verificadas end-to-end, con permisos multi-sucursal, historial por producto
-y paginación. POS offline-first, white-label, auditoría, inventario, ganancias, dashboard, fiado,
+y paginación. POS offline-first, white-label, auditoría, inventario, ganancias, dashboard,
 escáner. Listo para VPS KVM1. Bundle principal ~140KB gzip; dashboard y escáner en chunks aparte.
+
+---
+
+## 11 ago 2026 — Fuera el fiado
+
+Se retira del producto la venta al fiado, que estaba construida por dentro y **cerrada por
+fuera**: el POS filtraba el método `credit`, así que nunca se pudo fiar desde la interfaz.
+Decisión de franz. El detalle y el porqué, en `DECISIONS.md` (D20).
+
+- **Fuera:** método de pago `credit` (enum de BD incluido, migración `0019_fuera_el_fiado`),
+  tabla `customer_payment`, saldo del cliente, `GET /customers/:id`,
+  `POST /customers/:id/payments`, los abonos del desglose de arqueo y la rama "vas a fiar…"
+  de la confirmación de cobro.
+- **Se queda:** el registro de **compradores** (`customer`, `sale.customer_id`) — el
+  selector del POS, el nombre en el recibo y la columna «Cliente» de la exportación. Sin
+  saldo, porque ya no hay nada que deber.
+- La migración **aborta con un mensaje explicativo** si encuentra ventas a crédito o abonos:
+  son cuentas por cobrar y convertirlas a `cash` en silencio diría que ese dinero entró.
+- Texto legal: el ejemplo "para ventas al fiado" ya no era cierto. `TERMS_VERSION` → `2026-08-11`.
+- Tests: **599 en verde** (442 API + 157 web). Se repuso con `cash_movement` el único test
+  que probaba la desactivación de un usuario con historial, que colgaba de un abono.

@@ -22,6 +22,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import prettier from 'prettier';
 
 // Anclado a la raíz del repo: se ejecuta desde `apps/api` (que es donde está tsx) y
 // sin esto escribía el archivo dentro del paquete.
@@ -200,6 +201,16 @@ await app.ready();
 const rutas = aplanar(app.printRoutes({ commonPrefix: false }));
 await app.close();
 
+/*
+  La salida pasa por Prettier antes de escribirse, y no es cosmética: el CI comprueba
+  DOS cosas sobre este archivo —que esté formateado y que coincida con lo regenerado— y
+  sin esto se peleaban. Prettier alinea las columnas de las tablas; el generador las
+  escribía con un espacio. O sea: el archivo formateado a mano dejaba de coincidir con
+  el regenerado, y el paso "¿la documentación está al día?" fallaba señalando rutas sin
+  documentar que sí lo estaban. Un rojo que miente enseña a ignorar los rojos.
+*/
+const md = await prettier.format(generar(rutas), { parser: 'markdown' });
+
 mkdirSync(join(RAIZ, 'docs'), { recursive: true });
-writeFileSync(join(RAIZ, 'docs/API.md'), generar(rutas));
+writeFileSync(join(RAIZ, 'docs/API.md'), md);
 console.log(`✓ docs/API.md con ${rutas.length} endpoints`);

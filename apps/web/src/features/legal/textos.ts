@@ -127,7 +127,7 @@ export const PRIVACIDAD: Seccion[] = [
   {
     titulo: 'Los datos de TUS clientes',
     parrafos: [
-      'Si registras clientes (por ejemplo para ventas al fiado), esos datos son responsabilidad tuya: tú decides qué guardas y para qué. Nosotros sólo los almacenamos por cuenta tuya, como parte del servicio.',
+      'Si registras clientes (por ejemplo, para dejar constancia de a quién le vendiste), esos datos son responsabilidad tuya: tú decides qué guardas y para qué. Nosotros sólo los almacenamos por cuenta tuya, como parte del servicio.',
       'Carga sólo lo que necesites y ten el consentimiento de esas personas cuando corresponda.',
     ],
   },

@@ -34,8 +34,8 @@ import { and, count, eq, ne } from 'drizzle-orm';
  *   dos acciones sobre las que un dueño querría preguntar. Y no las cubren los RESTRICT de
  *   arriba, porque quien cierra un turno no suele ser quien lo abrió — que es justamente
  *   el caso interesante.
- * - `customer_payment` y `cash_movement` → **SET NULL**. El abono o el retiro sobreviven
- *   pero **pierden quién los hizo**, que es justo el dato por el que existe el registro.
+ * - `cash_movement` → **SET NULL**. El retiro sobrevive pero **pierde quién lo hizo**, que
+ *   es justo el dato por el que existe el registro.
  * - `audit_log` → SET NULL. La bitácora se queda sin autor: es el único control contra el
  *   fraude interno, y sin autor no controla nada.
  *
@@ -110,11 +110,6 @@ export async function colgandoDeUsuario(businessId: string, userId: string): Pro
       .from(schema.cashRegister)
       .where(eq(schema.cashRegister.userId, userId));
 
-    const [abonos] = await tx
-      .select({ n: count() })
-      .from(schema.customerPayment)
-      .where(eq(schema.customerPayment.userId, userId));
-
     const [movimientos] = await tx
       .select({ n: count() })
       .from(schema.cashMovement)
@@ -157,7 +152,6 @@ export async function colgandoDeUsuario(businessId: string, userId: string): Pro
     const n = {
       ventas: ventas?.n ?? 0,
       turnos: (turnos?.n ?? 0) + (cerroTurnos?.n ?? 0),
-      abonos: abonos?.n ?? 0,
       movimientos: movimientos?.n ?? 0,
       anuladas: anulo?.n ?? 0,
       bitacora: bitacora?.n ?? 0,
@@ -166,7 +160,6 @@ export async function colgandoDeUsuario(businessId: string, userId: string): Pro
     const detalle: string[] = [];
     if (n.ventas) detalle.push(plural(n.ventas, 'venta registrada', 'ventas registradas'));
     if (n.turnos) detalle.push(plural(n.turnos, 'turno de caja', 'turnos de caja'));
-    if (n.abonos) detalle.push(plural(n.abonos, 'abono cobrado', 'abonos cobrados'));
     if (n.movimientos)
       detalle.push(plural(n.movimientos, 'movimiento de caja', 'movimientos de caja'));
     if (n.anuladas) detalle.push(plural(n.anuladas, 'venta anulada', 'ventas anuladas'));
@@ -175,7 +168,7 @@ export async function colgandoDeUsuario(businessId: string, userId: string): Pro
 
     return {
       detalle,
-      total: n.ventas + n.turnos + n.abonos + n.movimientos + n.anuladas + n.bitacora,
+      total: n.ventas + n.turnos + n.movimientos + n.anuladas + n.bitacora,
     };
   });
 }

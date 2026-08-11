@@ -17,14 +17,8 @@ import {
 // ── Enums ──────────────────────────────────────────────────────
 export const roleEnum = pgEnum('role', ['admin', 'seller']);
 export const saleStatusEnum = pgEnum('sale_status', ['completed', 'cancelled']);
-// 'credit' = fiado (queda como cuenta por cobrar del cliente).
-export const paymentMethodEnum = pgEnum('payment_method', [
-  'cash',
-  'card',
-  'qr',
-  'transfer',
-  'credit',
-]);
+// Sin 'credit': el fiado se quitó del producto (migración 0019).
+export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'card', 'qr', 'transfer']);
 export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'trial',
   'active',
@@ -407,7 +401,14 @@ export const inventory = pgTable(
   ],
 );
 
-// Clientes frecuentes (Fase 6): para ventas al fiado y cuentas por cobrar.
+/*
+  Compradores: a quién se le vendió.
+
+  Nació para el fiado, y el fiado ya no existe (migración 0019). La tabla se queda porque
+  lo que hace hoy no depende de aquello: el POS deja elegir un comprador opcional, el
+  recibo lleva su nombre y la exportación de ventas trae una columna con él. Lo que se fue
+  con el fiado es el SALDO —no hay nada que deber— y sus abonos.
+*/
 export const customer = pgTable(
   'customer',
   {
@@ -422,26 +423,6 @@ export const customer = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('customer_business_idx').on(t.businessId, t.name)],
-);
-
-// Abonos del cliente (pagos contra su saldo de fiado).
-export const customerPayment = pgTable(
-  'customer_payment',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    businessId: uuid('business_id')
-      .notNull()
-      .references(() => business.id, { onDelete: 'cascade' }),
-    customerId: uuid('customer_id')
-      .notNull()
-      .references(() => customer.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').references(() => appUser.id, { onDelete: 'set null' }),
-    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
-    method: paymentMethodEnum('method').notNull().default('cash'),
-    note: text('note'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index('customer_payment_customer_idx').on(t.customerId)],
 );
 
 export const sale = pgTable(

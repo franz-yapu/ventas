@@ -175,12 +175,10 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   faltante. Un arqueo que siempre descuadra enseña a ignorar los descuadres, que es justo
   lo contrario de para lo que existe. El motivo es obligatorio: un movimiento sin motivo
   es indistinguible de un faltante.
-- **Qué es efectivo y qué no**: suman apertura, ventas en efectivo, abonos de fiado en
-  efectivo e ingresos; resta retiros. Tarjeta y QR no (ese dinero no está en el cajón),
-  fiado tampoco (no entró nada), anuladas tampoco (se devolvió).
-- Los abonos de fiado se atribuyen a la ubicación **del usuario que los cobró**:
-  `customer_payment` no tiene ubicación, y quien cobró tenía el cajón delante. Es la
-  única atribución posible sin añadir una columna.
+- **Qué es efectivo y qué no**: suman apertura, ventas en efectivo e ingresos; resta
+  retiros. Tarjeta, QR y transferencia no (ese dinero no está en el cajón). Las anuladas
+  sí suman, y devolver el billete es un retiro — ver más abajo.
+  (Hasta el 11-08-2026 sumaban también los abonos de fiado; se fueron con el fiado.)
 - **Un cajón, un turno**: índice parcial único sobre `location_id where closed_at is null`.
   Con dos cajas abiertas sobre el mismo cajón físico, ningún arqueo significa nada.
 - **La caja es operativa, no de análisis**: la abre y la cierra quien está en el mostrador,
@@ -341,3 +339,36 @@ Registro de decisiones tomadas durante la implementacion. No cambiar sin justifi
   migración ni una ruta sin documentar— ya corre en cada push. Si algún día entra un
   linter, que entre con una regla concreta que resuelva un problema que hayamos tenido, no
   con un preset entero.
+
+## D20 — Fuera el fiado (11 ago 2026)
+
+Decisión de franz: **la venta al fiado sale del producto.** No se pospone ni se documenta
+como "pendiente": se quita.
+
+- **Qué se fue:** el método de pago `credit` (enum de BD incluido), la tabla
+  `customer_payment` (abonos), el saldo del cliente, `GET /customers/:id` con su detalle de
+  deuda, los abonos del desglose de arqueo, la rama "vas a fiar…" de la confirmación de
+  cobro, y los tests de las tres cosas.
+- **Qué se queda:** el registro de **compradores** (`customer`, `sale.customer_id`). No es
+  fiado: es a quién se le vendió. Lo usan el selector del POS, el recibo y la columna
+  «Cliente» de la exportación de ventas. Lo que perdió es el saldo, porque ya no hay nada
+  que deber.
+
+**Por qué se quita en vez de terminarse.** El POS nunca ofreció fiar: la pantalla de cobro
+filtraba el método. Detrás de esa puerta cerrada había media función construida —clientes,
+saldos, abonos, una excepción de alcance escrita a propósito para que la deuda se viera
+entre sucursales— y ni una sola forma de llegar a ella. Eso no es una función a medias: es
+una trampa. El siguiente que la encuentre la "arregla" abriendo la puerta, y ese día el
+sistema empieza a fiar sin que nadie haya decidido cómo se cobra.
+
+**Lo que enseñó, y vale más que la función.** El fiado tenía **14 tests verdes sobre código
+que nadie ejecutaba**, incluida una rama de confirmación que sólo corría desde su propio
+test. Importar la función de verdad no basta —esa lección ya estaba aprendida—: hay que
+mirar también **quién la llama**. Es el mismo agujero que dejó los `DELETE` de sucursales y
+usuarios sin interfaz, y refuerza la idea del comprobante que cruza rutas del API contra lo
+que la web pide (`docs/PLAN_MANANA_0808.md`, punto 8.2).
+
+**La migración se planta si encuentra datos.** `0019_fuera_el_fiado.sql` cuenta ventas a
+crédito y abonos antes de tocar nada, y aborta con un mensaje que dice qué hacer. Son
+cuentas por cobrar: convertirlas a `cash` en silencio diría que ese dinero entró. En la base
+local había cero de las dos, y por la interfaz no se pudo crear ninguna nunca.

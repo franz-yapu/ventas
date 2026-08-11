@@ -83,7 +83,7 @@ export function PosPage() {
   // Búsqueda reactiva sobre el catálogo local -> funciona offline.
   const products = useLiveQuery(() => searchCatalog(search), [search], [] as Product[]);
 
-  // Clientes (para fiado): sólo con conexión.
+  // Compradores (a quién se le vendió): sólo con conexión.
   const { data: customers } = useQuery({
     queryKey: ['customers'],
     queryFn: () => api.get<Customer[]>('/customers'),
@@ -303,17 +303,11 @@ export function PosPage() {
    */
   /** Lo que pulsa el botón: confirma si toca, y si no cobra directo. */
   function alPulsarCobrar() {
-    const motivo = motivoParaConfirmar({
-      total,
-      descuento: discountNum,
-      metodoDePago: payment,
-      cliente: customers?.find((c) => c.id === customerId)?.name,
-    });
+    const motivo = motivoParaConfirmar({ total, descuento: discountNum });
     if (motivo) setConfirmar(motivo);
     else void checkout();
   }
-  // Sin fiado: el método 'credit' no se ofrece nunca.
-  const methods = PAYMENT_METHODS.filter((m) => m !== 'credit');
+  const methods = PAYMENT_METHODS;
   const PAY_ICON: Record<string, typeof Banknote> = {
     cash: Banknote,
     card: CreditCard,
@@ -709,7 +703,7 @@ export function PosPage() {
   );
 }
 
-/** Alta rápida de cliente desde el POS (para adjuntarlo a la venta / fiado). */
+/** Alta rápida de comprador desde el POS, para adjuntarlo a la venta. */
 function NewCustomerModal({
   onClose,
   onCreated,

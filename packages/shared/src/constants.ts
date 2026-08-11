@@ -4,7 +4,17 @@ export type Role = (typeof ROLES)[number];
 export const SALE_STATUS = ['completed', 'cancelled'] as const;
 export type SaleStatus = (typeof SALE_STATUS)[number];
 
-export const PAYMENT_METHODS = ['cash', 'card', 'qr', 'transfer', 'credit'] as const;
+/*
+  Sin fiado. La venta a crédito se quitó del producto el 11 de agosto de 2026 por decisión
+  de franz: el POS nunca la ofreció —el método estaba filtrado en la pantalla de cobro—, y
+  media función construida detrás de una puerta cerrada sólo sirve para que alguien la
+  "arregle" abriéndola sin saber lo que enciende. Con ella se fueron los saldos, los abonos
+  y el arqueo que los contaba.
+
+  Lo que queda de aquello es el registro de COMPRADORES, que no es fiado: es a quién se le
+  vendió, y lo usan el recibo y la exportación de ventas.
+*/
+export const PAYMENT_METHODS = ['cash', 'card', 'qr', 'transfer'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const SYNC_STATUS = ['pending', 'synced', 'error'] as const;
@@ -32,7 +42,6 @@ export const PAYMENT_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = 
   card: 'Tarjeta',
   qr: 'QR',
   transfer: 'Transferencia',
-  credit: 'Fiado',
 };
 
 export const SALE_STATUS_LABELS: Record<(typeof SALE_STATUS)[number], string> = {

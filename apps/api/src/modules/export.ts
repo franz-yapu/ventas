@@ -97,7 +97,6 @@ export async function exportRoutes(app: FastifyInstance) {
           productos,
           inventario,
           clientes,
-          abonos,
           ventas,
           lineas,
           cajas,
@@ -109,10 +108,6 @@ export async function exportRoutes(app: FastifyInstance) {
           tx.select().from(schema.product).where(eq(schema.product.businessId, businessId)),
           tx.select().from(schema.inventory).where(eq(schema.inventory.businessId, businessId)),
           tx.select().from(schema.customer).where(eq(schema.customer.businessId, businessId)),
-          tx
-            .select()
-            .from(schema.customerPayment)
-            .where(eq(schema.customerPayment.businessId, businessId)),
           tx.select().from(schema.sale).where(eq(schema.sale.businessId, businessId)),
           // `sale_item` no tiene business_id: hereda el tenant de su venta, así que se
           // trae por join en lugar de por filtro directo.
@@ -157,7 +152,6 @@ export async function exportRoutes(app: FastifyInstance) {
           productos,
           inventario,
           clientes,
-          abonos,
           ventas: ventas.map((v) => ({ ...v, items: porVenta.get(v.id) ?? [] })),
           cajas,
           movimientosDeCaja: movimientos,

@@ -16,9 +16,9 @@ import { auth, createTenant, makeApp, resetDb, type Tenant } from './helpers.js'
  * Lo que de verdad se está protegiendo aquí no es la política sino lo que hay debajo: las
  * claves foráneas NO defienden todo. `cash_register.location_id` cuelga en **CASCADE**, así
  * que un borrado sin contar antes se llevaría el historial de arqueos de una sucursal que
- * parecía vacía porque no tenía ventas. Y de un usuario, `customer_payment`,
- * `cash_movement` y `audit_log` quedan en SET NULL: el registro sobrevive sin saber quién
- * lo hizo, que en el caso de la bitácora es lo mismo que no tenerla.
+ * parecía vacía porque no tenía ventas. Y de un usuario, `cash_movement` y `audit_log`
+ * quedan en SET NULL: el registro sobrevive sin saber quién lo hizo, que en el caso de la
+ * bitácora es lo mismo que no tenerla.
  */
 
 let app: FastifyInstance;
@@ -272,16 +272,38 @@ describe('eliminar un usuario', () => {
     expect(u).toBeUndefined();
   });
 
-  it('uno con ABONOS COBRADOS no: perdería quién los cobró', async () => {
-    // `customer_payment.user_id` cuelga en SET NULL. El abono sobreviviría al borrado
-    // pero sin autor, que es justo el dato por el que existe el registro.
-    const id = await crearUsuario('cobrador');
-    await db.insert(schema.customerPayment).values({
+  it('uno con MOVIMIENTOS DE CAJA no: perdería quién los hizo', async () => {
+    /*
+      El camino "se desactiva y se dice por qué" del lado de los usuarios.
+
+      `cash_movement.user_id` cuelga en SET NULL: el retiro sobreviviría al borrado pero
+      sin autor, que es justo el dato por el que existe el registro — un retiro sin nombre
+      es indistinguible de un faltante.
+
+      Este caso lo cubría antes un abono de fiado. Al quitarse el fiado, el único test que
+      probaba la desactivación de un usuario se iba con él; se repone aquí sobre una tabla
+      que cuelga igual.
+    */
+    const id = await crearUsuario('cajero');
+    const [caja] = await db
+      .insert(schema.cashRegister)
+      .values({
+        businessId: t.businessId,
+        locationId: t.locationId,
+        userId: id,
+        openingAmount: '100.00',
+        closedAt: new Date(),
+        closingAmount: '100.00',
+        expectedAmount: '100.00',
+      })
+      .returning();
+    await db.insert(schema.cashMovement).values({
       businessId: t.businessId,
-      customerId: t.customerId,
+      cashRegisterId: caja!.id,
       userId: id,
+      type: 'out',
       amount: '50.00',
-      method: 'cash',
+      reason: 'Pago al proveedor',
     });
 
     const res = await app.inject({
@@ -290,7 +312,7 @@ describe('eliminar un usuario', () => {
       headers: auth(adminToken),
     });
     expect(res.json().data.eliminado).toBe(false);
-    expect(res.json().data.mensaje).toContain('abono cobrado');
+    expect(res.json().data.mensaje).toContain('movimiento de caja');
 
     const [u] = await db.select().from(schema.appUser).where(eq(schema.appUser.id, id));
     expect(u!.isActive).toBe(false);

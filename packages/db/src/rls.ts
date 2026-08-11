@@ -32,7 +32,6 @@ const TENANT_TABLES = [
   'product',
   'inventory',
   'customer',
-  'customer_payment',
   'sale',
   'audit_log',
   'user_dashboard_config',

@@ -103,7 +103,6 @@ export function CashPage() {
             <CardContent className="flex flex-col gap-3">
               <Linea etiqueta="Apertura" valor={caja.breakdown.openingAmount} />
               <Linea etiqueta="Ventas en efectivo" valor={caja.breakdown.cashSales} suma />
-              <Linea etiqueta="Abonos en efectivo" valor={caja.breakdown.cashPayments} suma />
               <Linea etiqueta="Ingresos" valor={caja.breakdown.movementsIn} suma />
               <Linea etiqueta="Retiros" valor={caja.breakdown.movementsOut} resta />
               <div className="flex items-baseline justify-between border-t border-border pt-3">

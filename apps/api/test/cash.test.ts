@@ -11,8 +11,9 @@ import { auth, createTenant, makeApp, resetDb, type Tenant } from './helpers.js'
  *
  * Lo que se prueba aquí no es que los endpoints respondan, sino que el ESPERADO sea
  * creíble: que sume lo que entró en efectivo, reste lo que se sacó, y no cuente lo que
- * nunca fue efectivo (fiado, tarjeta) ni lo que se devolvió (anuladas). Un arqueo que
- * descuadra siempre enseña a la gente a ignorar los descuadres.
+ * nunca fue efectivo (tarjeta, QR, transferencia). Lo anulado SÍ cuenta —el billete entró
+ * al cajón— y devolverlo es un retiro. Un arqueo que descuadra siempre enseña a la gente
+ * a ignorar los descuadres.
  */
 
 let app: FastifyInstance;
@@ -56,7 +57,7 @@ async function actual(token: string) {
 async function sembrarVenta(opts: {
   tenant: Tenant;
   total: string;
-  method: 'cash' | 'card' | 'credit';
+  method: 'cash' | 'card' | 'qr' | 'transfer';
   status?: 'completed' | 'cancelled';
   cuando?: Date;
   receipt: number;
@@ -179,9 +180,9 @@ describe('qué cuenta y qué no cuenta como efectivo', () => {
     );
   });
 
-  it('el FIADO no suma: no entró efectivo', async () => {
+  it('la TRANSFERENCIA tampoco suma: llegó al banco, no al cajón', async () => {
     await abrir(t.adminToken, '100.00');
-    await sembrarVenta({ tenant: t, total: '300.00', method: 'credit', receipt: 103 });
+    await sembrarVenta({ tenant: t, total: '300.00', method: 'transfer', receipt: 103 });
     expect((await actual(t.adminToken)).breakdown.expected).toBe('100.00');
   });
 
@@ -217,32 +218,6 @@ describe('qué cuenta y qué no cuenta como efectivo', () => {
       method: 'cash',
       cuando: new Date(Date.now() - 3 * 3_600_000),
       receipt: 105,
-    });
-    expect((await actual(t.adminToken)).breakdown.expected).toBe('100.00');
-  });
-
-  it('los abonos de fiado en efectivo SÍ suman: ese billete entró al cajón', async () => {
-    await abrir(t.adminToken, '100.00');
-    await db.insert(schema.customerPayment).values({
-      businessId: t.businessId,
-      customerId: t.customerId,
-      userId: t.adminId,
-      amount: '75.00',
-      method: 'cash',
-    });
-    const c = await actual(t.adminToken);
-    expect(c.breakdown.cashPayments).toBe('75.00');
-    expect(c.breakdown.expected).toBe('175.00');
-  });
-
-  it('un abono por transferencia no suma', async () => {
-    await abrir(t.adminToken, '100.00');
-    await db.insert(schema.customerPayment).values({
-      businessId: t.businessId,
-      customerId: t.customerId,
-      userId: t.adminId,
-      amount: '75.00',
-      method: 'transfer',
     });
     expect((await actual(t.adminToken)).breakdown.expected).toBe('100.00');
   });

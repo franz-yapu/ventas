@@ -132,7 +132,6 @@ export interface CashZ {
 export interface CashBreakdown {
   openingAmount: string;
   cashSales: string;
-  cashPayments: string;
   movementsIn: string;
   movementsOut: string;
   /** Lo cobrado en efectivo que después se anuló, ya sumado dentro de `cashSales`. */
@@ -184,29 +183,12 @@ export interface CashHistoryRow {
   difference: string | null;
 }
 
+/** Un comprador: a quién se le vendió. Sin saldo — el fiado ya no existe. */
 export interface Customer {
   id: string;
   name: string;
   phone: string | null;
   notes: string | null;
-  balance: string;
-}
-
-export interface CustomerDetail extends Customer {
-  creditSales: Array<{
-    id: string;
-    receiptNumber: number | null;
-    total: string;
-    status: string;
-    clientCreatedAt: string;
-  }>;
-  payments: Array<{
-    id: string;
-    amount: string;
-    method: string;
-    note: string | null;
-    createdAt: string;
-  }>;
 }
 
 export interface AuditRow {

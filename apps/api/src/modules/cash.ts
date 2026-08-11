@@ -20,7 +20,6 @@ import type { AuthUser } from '../types.js';
 interface Desglose {
   openingAmount: string;
   cashSales: string;
-  cashPayments: string;
   movementsIn: string;
   movementsOut: string;
   /**
@@ -44,7 +43,7 @@ const dec = (v: unknown) => Number(v ?? 0);
 /**
  * Calcula el efectivo que DEBERÍA haber en el cajón:
  *
- *   apertura + ventas en efectivo + abonos en efectivo + ingresos − retiros
+ *   apertura + ventas en efectivo + ingresos − retiros
  *
  * Las ventas se cuentan por `client_created_at` (cuándo ocurrió la venta), no por
  * `synced_at`: el billete entró al cajón cuando se vendió, aunque la venta llegue al
@@ -62,8 +61,6 @@ const dec = (v: unknown) => Number(v ?? 0);
  * Ahora el billete que entró se cuenta aunque la venta se anule después, y **devolver el
  * dinero es un retiro de caja**, como cualquier otra salida: queda registrado, con quién
  * y por qué. Si se devolvió, el turno cuadra igual; si no, aparece el faltante.
- *
- * El fiado no suma: no entró efectivo.
  */
 async function calcularDesglose(
   tx: TenantTx,
@@ -89,22 +86,6 @@ async function calcularDesglose(
     GROUP BY s.payment_method
   `);
 
-  /**
-   * Abonos de fiado cobrados en efectivo. `customer_payment` no tiene ubicación, así
-   * que se atribuye a la del usuario que lo recibió: quien cobró tenía el cajón
-   * delante. Es la única atribución posible sin inventarse una columna.
-   */
-  const abonos = await tx.execute<{ total: string }>(sql`
-    SELECT COALESCE(SUM(cp.amount), 0) AS total
-    FROM customer_payment cp
-    JOIN app_user u ON u.id = cp.user_id
-    WHERE cp.business_id = ${businessId}
-      AND u.location_id = ${caja.locationId}
-      AND cp.method = 'cash'
-      AND cp.created_at >= ${desde}::timestamptz
-      AND cp.created_at < ${finDelTurno}::timestamptz
-  `);
-
   const anuladas = await tx.execute<{ total: string }>(sql`
     SELECT COALESCE(SUM(s.total), 0) AS total
     FROM sale s
@@ -125,7 +106,6 @@ async function calcularDesglose(
 
   const efectivo = ventas.find((r) => r.payment_method === 'cash');
   const cashSales = dec(efectivo?.total);
-  const cashPayments = dec(abonos[0]?.total);
   const movementsIn = dec(movs.find((m) => m.type === 'in')?.total);
   const movementsOut = dec(movs.find((m) => m.type === 'out')?.total);
   const apertura = dec(caja.openingAmount);
@@ -133,11 +113,10 @@ async function calcularDesglose(
   return {
     openingAmount: apertura.toFixed(2),
     cashSales: cashSales.toFixed(2),
-    cashPayments: cashPayments.toFixed(2),
     movementsIn: movementsIn.toFixed(2),
     movementsOut: movementsOut.toFixed(2),
     cancelledCash: dec(anuladas[0]?.total).toFixed(2),
-    expected: (apertura + cashSales + cashPayments + movementsIn - movementsOut).toFixed(2),
+    expected: (apertura + cashSales + movementsIn - movementsOut).toFixed(2),
     byPaymentMethod: ventas.map((r) => ({
       paymentMethod: r.payment_method,
       total: Number(r.total).toFixed(2),

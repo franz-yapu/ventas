@@ -51,7 +51,7 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 
 ---
 
-## Endpoints (79)
+## Endpoints (78)
 
 ### Actividad
 
@@ -85,12 +85,10 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 
 ### Clientes y fiado
 
-| Método | Ruta                             | Sesión    |
-| ------ | -------------------------------- | --------- |
-| `GET`  | `/api/v1/customers`              | requerida |
-| `POST` | `/api/v1/customers`              | requerida |
-| `GET`  | `/api/v1/customers/:id`          | requerida |
-| `POST` | `/api/v1/customers/:id/payments` | requerida |
+| Método | Ruta                | Sesión    |
+| ------ | ------------------- | --------- |
+| `GET`  | `/api/v1/customers` | requerida |
+| `POST` | `/api/v1/customers` | requerida |
 
 ### Inventario
 
@@ -115,6 +113,7 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 | `OPTIONS` | `*`                             | requerida |
 | `GET`     | `/api/v1/dashboard-config`      | requerida |
 | `PUT`     | `/api/v1/dashboard-config`      | requerida |
+| `GET`     | `/api/v1/export/:seccion`       | requerida |
 | `GET`     | `/api/v1/public/business/:slug` | requerida |
 | `GET`     | `/health`                       | — pública |
 

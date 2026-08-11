@@ -97,7 +97,7 @@ Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB
 
 1. Busca por nombre/SKU **o** escanea código de barras (cámara).
 2. Toca productos → carrito; ajusta cantidades con +/−. Stock pintado verde/ámbar/rojo (agotado = bloqueado).
-3. Elige método de pago (efectivo, tarjeta, QR, transferencia — **el fiado no está disponible en POS offline**).
+3. Elige método de pago (efectivo, tarjeta, QR, transferencia).
 4. _(Solo online)_ asigna/crea comprador y aplica descuento en Bs.
 5. **COBRAR**: genera **UUID en el cliente**, **encola en IndexedDB primero** (nunca se pierde) y muestra **recibo provisional** (`PROV-xxxx`) al instante. Con conexión sincroniza y trae el correlativo real.
 6. Imprime recibo térmico 80 mm o inicia nueva venta.
@@ -124,7 +124,7 @@ Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB
 | `userId`                          | uuid        | vendedor (del token)                                    |
 | `status`                          | enum        | `completed` \| `cancelled`                              |
 | `subtotal` / `discount` / `total` | numeric     | montos                                                  |
-| `paymentMethod`                   | enum        | `cash` `card` `qr` `transfer` `credit`                  |
+| `paymentMethod`                   | enum        | `cash` `card` `qr` `transfer`                           |
 | `receiptNumber`                   | int?        | correlativo asignado por el **servidor** al sincronizar |
 | `clientCreatedAt`                 | timestamp   | fecha real de la venta (cliente)                        |
 | `syncedAt`                        | timestamp   | fecha de sincronización                                 |
@@ -232,9 +232,11 @@ Pantalla principal, **offline-first**. Catálogo (leído siempre desde IndexedDB
 
 ---
 
-### 3.10 Clientes / Fiado · dentro del POS (sin página propia)
+### 3.10 Compradores · dentro del POS (sin página propia)
 
-**Funcionalidades:** listar con saldo de fiado (deudores primero); alta rápida desde el POS; ver detalle (datos + saldo + ventas a crédito + abonos); **registrar abonos**. El saldo = SUM(ventas `credit` completadas) − SUM(abonos). Visibles a todo el negocio (sin scope por ubicación).
+**Funcionalidades:** listar por nombre y alta rápida desde el propio POS, para dejar constancia de a quién se le vendió. El nombre viaja al recibo y sale en la columna «Cliente» de la exportación de ventas. Visibles a todo el negocio (sin scope por ubicación).
+
+Hasta el 11 de agosto de 2026 esto era el fiado —saldo, ventas a crédito y abonos—; se quitó del producto (ver `DECISIONS.md`, D20).
 
 **Campos del cliente** (tabla `customer`): `id`, `businessId`, `name`, `phone?`, `notes?`, `isActive`, `createdAt`.
 
@@ -294,7 +296,7 @@ Contador de recibos (tabla `business_counter`): `businessId` (PK), `lastReceiptN
 2. Cada venta se **encola localmente antes** de tocar la red y emite recibo provisional (`PROV-xxxx`).
 3. Un **worker de sync** (arranca con la sesión, escucha `online` + ping cada 30 s) sube la cola en lote a `POST /sales/sync`, **idempotente por UUID**; al confirmarse llega el correlativo real.
 4. **`SyncIndicator`** en la barra superior: ámbar "sin conexión · N por subir", azul "N pendientes", verde "sincronizado" (clic = sincronizar ahora).
-5. Restricciones offline por consistencia: **sin descuentos, sin comprador y sin fiado**.
+5. Restricciones offline por consistencia: **sin descuentos y sin comprador**.
 
 **Almacenamiento local** (Dexie, BD `ventafacil`): tablas `catalog` (productos), `pendingSales` (cola de ventas: `id`, `payload`, `status`, `attempts`, `lastError`, `createdAt`), `meta` (ubicaciones cacheadas, `lastSyncAt`).
 
@@ -302,19 +304,19 @@ Contador de recibos (tabla `business_counter`): `businessId` (PK), `lastReceiptN
 
 ## 6. Estado del proyecto
 
-- ✅ **Implementado:** auth, productos, inventario+transferencias, ventas+cancelaciones, sync offline, clientes/fiado, reportes, dashboard configurable, corte Z (lectura), auditoría, white-label, multi-sucursal/multi-tenant.
+- ✅ **Implementado:** auth, productos, inventario+transferencias, ventas+cancelaciones, sync offline, compradores, reportes, dashboard configurable, corte Z (lectura), auditoría, white-label, multi-sucursal/multi-tenant.
 - ⏳ **Pendiente:** apertura/cierre de caja real con fondo y arqueo (tabla `cash_register` existe pero sin endpoints — Fase 5).
 
 ---
 
 ## Anexo — Enums del sistema
 
-| Enum                    | Valores                                            |
-| ----------------------- | -------------------------------------------------- |
-| `role`                  | `admin`, `seller`                                  |
-| `sale_status`           | `completed`, `cancelled`                           |
-| `payment_method`        | `cash`, `card`, `qr`, `transfer`, `credit` (fiado) |
-| `sync_status` (offline) | `pending`, `synced`, `error`                       |
+| Enum                    | Valores                          |
+| ----------------------- | -------------------------------- |
+| `role`                  | `admin`, `seller`                |
+| `sale_status`           | `completed`, `cancelled`         |
+| `payment_method`        | `cash`, `card`, `qr`, `transfer` |
+| `sync_status` (offline) | `pending`, `synced`, `error`     |
 
 Moneda por defecto: **BOB** (`Bs.`) · Zona horaria: **America/La_Paz**
 </content>

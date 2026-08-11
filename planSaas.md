@@ -428,9 +428,9 @@ cierra contando lo que hay.
 > siendo de admin. En el menú, "Caja" bajó al bloque operativo.
 
 > **Qué cuenta como efectivo y qué no** (es lo que hace creíble el esperado):
-> suman la apertura, las ventas en efectivo, los abonos de fiado cobrados en efectivo
-> y los ingresos; resta los retiros. **No** suman la tarjeta ni el QR (ese dinero no
-> está en el cajón), ni el fiado (no entró nada), ni las ventas anuladas (se devolvió).
+> suman la apertura, las ventas en efectivo y los ingresos; resta los retiros. **No**
+> suman la tarjeta, el QR ni la transferencia (ese dinero no está en el cajón).
+> (Hasta el 11-08-2026 sumaban también los abonos de fiado; se fueron con el fiado.)
 >
 > Las ventas se cuentan por `client_created_at`, no por cuándo sincronizaron: el billete
 > entró al cajón cuando se vendió. Y **el esperado se congela al cerrar**: si mañana
@@ -637,23 +637,23 @@ negocios.
 VentaFácil **ya era multi-tenant** antes de este plan. No hay que convertirlo en SaaS:
 hay que ponerle la capa de negocio encima y endurecer el aislamiento.
 
-| Capacidad                                                                 | Dónde                                        |
-| ------------------------------------------------------------------------- | -------------------------------------------- |
-| `business_id` en las 12 tablas de negocio, con índices compuestos         | `packages/db/src/schema.ts`                  |
-| Tenant resuelto en login por slug del negocio                             | `apps/api/src/modules/auth.ts:20-39`         |
-| JWT access/refresh con `businessId` en el payload                         | `apps/api/src/plugins/auth.ts`               |
-| Alta de tenants por CLI (`pnpm new-tenant`)                               | `packages/db/src/new-tenant.ts`              |
-| White-label por tenant (tema, textos, logo, moneda, prefijo SKU)          | `business.theme_json` / `texts_json`         |
-| Campos de producto configurables por rubro                                | `business.product_schema_json`               |
-| Roles y alcance por sucursal / central                                    | `apps/api/src/lib/scope.ts`                  |
-| Auditoría por tenant                                                      | tabla `audit_log` + `plugins/audit.ts`       |
-| Venta con descuento, 5 métodos de pago (incl. fiado) y anulación auditada | `schema.ts` (`sale`) + `modules/sales.ts`    |
-| Recibo correlativo por negocio asignado por el servidor                   | `business_counter.last_receipt_number`       |
-| Snapshot de nombre/precio/costo por línea                                 | `sale_item`                                  |
-| Venta offline: UUID de cliente, cola outbox, idempotencia                 | `apps/web/src/offline/sync.ts`               |
-| Reportes y analítica (incl. lectura Z)                                    | `modules/reports.ts`, `modules/analytics.ts` |
-| PWA instalable                                                            | `vite-plugin-pwa`                            |
-| Dockerfile del API + producción con dominio y SSL                         | `apps/api/Dockerfile`, `vertexweb.lat`       |
+| Capacidad                                                         | Dónde                                        |
+| ----------------------------------------------------------------- | -------------------------------------------- |
+| `business_id` en las 12 tablas de negocio, con índices compuestos | `packages/db/src/schema.ts`                  |
+| Tenant resuelto en login por slug del negocio                     | `apps/api/src/modules/auth.ts:20-39`         |
+| JWT access/refresh con `businessId` en el payload                 | `apps/api/src/plugins/auth.ts`               |
+| Alta de tenants por CLI (`pnpm new-tenant`)                       | `packages/db/src/new-tenant.ts`              |
+| White-label por tenant (tema, textos, logo, moneda, prefijo SKU)  | `business.theme_json` / `texts_json`         |
+| Campos de producto configurables por rubro                        | `business.product_schema_json`               |
+| Roles y alcance por sucursal / central                            | `apps/api/src/lib/scope.ts`                  |
+| Auditoría por tenant                                              | tabla `audit_log` + `plugins/audit.ts`       |
+| Venta con descuento, 4 métodos de pago y anulación auditada       | `schema.ts` (`sale`) + `modules/sales.ts`    |
+| Recibo correlativo por negocio asignado por el servidor           | `business_counter.last_receipt_number`       |
+| Snapshot de nombre/precio/costo por línea                         | `sale_item`                                  |
+| Venta offline: UUID de cliente, cola outbox, idempotencia         | `apps/web/src/offline/sync.ts`               |
+| Reportes y analítica (incl. lectura Z)                            | `modules/reports.ts`, `modules/analytics.ts` |
+| PWA instalable                                                    | `vite-plugin-pwa`                            |
+| Dockerfile del API + producción con dominio y SSL                 | `apps/api/Dockerfile`, `vertexweb.lat`       |
 
 **El producto POS está ~70% hecho.** Lo que falta es la capa SaaS, la seguridad para
 clientes desconocidos, y las brechas de producto de la #9 y la #13.

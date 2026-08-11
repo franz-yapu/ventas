@@ -19,8 +19,12 @@ import { money } from '@/lib/format';
  * caro y no se descubre hasta el arqueo:
  *
  * - hay **descuento** (dinero que se deja de cobrar),
- * - es **fiado** (no entra efectivo y queda alguien debiendo),
  * - o el **total es alto** para el mostrador.
+ *
+ * Hubo una tercera: el fiado. Nunca llegó a ejecutarse —la pantalla de cobro no ofrecía
+ * ese método— y aun así tenía un test verde encima, que es exactamente el peligro de
+ * probar por unidades sin mirar si alguien llama a la función con ese dato. Se fue con el
+ * resto del fiado el 11 de agosto de 2026.
  */
 
 /**
@@ -35,19 +39,11 @@ export const MONTO_QUE_MERECE_CONFIRMAR = 1000;
 export interface VentaAConfirmar {
   total: number;
   descuento: number;
-  metodoDePago: string;
-  /** Nombre del cliente, cuando es fiado. */
-  cliente?: string | null;
 }
 
 export function motivoParaConfirmar(v: VentaAConfirmar): string | null {
   if (v.descuento > 0) {
     return `Vas a cobrar ${money(v.total)} con ${money(v.descuento)} de descuento.`;
-  }
-  if (v.metodoDePago === 'credit') {
-    return v.cliente
-      ? `Vas a fiar ${money(v.total)} a ${v.cliente}. Quedará como deuda suya.`
-      : `Vas a fiar ${money(v.total)}.`;
   }
   if (v.total >= MONTO_QUE_MERECE_CONFIRMAR) {
     return `Vas a cobrar ${money(v.total)}, que es una venta grande.`;

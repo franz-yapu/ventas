@@ -15,7 +15,7 @@
  * **cámbiala cada vez que cambie el texto**: si no, no habrá forma de saber qué aceptó
  * cada quien. Formato de fecha para que el orden sea evidente.
  */
-export const TERMS_VERSION = '2026-08-06';
+export const TERMS_VERSION = '2026-08-11';
 
 export const EMPRESA = {
   /** Nombre comercial del producto. */

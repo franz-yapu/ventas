@@ -25,37 +25,30 @@ import { motivoParaConfirmar } from '@/features/pos/confirmar';
  * la probaba sobre la copia: cero líneas del código real. Pasó a la primera, que debería
  * haber sido la señal. Por eso la regla se extrajo a `features/pos/confirmar.ts` y ahora
  * se importa la de verdad — si alguien cambia el umbral en el POS, estos tests se enteran.
+ *
+ * ⚠️ Y hubo una segunda trampa, de otra clase: aquí vivía un test de "al fiar pregunta, y
+ * nombra a quien queda debiendo". Verde, sobre código real… al que **nadie llamaba nunca**,
+ * porque la pantalla de cobro no ofrecía ese método. Importar la función de verdad no basta
+ * si la rama que se prueba está muerta: hay que mirar también quién la llama. Se fue con el
+ * resto del fiado el 11 de agosto de 2026.
  */
 
 describe('cuándo se pregunta antes de cobrar', () => {
   it('la venta de todos los días NO pregunta', () => {
     // Lo más importante del diseño: cobrar es el gesto más repetido de la jornada, y un
     // diálogo que se pulsa doscientas veces al día deja de leerse en una semana.
-    expect(motivoParaConfirmar({ total: 45, descuento: 0, metodoDePago: 'cash' })).toBeNull();
-    expect(motivoParaConfirmar({ total: 999.99, descuento: 0, metodoDePago: 'card' })).toBeNull();
+    expect(motivoParaConfirmar({ total: 45, descuento: 0 })).toBeNull();
+    expect(motivoParaConfirmar({ total: 999.99, descuento: 0 })).toBeNull();
   });
 
   it('con descuento pregunta, y dice cuánto se está dejando de cobrar', () => {
-    const motivo = motivoParaConfirmar({ total: 90, descuento: 10, metodoDePago: 'cash' });
+    const motivo = motivoParaConfirmar({ total: 90, descuento: 10 });
     expect(motivo).toContain('10.00');
     expect(motivo).toContain('descuento');
   });
 
-  it('al fiar pregunta, y nombra a quien queda debiendo', () => {
-    const motivo = motivoParaConfirmar({
-      total: 300,
-      descuento: 0,
-      metodoDePago: 'credit',
-      cliente: 'Doña Rosa',
-    });
-    expect(motivo).toContain('Doña Rosa');
-    expect(motivo).toContain('deuda');
-  });
-
   it('una venta grande pregunta por el monto', () => {
-    expect(motivoParaConfirmar({ total: 1000, descuento: 0, metodoDePago: 'cash' })).toContain(
-      'venta grande',
-    );
+    expect(motivoParaConfirmar({ total: 1000, descuento: 0 })).toContain('venta grande');
   });
 });
 
