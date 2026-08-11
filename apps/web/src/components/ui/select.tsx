@@ -12,8 +12,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     <select
       ref={ref}
       className={cn(
+        // Sin foco propio: lo pone la regla global de `index.css`. Ver `input.tsx`.
         'h-11 w-full rounded-theme border border-field bg-surface px-3 text-base text-fg',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         filter && 'h-[42px] rounded-theme-sm border-field text-[13px] text-fg/80',
         className,
       )}

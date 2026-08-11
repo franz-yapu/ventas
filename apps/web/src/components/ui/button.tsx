@@ -3,7 +3,10 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-theme font-semibold transition-[transform,background-color,opacity] active:scale-[.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-70 disabled:pointer-events-none',
+  // Sin foco propio: lo pone la regla global de `index.css`. El `focus-visible:outline-none`
+  // que había aquí es una utilidad y le ganaba por cascada, así que Cobrar y Cerrar caja se
+  // quedaban con un anillo de 1.82:1 mientras los enlaces del menú llegaban a 5.30:1.
+  'inline-flex items-center justify-center gap-2 rounded-theme font-semibold transition-[transform,background-color,opacity] active:scale-[.98] disabled:opacity-70 disabled:pointer-events-none',
   {
     variants: {
       variant: {

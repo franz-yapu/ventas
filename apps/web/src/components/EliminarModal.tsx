@@ -124,10 +124,10 @@ export function EliminarModal({ que, advertencia, onEliminar, onCambio, onCerrar
 
         {estado.paso === 'hecho' && (
           <>
-            {/* `bg-success-bg` / `bg-warning-bg`, no `bg-success/10`: estos colores son
-                `var()`, y Tailwind descarta la utilidad con opacidad EN SILENCIO — queda
-                un recuadro sin fondo y nadie se entera. Además los tokens `-bg` tienen su
-                propia versión en modo oscuro. */}
+            {/* `bg-success-bg` / `bg-warning-bg`, no `bg-success/10`: son tokens con su
+                propio valor en modo oscuro, mientras que una mezcla al 10% del color
+                fuerte sale de un sitio pensado para texto y en oscuro apenas se despega
+                de la superficie. */}
             <div
               className={
                 estado.res.eliminado

@@ -59,12 +59,38 @@
     
     Va por defecto y no componente a componente justamente porque el patrón que falla es
     el del elemento suelto que nadie se acordó de vestir.
+
+    ## Por qué la lista incluye `input`, `select` y `textarea`, y los componentes ya no
+    ## traen foco propio
+
+    Esta regla se escribió cubriendo sólo lo que no era `Button`/`Input`/`Select`, porque
+    esos tres traían el suyo: `focus-visible:outline-none focus-visible:ring-2
+    focus-visible:ring-primary/40`. El reparto salió al revés de lo que hacía falta.
+
+    1. `outline-none` es una UTILIDAD, y las utilidades ganan a esta capa por cascada. O
+       sea que en los tres componentes que más se pulsan —Cobrar, Cerrar caja, el
+       buscador, los selects— esta regla no pintaba nada: sólo quedaba su anillo al 40 %,
+       que medía **1.82:1 en claro y 1.48:1 en oscuro**. La norma pide 3:1.
+    2. Y lo decorativo —los enlaces del menú— sí llegaba a 5.30:1. El foco se veía
+       justamente donde menos importaba.
+
+    Un test comprobaba que la clase `focus-visible:ring` estuviera puesta. Estaba, y el
+    anillo no se veía: **la clase no es la cascada**. Por eso ahora hay UNA regla para
+    todo y ningún componente pone la suya — no hay dos sitios que puedan discrepar.
+
+    El color es `--color-primary-ink` y no `--color-primary` por lo mismo que el texto:
+    el color de marca no cambia en oscuro, y con el tema Grafito el anillo caía a
+    **1.53:1**, invisible. `--color-primary-ink` es la variante que `lib/color.ts`
+    recalcula para que se lea sobre la superficie.
   */
   a:focus-visible,
   button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
   [tabindex]:focus-visible,
   summary:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-primary-ink);
     outline-offset: 2px;
     border-radius: var(--radius-sm);
   }

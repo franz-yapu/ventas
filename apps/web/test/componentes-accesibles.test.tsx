@@ -49,11 +49,18 @@ describe('el contorno de los controles', () => {
 });
 
 describe('el foco de teclado', () => {
-  it('los controles propios traen su anillo', () => {
-    montar(<Button>Cobrar</Button>);
-    expect(screen.getByRole('button').className).toContain('focus-visible:ring');
-  });
+  /*
+    Aquí vivía «los controles propios traen su anillo», que comprobaba que la clase
+    `focus-visible:ring` estuviera en el botón. Estaba, y el anillo NO se veía: una
+    utilidad de los propios componentes apagaba el contorno y las utilidades ganan por
+    cascada. El test pasaba y el usuario no veía el foco.
 
+    Se fue a `foco.test.tsx`, que compila el CSS de verdad y mira si alguna regla apaga el
+    contorno de las clases que el elemento lleva puestas. La diferencia no es de estilo:
+    **una clase presente no es un estilo aplicado**, y este archivo sólo puede ver lo
+    primero. Lo que queda abajo sí es de su competencia, porque no hay ninguna otra regla
+    peleándose por ello.
+  */
   it('un botón deshabilitado trae las DOS defensas, no sólo la nativa', () => {
     /*
       La primera versión de este test hacía clic con `pointerEventsCheck: 0` y comprobaba

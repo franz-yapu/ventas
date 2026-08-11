@@ -13,7 +13,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       ref={ref}
       className={cn(
         'h-11 w-full rounded-theme border border-field bg-surface px-3 text-base text-fg',
-        'placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+        // Sin foco propio: lo pone la regla global de `index.css`. El `outline-none` que
+        // había aquí ganaba por cascada y dejaba el campo con un anillo de 1.82:1.
+        'placeholder:text-muted',
         filter && 'h-[42px] rounded-theme-sm border-field text-[13px] text-fg/80',
         className,
       )}
