@@ -117,3 +117,61 @@ el dueño.
 
 **Se añadió al texto** (§4 de privacidad), no se retiró. Un cliente tiene derecho a saber que
 esa llave existe, y decirlo es más barato que explicarlo después.
+
+---
+
+# Segunda ronda — 2026-08-11
+
+> Las fotos de producto entraron ese día y son una **categoría de datos nueva**: viven en
+> el disco del servidor y no dentro de Postgres, y se sirven por una dirección que **no
+> pide sesión**. `TERMS_VERSION` había subido esa misma mañana por lo del fiado sin que
+> nadie tocara la privacidad — o sea que la disciplina se cumplió a medias: se subió la
+> versión, pero no se revisó qué había cambiado de lo que se guarda y quién lo ve.
+>
+> Pasa de `2026-08-11` a `2026-08-11.2`. El sufijo distingue las dos ediciones del mismo
+> día; la fecha que se enseña al pie sigue siendo limpia (`ULTIMA_ACTUALIZACION`).
+
+## 5. «Una copia COMPLETA de tus datos»
+
+**Decía:** «Puedes descargar una copia completa de tus datos cuando quieras.»
+**Dice ahora:** enumera lo que trae y añade: «De las fotos de producto lleva su dirección,
+no la imagen; cada foto se descarga abriendo esa dirección.»
+
+**Por qué se retiró.** `GET /business/export` emite `product.imageUrl` —una ruta— y ningún
+byte de imagen. Con 5.000 productos, meterlas en el JSON en base64 daría un archivo de
+cientos de megas, así que la salida honesta no es hinchar el export: es decir qué trae.
+
+**Qué costaría implementarlo.** Un ZIP en vez de un JSON: una dependencia de compresión en
+el servidor y streaming para no cargarlo todo en memoria en una máquina de 1 vCPU. Es la
+forma correcta de cumplir la portabilidad de verdad, y es un trabajo con su propio diseño.
+
+## 6. Que el borrado tras cancelar ocurre solo
+
+**Decía:** «Pasado ese plazo podremos borrarlos definitivamente.»
+**Dice ahora:** lo mismo, más «El borrado no es automático: lo hacemos nosotros cuando
+corresponde o cuando nos lo pides. Si quieres que tus datos y tus fotos se borren en una
+fecha concreta, escríbenos y te confirmamos cuándo se hizo.»
+
+**Por qué se matizó.** No existe **ninguna** ruta que borre un negocio ni sus datos: ni en
+`business.ts` ni en `platform.ts`. Y para las fotos hay una función escrita para eso
+—`borrarTodoDe()` en `lib/almacen.ts`— que **no tiene un solo llamador en producción**. El
+verbo era «podremos», o sea una facultad y no una obligación, así que el texto no mentía;
+lo que faltaba era decir que quien lo ejecuta es una persona.
+
+**Qué costaría implementarlo.** Una tarea programada que recorra los negocios cancelados
+hace más de `DIAS_RETENCION_TRAS_CANCELAR` días y borre base y fotos, con registro de qué
+se borró y cuándo. Ojo con hacerlo automático sin freno: es la única operación del sistema
+que destruye datos de un cliente sin vuelta atrás.
+
+## Y otra en sentido contrario: las fotos se ven sin iniciar sesión
+
+`/media/<negocio>/<uuid>.webp` lo sirve `fastify-static` **sin pasar por `requireAuth`**, y
+es a propósito: son `<img>` del mostrador y pedir sesión por cada miniatura las haría
+inservibles. La protección real es que el nombre lleva un uuid que no se puede adivinar y
+que no hay listado de directorio.
+
+Pero la privacidad decía «los negocios están aislados entre sí: ninguna consulta del sistema
+devuelve información de otro negocio», y eso, leído por un cliente, promete que todo está
+detrás de la sesión. **Se añadió la excepción al texto** (§4 de privacidad), con la
+recomendación de no subir en una foto de producto nada que no se quiera ver así. Mismo
+criterio que la contraseña temporal del panel: decirlo es más barato que explicarlo después.

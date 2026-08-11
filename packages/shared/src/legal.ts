@@ -14,8 +14,15 @@
  * Versión de los términos. Se guarda junto a la aceptación de cada negocio, así que
  * **cámbiala cada vez que cambie el texto**: si no, no habrá forma de saber qué aceptó
  * cada quien. Formato de fecha para que el orden sea evidente.
+ *
+ * El sufijo `.2` es la SEGUNDA edición del 11 de agosto: por la mañana salió el fiado y
+ * por la tarde se declararon las fotos de producto. Dos cambios distintos el mismo día
+ * colapsarían en la misma etiqueta y dejarían de distinguir qué aceptó quien se registró
+ * entre medias, que es justo para lo que existe esta constante. La fecha que se enseña en
+ * pantalla sale de aquí recortando el sufijo (`ULTIMA_ACTUALIZACION`), así que quien lee
+ * los términos sigue viendo una fecha limpia.
  */
-export const TERMS_VERSION = '2026-08-11';
+export const TERMS_VERSION = '2026-08-11.2';
 
 export const EMPRESA = {
   /** Nombre comercial del producto. */

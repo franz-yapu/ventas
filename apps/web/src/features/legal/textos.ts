@@ -31,7 +31,14 @@ export interface Seccion {
   parrafos: string[];
 }
 
-export const ULTIMA_ACTUALIZACION = TERMS_VERSION;
+/**
+ * La fecha que se enseña al pie de los términos.
+ *
+ * Sale de `TERMS_VERSION` recortando el sufijo de edición: la versión necesita distinguir
+ * dos cambios del mismo día (`2026-08-11.2`), pero a quien lee los términos eso no le dice
+ * nada — vería «Última actualización: 2026-08-11.2», que parece un error de la página.
+ */
+export const ULTIMA_ACTUALIZACION = TERMS_VERSION.slice(0, 10);
 
 export const TERMINOS: Seccion[] = [
   {
@@ -75,7 +82,7 @@ export const TERMINOS: Seccion[] = [
     titulo: 'Tus datos son tuyos',
     parrafos: [
       'Los productos, ventas, clientes y demás información que cargues son tuyos. No los vendemos ni los usamos para otra cosa que prestarte el servicio.',
-      'Puedes descargar una copia completa en cualquier momento desde Administración, en un archivo que sirve para migrar a otro sistema.',
+      'Puedes descargar una copia en cualquier momento desde Administración, en un archivo que sirve para migrar a otro sistema. Las fotos de producto van por su dirección y se descargan aparte.',
       `Si cancelas, conservamos tus datos ${DIAS_RETENCION_TRAS_CANCELAR} días por si quieres volver o descargar una copia. Pasado ese plazo podremos borrarlos definitivamente.`,
     ],
   },
@@ -121,6 +128,7 @@ export const PRIVACIDAD: Seccion[] = [
     parrafos: [
       'De ti y de tu equipo: nombre, usuario, correo y contraseña (cifrada, nunca en texto legible), además de un registro de la actividad dentro del sistema.',
       'De tu negocio: productos, inventario, ventas, movimientos de caja y los clientes que registres.',
+      'Las fotos de producto que subas, y el logo de tu negocio si pones uno. Las fotos se guardan como archivos en el disco de nuestro servidor, no dentro de la base de datos.',
       'Datos técnicos mínimos para que el servicio funcione y para detectar abusos.',
     ],
   },
@@ -142,6 +150,7 @@ export const PRIVACIDAD: Seccion[] = [
     titulo: 'Quién puede verlos',
     parrafos: [
       'Tú y los usuarios que tú crees. Los negocios están aislados entre sí: ninguna consulta del sistema devuelve información de otro negocio.',
+      'Las fotos de producto son la excepción, y conviene que la sepas: se sirven por una dirección web propia que no pide iniciar sesión, para que carguen rápido en el mostrador. La dirección lleva un identificador aleatorio imposible de adivinar, así que no se llega a ella navegando ni buscando; pero cualquiera que tenga el enlace puede abrir esa foto. No subas en una foto de producto nada que no quieras que se vea así.',
       'Nuestro equipo puede acceder cuando haga falta para dar soporte o resolver una falla, y esos accesos quedan registrados.',
       'Si pierdes el acceso y nos lo pides, podemos generar una contraseña temporal para un usuario tuyo. Hacerlo cierra todas sus sesiones abiertas y queda registrado con quién lo hizo y cuándo.',
       `La información se aloja en ${EMPRESA.hosting}.`,
@@ -158,13 +167,14 @@ export const PRIVACIDAD: Seccion[] = [
     titulo: 'Cuánto tiempo los conservamos',
     parrafos: [
       'Mientras tengas la cuenta activa.',
-      `Si cancelas, ${DIAS_RETENCION_TRAS_CANCELAR} días más, por si quieres volver o descargar una copia. Después podremos borrarlos definitivamente.`,
+      `Si cancelas, ${DIAS_RETENCION_TRAS_CANCELAR} días más, por si quieres volver o descargar una copia. Después podremos borrarlos definitivamente, incluidas las fotos que hayas subido.`,
+      'El borrado no es automático: lo hacemos nosotros cuando corresponde o cuando nos lo pides. Si quieres que tus datos y tus fotos se borren en una fecha concreta, escríbenos y te confirmamos cuándo se hizo.',
     ],
   },
   {
     titulo: 'Tus derechos',
     parrafos: [
-      'Puedes descargar una copia completa de tus datos cuando quieras, desde Administración.',
+      'Puedes descargar una copia de tus datos cuando quieras, desde Administración: incluye productos, inventario, ventas con sus líneas, clientes, caja y actividad. De las fotos de producto lleva su dirección, no la imagen; cada foto se descarga abriendo esa dirección.',
       `Puedes pedirnos que corrijamos o borremos información escribiendo a ${EMPRESA.correoContacto}. Ten en cuenta que algunos registros —como los de ventas ya emitidas— pueden tener que conservarse por obligaciones contables.`,
     ],
   },
