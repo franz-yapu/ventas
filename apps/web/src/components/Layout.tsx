@@ -13,6 +13,7 @@ import {
   Settings,
   Shield,
   ShoppingCart,
+  UserRound,
   Users,
 } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
@@ -51,6 +52,15 @@ const ANALYTICS_NAV = [
 const ADMIN_CHILDREN = [
   { to: '/ubicaciones', label: 'Ubicaciones', icon: MapPin, central: true },
   { to: '/usuarios', label: 'Usuarios', icon: Users },
+  /*
+    Clientes va aquí y no en el menú operativo de arriba, y es una decisión, no un
+    descuido: `TOP_NAV` es también la barra inferior del móvil, que ya llega a seis
+    columnas para un administrador. Una séptima rompe lo único que la hace usable —que
+    cada destino esté siempre en el mismo sitio— y se lo rompe al vendedor, que es quien
+    la usa. Y el vendedor ya tiene lo que necesita, dar de alta a un comprador, dentro de
+    la propia pantalla de cobro.
+  */
+  { to: '/clientes', label: 'Clientes', icon: UserRound },
   { to: '/actividad', label: 'Actividad', icon: History, feature: 'auditoria' as const },
   { to: '/configuracion', label: 'Config', icon: Settings, central: true },
   { to: '/suscripcion', label: 'Mi plan', icon: CreditCard, central: true },

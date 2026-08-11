@@ -51,7 +51,7 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 
 ---
 
-## Endpoints (78)
+## Endpoints (81)
 
 ### Actividad
 
@@ -85,10 +85,13 @@ el servidor y la web, y se lee mejor que cualquier copia que hiciéramos aquí.
 
 ### Clientes y fiado
 
-| Método | Ruta                | Sesión    |
-| ------ | ------------------- | --------- |
-| `GET`  | `/api/v1/customers` | requerida |
-| `POST` | `/api/v1/customers` | requerida |
+| Método   | Ruta                    | Sesión    |
+| -------- | ----------------------- | --------- |
+| `GET`    | `/api/v1/customers`     | requerida |
+| `POST`   | `/api/v1/customers`     | requerida |
+| `GET`    | `/api/v1/customers/:id` | requerida |
+| `PATCH`  | `/api/v1/customers/:id` | requerida |
+| `DELETE` | `/api/v1/customers/:id` | requerida |
 
 ### Inventario
 

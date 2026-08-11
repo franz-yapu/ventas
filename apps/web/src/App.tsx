@@ -18,6 +18,7 @@ import { VerifyEmailPage } from '@/features/auth/VerifyEmailPage';
 const DashboardPage = lazy(() =>
   import('@/features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
+import { CustomersPage } from '@/features/customers/CustomersPage';
 import { LocationsPage } from '@/features/locations/LocationsPage';
 import { usePlatformAuth } from '@/features/platform/PlatformAuthProvider';
 import { PlatformLoginPage } from '@/features/platform/PlatformLoginPage';
@@ -214,6 +215,17 @@ export function App() {
           element={
             <Protected adminOnly>
               <UsersPage />
+            </Protected>
+          }
+        />
+        {/* Sin `centralOnly`: un comprador es del negocio, no de una sucursal —la tabla
+            no tiene ubicación—, así que el encargado de un local administra la misma
+            lista que la central. */}
+        <Route
+          path="/clientes"
+          element={
+            <Protected adminOnly>
+              <CustomersPage />
             </Protected>
           }
         />

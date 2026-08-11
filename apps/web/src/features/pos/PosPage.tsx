@@ -551,11 +551,15 @@ export function PosPage() {
                 className="flex-1"
               >
                 <option value="">Comprador (opcional)</option>
-                {customers?.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                {/* Sólo los activos: aquí se elige a quién vender HOY. La lista completa,
+                    con los desactivados, es cosa de la pantalla de Clientes. */}
+                {customers
+                  ?.filter((c) => c.isActive)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
               </Select>
               <Button
                 variant="outline"

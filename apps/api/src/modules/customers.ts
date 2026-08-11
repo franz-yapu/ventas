@@ -1,7 +1,8 @@
 import { schema, withTenant } from '@ventafacil/db';
-import { upsertCustomerSchema } from '@ventafacil/shared';
-import { and, eq } from 'drizzle-orm';
+import { patchCustomerSchema, upsertCustomerSchema } from '@ventafacil/shared';
+import { and, count, desc, eq, max, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
+import { colgandoDeComprador, mensajeDesactivado } from '../lib/borrado.js';
 
 /**
  * Compradores: a quién se le vendió.
@@ -9,17 +10,36 @@ import type { FastifyInstance } from 'fastify';
  * Este módulo era el del fiado —saldo, ventas a crédito, abonos, y una excepción de
  * alcance escrita a propósito para que la deuda se viera entre sucursales—. El fiado se
  * quitó del producto el 11 de agosto de 2026 y con él se fue todo eso: sin ventas a
- * crédito no hay saldo que calcular, y sin saldo no hay abono contra el que aplicarlo.
+ * crédito no hay saldo que calcular.
  *
- * Lo que queda es lo que la pantalla de cobro usa de verdad: una lista para elegir
- * comprador y un alta rápida desde el propio POS. El nombre viaja al recibo y sale en la
- * columna «Cliente» de la exportación de ventas.
+ * Lo que queda es un registro de compradores con su historial de compras. El nombre viaja
+ * al recibo y sale en la columna «Cliente» de la exportación de ventas.
  *
- * Ya no hace falta la excepción de alcance: lo único que se lee aquí es el nombre y el
- * teléfono de quien compra, que no es el trabajo de nadie ni una deuda de nadie.
+ * ## Quién puede qué, y por qué no es lo mismo
+ *
+ * **Crear y ver: cualquiera con sesión.** El alta rápida vive en la pantalla de cobro, y
+ * quien está atendiendo tiene que poder apuntar a quién le vende sin ir a buscar a un
+ * administrador. Lo que se guarda aquí es un nombre y un teléfono, no el costo de nada.
+ *
+ * **Editar y eliminar: sólo administrador.** Son las dos que pueden hacer daño a un
+ * registro que ya está enlazado desde ventas cerradas.
+ *
+ * **Sin alcance por sucursal**, porque la tabla no tiene ubicación: un comprador es del
+ * negocio. Quien compró en Norte puede volver por la Central, y obligarle a estar dado de
+ * alta dos veces daría dos historiales de la misma persona.
  */
 export async function customerRoutes(app: FastifyInstance) {
-  // GET /customers — lista alfabética, para el selector del POS.
+  /**
+   * GET /customers — la lista, con cuántas compras lleva cada uno y cuándo fue la última.
+   *
+   * Los dos números salen de la misma consulta con un `LEFT JOIN` agrupado, y no con una
+   * consulta por fila: con doscientos compradores eso serían doscientas idas y vueltas
+   * para pintar una tabla.
+   *
+   * Van los INACTIVOS también, marcados: un comprador desactivado sigue siendo el dueño de
+   * su historial, y esconderlo aquí haría que sus compras parecieran de nadie. El POS sí
+   * los filtra, porque ahí lo que se ofrece es a quién vender hoy.
+   */
   app.get('/customers', { preHandler: app.requireAuth }, async (req, reply) => {
     const businessId = req.authUser!.businessId;
     const rows = await withTenant(businessId, (tx) =>
@@ -29,15 +49,20 @@ export async function customerRoutes(app: FastifyInstance) {
           name: schema.customer.name,
           phone: schema.customer.phone,
           notes: schema.customer.notes,
+          isActive: schema.customer.isActive,
+          compras: count(schema.sale.id),
+          ultimaCompra: max(schema.sale.clientCreatedAt),
         })
         .from(schema.customer)
-        .where(and(eq(schema.customer.businessId, businessId), eq(schema.customer.isActive, true)))
+        .leftJoin(schema.sale, eq(schema.sale.customerId, schema.customer.id))
+        .where(eq(schema.customer.businessId, businessId))
+        .groupBy(schema.customer.id)
         .orderBy(schema.customer.name),
     );
     return reply.send({ data: rows, error: null });
   });
 
-  // POST /customers
+  // POST /customers — el alta rápida del POS.
   app.post('/customers', { preHandler: app.requireAuth }, async (req, reply) => {
     const parsed = upsertCustomerSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ data: null, error: 'Datos inválidos' });
@@ -50,4 +75,186 @@ export async function customerRoutes(app: FastifyInstance) {
     await app.audit(req, { action: 'create', entity: 'customer', entityId: row!.id, after: row });
     return reply.code(201).send({ data: row, error: null });
   });
+
+  /**
+   * GET /customers/:id — sus datos y sus compras.
+   *
+   * Es lo que hace que esta pantalla valga más que una agenda de teléfonos: `sale.customer_id`
+   * se venía llenando desde el POS y **no había ninguna pantalla que lo leyera**. Sirve para
+   * la pregunta que se hace de verdad en el mostrador —"¿qué le vendí a este señor y
+   * cuándo?"— cuando alguien vuelve seis meses después con algo en la mano.
+   *
+   * Las anuladas entran, marcadas con su estado: que una venta se anulara es parte de lo
+   * que pasó con ese comprador, y esconderla deja un hueco inexplicable en su historial.
+   */
+  app.get('/customers/:id', { preHandler: app.requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const businessId = req.authUser!.businessId;
+
+    // Las dos consultas en la MISMA transacción: una foto coherente del comprador y de
+    // sus compras, y una sola ida y vuelta de BEGIN/COMMIT.
+    const detalle = await withTenant(businessId, async (tx) => {
+      const [cliente] = await tx
+        .select()
+        .from(schema.customer)
+        .where(and(eq(schema.customer.id, id), eq(schema.customer.businessId, businessId)))
+        .limit(1);
+      if (!cliente) return null;
+
+      const compras = await tx
+        .select({
+          id: schema.sale.id,
+          receiptNumber: schema.sale.receiptNumber,
+          total: schema.sale.total,
+          status: schema.sale.status,
+          paymentMethod: schema.sale.paymentMethod,
+          locationName: schema.location.name,
+          clientCreatedAt: schema.sale.clientCreatedAt,
+        })
+        .from(schema.sale)
+        .leftJoin(schema.location, eq(schema.location.id, schema.sale.locationId))
+        .where(and(eq(schema.sale.customerId, id), eq(schema.sale.businessId, businessId)))
+        .orderBy(desc(schema.sale.clientCreatedAt))
+        .limit(50);
+
+      /*
+        El total gastado se calcula sobre TODAS sus compras completadas, no sobre las 50
+        que se devuelven. Sumar sólo la página daría un número más pequeño que el real
+        justo para los compradores que más han comprado, que son los que se miran.
+      */
+      const [gasto] = await tx
+        .select({ total: sql<string>`COALESCE(SUM(${schema.sale.total}), 0)` })
+        .from(schema.sale)
+        .where(
+          and(
+            eq(schema.sale.customerId, id),
+            eq(schema.sale.businessId, businessId),
+            eq(schema.sale.status, 'completed'),
+          ),
+        );
+
+      return { ...cliente, compras, totalGastado: gasto?.total ?? '0' };
+    });
+
+    if (!detalle) return reply.code(404).send({ data: null, error: 'Comprador no encontrado' });
+    return reply.send({ data: detalle, error: null });
+  });
+
+  // PATCH /customers/:id — corregir el nombre, el teléfono o la nota. Sólo administrador.
+  app.patch(
+    '/customers/:id',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const businessId = req.authUser!.businessId;
+
+      const parsed = patchCustomerSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ data: null, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' });
+      }
+
+      const [antes] = await withTenant(businessId, (tx) =>
+        tx
+          .select()
+          .from(schema.customer)
+          .where(and(eq(schema.customer.id, id), eq(schema.customer.businessId, businessId)))
+          .limit(1),
+      );
+      if (!antes) return reply.code(404).send({ data: null, error: 'Comprador no encontrado' });
+
+      /*
+        Sólo lo que vino. Volcar el objeto entero escribiría `null` en el teléfono de quien
+        edita únicamente el nombre — la diferencia entre "no lo toco" y "bórralo" es que
+        la clave esté o no en el cuerpo, y eso `undefined` no lo distingue solo.
+      */
+      const d = parsed.data;
+      const cambios: Record<string, unknown> = {};
+      if (d.name !== undefined) cambios.name = d.name.trim();
+      if (d.phone !== undefined) cambios.phone = d.phone || null;
+      if (d.notes !== undefined) cambios.notes = d.notes || null;
+      if (d.isActive !== undefined) cambios.isActive = d.isActive;
+
+      const [row] = await withTenant(businessId, (tx) =>
+        tx.update(schema.customer).set(cambios).where(eq(schema.customer.id, id)).returning(),
+      );
+      await app.audit(req, {
+        action: 'update',
+        entity: 'customer',
+        entityId: id,
+        before: antes,
+        after: row,
+      });
+      return reply.send({ data: row, error: null });
+    },
+  );
+
+  /**
+   * DELETE /customers/:id — borra si nunca compró; si compró, desactiva y lo explica.
+   *
+   * La misma política que sucursales y usuarios, y por el mismo motivo: `sale.customer_id`
+   * cuelga en SET NULL, así que un borrado a secas no falla — deja ventas cerradas sin
+   * saber a quién se le hicieron. Un error de tecleo al dar de alta sí se puede borrar del
+   * todo, que es lo que la política protege por el otro lado.
+   */
+  app.delete(
+    '/customers/:id',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const businessId = req.authUser!.businessId;
+
+      const [cliente] = await withTenant(businessId, (tx) =>
+        tx
+          .select()
+          .from(schema.customer)
+          .where(and(eq(schema.customer.id, id), eq(schema.customer.businessId, businessId)))
+          .limit(1),
+      );
+      if (!cliente) return reply.code(404).send({ data: null, error: 'Comprador no encontrado' });
+
+      const colgando = await colgandoDeComprador(businessId, id);
+
+      if (colgando.total === 0) {
+        await withTenant(businessId, (tx) =>
+          tx.delete(schema.customer).where(eq(schema.customer.id, id)),
+        );
+        await app.audit(req, {
+          action: 'delete',
+          entity: 'customer',
+          entityId: id,
+          before: cliente,
+        });
+        return reply.send({
+          data: { eliminado: true, mensaje: `${cliente.name} se eliminó.` },
+          error: null,
+        });
+      }
+
+      const [desactivado] = await withTenant(businessId, (tx) =>
+        tx
+          .update(schema.customer)
+          .set({ isActive: false })
+          .where(eq(schema.customer.id, id))
+          .returning(),
+      );
+      await app.audit(req, {
+        action: 'update',
+        entity: 'customer',
+        entityId: id,
+        before: cliente,
+        after: { isActive: false, motivo: 'intento de borrado con historial' },
+      });
+      return reply.send({
+        data: {
+          eliminado: false,
+          desactivado,
+          mensaje: mensajeDesactivado(cliente.name, colgando),
+          colgando: colgando.detalle,
+        },
+        error: null,
+      });
+    },
+  );
 }

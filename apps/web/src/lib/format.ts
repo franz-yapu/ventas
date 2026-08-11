@@ -32,4 +32,4 @@ export function currentWeek(): { from: string; to: string } {
  * la necesitaba — que es justo como dos listas empiezan a separarse. Se deja el nombre de
  * siempre para no tocar las quince pantallas que ya lo importan de aquí.
  */
-export { PAYMENT_LABELS, etiquetaDePago } from '@ventafacil/shared';
+export { PAYMENT_LABELS, etiquetaDePago, etiquetaDeEstado } from '@ventafacil/shared';

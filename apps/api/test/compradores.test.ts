@@ -1,0 +1,303 @@
+import { db, schema } from '@ventafacil/db';
+import argon2 from 'argon2';
+import { eq } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { auth, createTenant, makeApp, resetDb, type Tenant } from './helpers.js';
+
+/**
+ * Compradores: a quién se le vendió, y quién puede tocarlo.
+ *
+ * Este módulo era el del fiado. Al quitarse, se quedó en listar y crear, y con la pantalla
+ * de Clientes le vuelven el detalle, la edición y el borrado — o sea, tres rutas nuevas que
+ * tocan un registro enlazado desde ventas ya cerradas.
+ *
+ * Lo que se fija aquí:
+ *
+ * - **La aritmética del historial.** Cuántas compras lleva, cuándo fue la última y cuánto
+ *   ha gastado. Es el único motivo por el que la pantalla existe; si el número miente, es
+ *   peor que no tenerlo.
+ * - **Que editar no borre lo que no se tocó.** Un PATCH con sólo el nombre no puede dejar
+ *   el teléfono en NULL.
+ * - **Borrar o desactivar**, igual que sucursales y usuarios: `sale.customer_id` cuelga en
+ *   SET NULL, así que un borrado a secas no falla — deja ventas sin saber a quién se le
+ *   hicieron.
+ * - **Quién puede qué**: crear lo hace cualquiera (el alta rápida vive en la pantalla de
+ *   cobro); editar y borrar, sólo administrador.
+ */
+
+let app: FastifyInstance;
+let t: Tenant;
+let otro: Tenant;
+let vendedorToken = '';
+
+/** Un comprador nuevo, sin historial. */
+async function crearComprador(nombre: string, token = t.adminToken): Promise<string> {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/v1/customers',
+    headers: auth(token),
+    payload: { name: nombre, phone: '77712345' },
+  });
+  expect(res.statusCode, res.body).toBe(201);
+  return res.json().data.id;
+}
+
+/** Una venta suya, insertada directo: aquí se prueba el historial, no el flujo de venta. */
+async function venderle(
+  customerId: string,
+  total: string,
+  receipt: number,
+  status: 'completed' | 'cancelled' = 'completed',
+) {
+  await db.insert(schema.sale).values({
+    id: crypto.randomUUID(),
+    businessId: t.businessId,
+    locationId: t.locationId,
+    userId: t.adminId,
+    customerId,
+    status,
+    subtotal: total,
+    total,
+    paymentMethod: 'cash',
+    receiptNumber: receipt,
+    clientCreatedAt: new Date(),
+  });
+}
+
+const lista = async (token = t.adminToken) =>
+  (await app.inject({ method: 'GET', url: '/api/v1/customers', headers: auth(token) })).json().data;
+
+const detalle = async (id: string, token = t.adminToken) =>
+  app.inject({ method: 'GET', url: `/api/v1/customers/${id}`, headers: auth(token) });
+
+beforeAll(async () => {
+  app = await makeApp();
+  await resetDb();
+  t = await createTenant(app, 'compradores-a');
+  otro = await createTenant(app, 'compradores-b');
+
+  await db.insert(schema.appUser).values({
+    businessId: t.businessId,
+    locationId: t.locationId,
+    name: 'Vendedora',
+    username: 'vendedora',
+    passwordHash: await argon2.hash('secreto123'),
+    role: 'seller',
+  });
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { username: 'vendedora', password: 'secreto123', business: 'compradores-a' },
+  });
+  vendedorToken = login.json().data.accessToken;
+});
+
+afterAll(async () => {
+  await app.close();
+});
+
+describe('la lista', () => {
+  it('trae cuántas compras lleva cada uno', async () => {
+    // El tenant nace con un comprador y una venta suya (ver `helpers.ts`).
+    const fila = (await lista()).find((c: any) => c.id === t.customerId);
+    expect(fila.compras).toBe(1);
+    expect(fila.ultimaCompra).toBeTruthy();
+  });
+
+  it('uno que nunca compró sale en CERO, no ausente ni en null', async () => {
+    // El `LEFT JOIN` es lo que lo garantiza; con un join normal desaparecería de la lista,
+    // y quien acaba de darlo de alta pensaría que no se guardó.
+    const id = await crearComprador('Recién llegado');
+    const fila = (await lista()).find((c: any) => c.id === id);
+    expect(fila).toBeTruthy();
+    expect(fila.compras).toBe(0);
+    expect(fila.ultimaCompra).toBeNull();
+  });
+
+  it('los DESACTIVADOS siguen en la lista, marcados', async () => {
+    /*
+      A propósito: un comprador desactivado sigue siendo el dueño de su historial, y
+      esconderlo aquí haría que sus compras parecieran de nadie. Quien lo filtra es el POS,
+      porque ahí lo que se ofrece es a quién vender hoy.
+    */
+    const id = await crearComprador('Ya no viene');
+    await db.update(schema.customer).set({ isActive: false }).where(eq(schema.customer.id, id));
+
+    const fila = (await lista()).find((c: any) => c.id === id);
+    expect(fila, 'el desactivado desapareció de la lista').toBeTruthy();
+    expect(fila.isActive).toBe(false);
+  });
+
+  it('no se ven los compradores de otro negocio', async () => {
+    const ids = (await lista()).map((c: any) => c.id);
+    expect(ids).not.toContain(otro.customerId);
+  });
+});
+
+describe('el detalle, que es para lo que existe la pantalla', () => {
+  it('trae sus compras, con recibo, sucursal y fecha', async () => {
+    const res = await detalle(t.customerId);
+    expect(res.statusCode).toBe(200);
+    const d = res.json().data;
+    expect(d.compras).toHaveLength(1);
+    expect(d.compras[0].receiptNumber).toBe(1);
+    expect(d.compras[0].locationName).toBeTruthy();
+    expect(d.compras[0].total).toBe('100.00');
+  });
+
+  it('suma lo gastado, y las ANULADAS no cuentan', async () => {
+    // Una venta anulada aparece en el historial —es parte de lo que pasó— pero no es
+    // dinero que este comprador haya dejado en el negocio.
+    const id = await crearComprador('Compra y devuelve');
+    await venderle(id, '200.00', 900);
+    await venderle(id, '500.00', 901, 'cancelled');
+
+    const d = (await detalle(id)).json().data;
+    expect(d.compras).toHaveLength(2);
+    expect(Number(d.totalGastado)).toBe(200);
+  });
+
+  it('el de otro negocio responde 404, no sus datos', async () => {
+    expect((await detalle(otro.customerId)).statusCode).toBe(404);
+  });
+
+  it('un identificador que no es uuid es 400, no 500', async () => {
+    expect((await detalle('no-soy-un-uuid')).statusCode).toBe(400);
+  });
+});
+
+describe('editar', () => {
+  const editar = (id: string, body: unknown, token = t.adminToken) =>
+    app.inject({
+      method: 'PATCH',
+      url: `/api/v1/customers/${id}`,
+      headers: auth(token),
+      payload: body,
+    });
+
+  it('cambia el nombre y NO borra lo que no vino', async () => {
+    /*
+      El fallo fácil de este endpoint: volcar el objeto entero y escribir `null` en el
+      teléfono de quien sólo corrigió una letra del nombre. La diferencia entre "no lo
+      toco" y "bórralo" es que la clave esté o no en el cuerpo.
+    */
+    const id = await crearComprador('Maria Quispe');
+    const res = await editar(id, { name: 'María Quispe' });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().data.name).toBe('María Quispe');
+    expect(res.json().data.phone, 'se llevó por delante el teléfono').toBe('77712345');
+  });
+
+  it('un teléfono vacío SÍ lo borra: es lo que pidió quien lo vació', async () => {
+    const id = await crearComprador('Sin telefono');
+    const res = await editar(id, { phone: '' });
+    expect(res.json().data.phone).toBeNull();
+  });
+
+  it('lo puede sacar de la lista de venta sin borrarlo', async () => {
+    const id = await crearComprador('De baja');
+    expect((await editar(id, { isActive: false })).json().data.isActive).toBe(false);
+  });
+
+  it('un cuerpo vacío es 400 y lo dice: no es una operación válida', async () => {
+    const id = await crearComprador('Nada que cambiar');
+    const res = await editar(id, {});
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('nada que cambiar');
+  });
+
+  it('un nombre en blanco no pasa', async () => {
+    const id = await crearComprador('Con nombre');
+    expect((await editar(id, { name: '' })).statusCode).toBe(400);
+  });
+
+  it('un VENDEDOR no edita: es un registro enlazado desde ventas cerradas', async () => {
+    const id = await crearComprador('Intocable');
+    expect((await editar(id, { name: 'Otro' }, vendedorToken)).statusCode).toBe(403);
+  });
+
+  it('el de otro negocio es 404', async () => {
+    expect((await editar(otro.customerId, { name: 'Ajeno' })).statusCode).toBe(404);
+  });
+});
+
+describe('eliminar: borrar o desactivar', () => {
+  const eliminar = (id: string, token = t.adminToken) =>
+    app.inject({ method: 'DELETE', url: `/api/v1/customers/${id}`, headers: auth(token) });
+
+  it('uno que nunca compró se BORRA de verdad', async () => {
+    // Un error de tecleo al dar de alta no tiene por qué quedarse para siempre.
+    const id = await crearComprador('Error de tecleo');
+    const res = await eliminar(id);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().data.eliminado).toBe(true);
+
+    const [c] = await db.select().from(schema.customer).where(eq(schema.customer.id, id));
+    expect(c).toBeUndefined();
+  });
+
+  it('uno CON COMPRAS no: se desactiva y se dice cuántas', async () => {
+    /*
+      `sale.customer_id` cuelga en SET NULL, así que un `DELETE` a secas no habría fallado
+      — habría dejado dos ventas cerradas sin saber a quién se le hicieron, que es
+      justamente lo que un recibo necesita responder meses después.
+    */
+    const id = await crearComprador('Cliente de años');
+    await venderle(id, '50.00', 910);
+    await venderle(id, '70.00', 911);
+
+    const res = await eliminar(id);
+    expect(res.json().data.eliminado).toBe(false);
+    expect(res.json().data.mensaje).toContain('2 compras registradas');
+    expect(res.json().data.colgando).toEqual(['2 compras registradas']);
+
+    const [c] = await db.select().from(schema.customer).where(eq(schema.customer.id, id));
+    expect(c!.isActive).toBe(false);
+
+    // Y sus ventas siguen sabiendo de quién son, que era el punto.
+    const ventas = await db.select().from(schema.sale).where(eq(schema.sale.customerId, id));
+    expect(ventas).toHaveLength(2);
+  });
+
+  it('con UNA sola compra el mensaje va en singular', async () => {
+    // El plural mal puesto en el único mensaje que explica por qué no se pudo borrar hace
+    // dudar del resto del mensaje.
+    const id = await crearComprador('Una vez');
+    await venderle(id, '10.00', 920);
+    expect((await eliminar(id)).json().data.mensaje).toContain('1 compra registrada');
+  });
+
+  it('un VENDEDOR no elimina', async () => {
+    const id = await crearComprador('A salvo');
+    expect((await eliminar(id, vendedorToken)).statusCode).toBe(403);
+  });
+
+  it('el de otro negocio es 404, y sigue vivo', async () => {
+    expect((await eliminar(otro.customerId)).statusCode).toBe(404);
+    const [c] = await db
+      .select()
+      .from(schema.customer)
+      .where(eq(schema.customer.id, otro.customerId));
+    expect(c, 'se borró el comprador de otro negocio').toBeTruthy();
+  });
+});
+
+describe('el alta rápida del mostrador', () => {
+  it('un VENDEDOR sí puede crear: es lo que hace al cobrar', async () => {
+    // Si esto pidiera administrador, quien atiende tendría que ir a buscar a alguien para
+    // poder poner un nombre en un recibo.
+    const id = await crearComprador('Doña Rosa', vendedorToken);
+    expect(id).toBeTruthy();
+  });
+
+  it('sin nombre no se crea', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/customers',
+      headers: auth(vendedorToken),
+      payload: { name: '' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

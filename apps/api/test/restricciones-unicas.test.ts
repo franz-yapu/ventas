@@ -146,6 +146,7 @@ describe('un identificador mal formado es un 400, no un 500', () => {
    */
   it.each([
     ['/api/v1/sales/abc'],
+    ['/api/v1/customers/123'],
     ['/api/v1/cash/registers/xx'],
     ['/api/v1/products/no-es-uuid/history'],
   ])('%s responde 400', async (url) => {

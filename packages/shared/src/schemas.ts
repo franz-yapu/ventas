@@ -302,6 +302,19 @@ export const upsertCustomerSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
+/**
+ * La edición, donde todo es opcional pero el nombre no puede quedar vacío.
+ *
+ * `.partial()` a secas dejaría pasar `{ name: '' }`: el campo estaría presente y el
+ * `.min(1)` se aplicaría… pero también dejaría pasar `{}`, un PATCH que no cambia nada y
+ * al que hay que contestar algo. Por eso el `refine` de abajo — un cuerpo vacío es un
+ * error del que llama, no una operación válida que no hace nada.
+ */
+export const patchCustomerSchema = upsertCustomerSchema
+  .extend({ isActive: z.boolean() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'No hay nada que cambiar');
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UpsertProductInput = z.infer<typeof upsertProductSchema>;
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;

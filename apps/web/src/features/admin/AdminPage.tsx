@@ -1,5 +1,13 @@
 import type { PlanFeature } from '@ventafacil/shared';
-import { CreditCard, History, MapPin, Settings, Users, type LucideIcon } from 'lucide-react';
+import {
+  CreditCard,
+  History,
+  MapPin,
+  Settings,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/ui/page';
@@ -24,6 +32,15 @@ const SECTIONS: Array<{
     central: true,
   },
   { to: '/usuarios', label: 'Usuarios', desc: 'Cuentas y roles del equipo', icon: Users },
+  // En móvil ésta es la ÚNICA puerta a las pantallas de administración: el submenú del
+  // lateral no existe ahí. Una entrada que se olvide aquí es una pantalla inalcanzable
+  // desde el teléfono, que es donde se usa el sistema.
+  {
+    to: '/clientes',
+    label: 'Clientes',
+    desc: 'A quién le vendes y qué le vendiste',
+    icon: UserRound,
+  },
   {
     to: '/actividad',
     label: 'Actividad',

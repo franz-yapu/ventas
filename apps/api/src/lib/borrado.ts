@@ -97,6 +97,32 @@ export async function colgandoDeUbicacion(
   });
 }
 
+/**
+ * Qué cuelga de un COMPRADOR.
+ *
+ * Sólo sus ventas, y basta: `sale.customer_id` cuelga en **SET NULL**, así que borrar a
+ * un comprador con historial no rompe nada… se lleva por delante a quién se le vendió.
+ * Y eso es justo lo que un recibo necesita responder seis meses después, cuando alguien
+ * vuelve con una llanta y hay que mirar qué se le vendió y cuándo.
+ */
+export async function colgandoDeComprador(
+  businessId: string,
+  customerId: string,
+): Promise<Colgando> {
+  return withTenant(businessId, async (tx) => {
+    const [ventas] = await tx
+      .select({ n: count() })
+      .from(schema.sale)
+      .where(eq(schema.sale.customerId, customerId));
+
+    const n = ventas?.n ?? 0;
+    return {
+      detalle: n ? [plural(n, 'compra registrada', 'compras registradas')] : [],
+      total: n,
+    };
+  });
+}
+
 /** Qué cuelga de un USUARIO. */
 export async function colgandoDeUsuario(businessId: string, userId: string): Promise<Colgando> {
   return withTenant(businessId, async (tx) => {

@@ -207,6 +207,24 @@ export interface Customer {
   name: string;
   phone: string | null;
   notes: string | null;
+  isActive: boolean;
+  /** Cuántas compras lleva y cuándo fue la última. Las calcula el API en la misma consulta. */
+  compras: number;
+  ultimaCompra: string | null;
+}
+
+export interface CustomerDetail extends Omit<Customer, 'compras' | 'ultimaCompra'> {
+  /** Lo gastado en TODAS sus compras completadas, no sólo en las que caben abajo. */
+  totalGastado: string;
+  compras: Array<{
+    id: string;
+    receiptNumber: number | null;
+    total: string;
+    status: string;
+    paymentMethod: string;
+    locationName: string | null;
+    clientCreatedAt: string;
+  }>;
 }
 
 export interface AuditRow {
