@@ -196,7 +196,17 @@ export function Exportar({ seccion, filtros, alcance, className }: Props) {
           <FileText size={18} /> {bajando === 'pdf' ? 'Preparando…' : 'PDF'}
         </Button>
       </div>
-      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+      {/*
+        El ancho máximo NO es decoración: sin él, este aviso se sale de la pantalla.
+
+        Estos botones viven en las `acciones` de `PageHeader`, que es un flex item con
+        `shrink-0`. Un item que no encoge toma el ancho de su contenido sin partir, así que
+        el párrafo se estira en una sola línea y en un móvil de 390 px el texto se va por el
+        borde derecho — se lee "Son 8.320 filas, unas 333 páginas. El PDF es para im…" y ahí
+        se acaba. Con los mensajes de antes (~45 caracteres) no se notaba; el aviso del tope
+        tiene el doble y lo destapó. Medido en Chrome a 390 px, antes y después.
+      */}
+      {error && <p className="mt-1 max-w-[16rem] text-xs text-danger">{error}</p>}
     </div>
   );
 }

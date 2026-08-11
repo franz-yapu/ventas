@@ -108,11 +108,41 @@ No hay cupo de imágenes por plan —lo acota el límite de productos—, así q
 configurar por negocio. El número a vigilar es el espacio libre del disco: con ~60 kB por
 foto, 5.000 productos son unos 300 MB.
 
-## 4. Nada más
+## 4. ⛔ La migración `0019` se PLANTA si en producción hay ventas al fiado
 
-El resto de la rama (aislamiento, caja, catálogo por sucursal, cola offline, contraste) es
-código y migraciones normales. **No hay migraciones nuevas de base de datos** en esta
-tanda: los seis commits no tocan el esquema.
+**Esta sección corrige lo que decía antes este documento.** Estaba escrito que «no hay
+migraciones nuevas de base de datos», y era cierto cuando se escribió: dejó de serlo con el
+commit `28116b1`, que quitó el fiado. Quien despliegue creyendo la frase de antes no hará
+la comprobación de abajo.
+
+`0019_fuera_el_fiado.sql` **borra la tabla `customer_payment` y recrea el enum
+`payment_method` sin `credit`**. Empieza con una guarda que aborta la migración —con un
+mensaje que explica qué hacer— si encuentra ventas a crédito o abonos. Que se plante es lo
+correcto: son cuentas por cobrar, plata que el negocio no ha cobrado, y pasarlas a `cash` en
+silencio diría que ya entró.
+
+**En la base local había cero de las dos. En producción no está comprobado**, y ahí hay un
+cliente real operando. Antes de migrar, con el `.env` de producción:
+
+```bash
+cd /home/franz/deploy-ventafacil   # donde vive el stack, con su .env
+docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT (SELECT count(*) FROM sale WHERE payment_method::text='credit') AS ventas_fiado,
+          (SELECT count(*) FROM customer_payment) AS abonos;"
+```
+
+Va por **nombre de servicio** (`db`) y no por nombre de contenedor a propósito: el
+`docker-compose.yml` de producción no fija `container_name`, así que el contenedor se llama
+según la carpeta del stack y un nombre escrito a mano aquí fallaría. Las credenciales las
+toma del `.env` que compose ya carga.
+
+- **Los dos en cero** → la migración pasa sola, no hay nada que decidir.
+- **Alguno distinto de cero** → **parar**. Exportar esas ventas (Reportes → Exportar) y
+  decidir con el dueño qué pasa con esas cuentas por cobrar ANTES de aplicar nada. La
+  migración no se puede deshacer: recrea un tipo de la base.
+
+El resto de la rama (aislamiento, caja, catálogo por sucursal, cola offline, contraste, la
+pantalla de Clientes, las fotos y el PDF) es código y migraciones normales.
 
 ---
 
@@ -125,3 +155,18 @@ tanda: los seis commits no tocan el esquema.
 3. **Monitor de uptime** externo apuntando a `/health`.
 4. Que un abogado revise los legales, y **los cinco datos de la empresa** para cerrar los
    marcadores de `packages/shared/src/legal.ts`.
+
+## Y esto salió de la revisión del 11 de agosto
+
+5. **`TERMS_VERSION` subió a `2026-08-11` y nadie compara nada.** Se guarda en
+   `business.terms_version` al registrarse (`create-tenant.ts`) y ahí muere: no hay ningún
+   sitio que contraste lo que un negocio aceptó con la versión vigente. Los términos
+   cambiaron —se quitó el fiado, que era una de las cosas que describían— y **el negocio que
+   ya opera no se va a enterar**. O se añade el aviso de reaceptación, o subir la constante
+   es un gesto que no hace nada; lo que no puede quedarse es a medias, porque el campo da la
+   impresión de que el consentimiento está al día. Va por el skill `legal`.
+6. **Tres avisos moderados en `react-router-dom` 6.27** (open redirect vía `\` en `<Link>`,
+   open redirect → XSS, inyección de constructor). El CI no los ve porque corta en `high`.
+   Se arreglan subiendo a **6.30.5**. Ojo: en esta rama ya hubo una subida de versión que
+   rompió seis caminos sin test, así que se hace con la suite delante y no de camino al
+   despliegue.
