@@ -70,7 +70,7 @@ export function SubscriptionBlocked({ status }: { status: EffectiveStatus }) {
 
         <button
           onClick={logout}
-          className="mt-4 rounded-theme border border-border px-4 py-2 text-[13px] font-semibold text-muted hover:bg-muted/10"
+          className="mt-4 rounded-theme border border-field px-4 py-2 text-[13px] font-semibold text-muted hover:bg-muted/10"
         >
           Cerrar sesión
         </button>

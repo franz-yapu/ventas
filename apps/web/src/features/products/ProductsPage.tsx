@@ -240,14 +240,14 @@ export function ProductsPage() {
             <div className="mt-3.5 flex gap-2">
               <button
                 onClick={() => setHistory({ id: p.id, name: p.name })}
-                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-field bg-surface text-[13px] font-semibold"
               >
                 <History size={16} /> Historial
               </button>
               {p.canManage && (
                 <button
                   onClick={() => setEditing(p)}
-                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-field bg-surface text-[13px] font-semibold"
                 >
                   <Pencil size={16} /> Editar
                 </button>

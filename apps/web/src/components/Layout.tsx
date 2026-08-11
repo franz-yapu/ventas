@@ -162,7 +162,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </NavLink>
           <button
             onClick={logout}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-theme border border-border p-2.5 text-[13px] font-semibold text-muted hover:bg-muted/10"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-theme border border-field p-2.5 text-[13px] font-semibold text-muted hover:bg-muted/10"
           >
             <LogOut size={16} /> Salir
           </button>

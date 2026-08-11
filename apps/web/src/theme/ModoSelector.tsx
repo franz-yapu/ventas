@@ -26,7 +26,7 @@ export function ModoSelector() {
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm text-muted">Modo de pantalla</label>
-      <div className="inline-flex w-fit rounded-theme border border-border p-1">
+      <div className="inline-flex w-fit rounded-theme border border-field p-1">
         {MODOS.map((m) => (
           <button
             key={m.valor}

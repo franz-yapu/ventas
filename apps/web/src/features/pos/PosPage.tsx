@@ -384,7 +384,7 @@ export function PosPage() {
               ? 'border-danger/40'
               : low
                 ? 'border-warning/40'
-                : 'border-border hover:border-primary';
+                : 'border-field hover:border-primary';
             return (
               <button
                 key={p.id}
@@ -486,7 +486,7 @@ export function PosPage() {
                     <div className="truncate text-sm font-semibold">{l.product.name}</div>
                     <div className="text-xs text-muted">{money(l.product.price)} c/u</div>
                   </div>
-                  <div className="flex items-center overflow-hidden rounded-[11px] border border-border">
+                  <div className="flex items-center overflow-hidden rounded-[11px] border border-field">
                     <button
                       onClick={() => setQty(l.product.id, -1)}
                       className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10"
@@ -531,7 +531,7 @@ export function PosPage() {
                     className={`flex flex-col items-center gap-1 rounded-theme border py-2.5 text-[11px] font-semibold transition active:scale-95 ${
                       active
                         ? 'border-primary-line bg-primary-soft text-primary'
-                        : 'border-border bg-surface text-muted hover:bg-fg/[0.06]'
+                        : 'border-field bg-surface text-muted hover:bg-fg/[0.06]'
                     }`}
                   >
                     <Icon size={18} />

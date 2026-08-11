@@ -241,7 +241,7 @@ export function SettingsPage() {
                   className={`inline-flex items-center gap-2 rounded-theme border px-3 py-2 text-sm font-semibold ${
                     active
                       ? 'border-primary bg-primary/10 text-fg'
-                      : 'border-border bg-surface text-muted hover:bg-muted/10'
+                      : 'border-field bg-surface text-muted hover:bg-muted/10'
                   }`}
                 >
                   {/* Los dos colores del preset, para verlos juntos antes de elegir. */}
@@ -398,7 +398,7 @@ function ColorField({
           type="color"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-10 w-14 rounded border border-border"
+          className="h-10 w-14 rounded border border-field"
         />
         <Input value={value} onChange={(e) => onChange(e.target.value)} className="w-28" />
       </div>

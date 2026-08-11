@@ -175,7 +175,7 @@ export function LocationsPage() {
                 <button
                   onClick={() => hacerPrincipal.mutate(l.id)}
                   disabled={hacerPrincipal.isPending}
-                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-field bg-surface text-[13px] font-semibold"
                 >
                   <Star size={16} /> Hacer principal
                 </button>

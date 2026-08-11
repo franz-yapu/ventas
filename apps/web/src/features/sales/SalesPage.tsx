@@ -235,7 +235,7 @@ export function SalesPage() {
             <div className="mt-3.5 flex gap-2">
               <button
                 onClick={() => openReceipt(s.id)}
-                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-field bg-surface text-[13px] font-semibold"
               >
                 <Printer size={16} /> Recibo
               </button>

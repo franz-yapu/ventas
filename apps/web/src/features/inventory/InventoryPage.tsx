@@ -217,14 +217,14 @@ export function InventoryPage() {
               <div className="mt-3.5 flex gap-2">
                 <button
                   onClick={() => setHistory({ productId: r.productId, name: r.productName })}
-                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-field bg-surface text-[13px] font-semibold"
                 >
                   <History size={16} /> Historial
                 </button>
                 {r.canAdjust && (
                   <button
                     onClick={() => setAdjust(r)}
-                    className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+                    className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-field bg-surface text-[13px] font-semibold"
                   >
                     <SlidersHorizontal size={16} /> Ajustar
                   </button>
