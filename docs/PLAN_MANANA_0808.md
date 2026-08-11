@@ -8,6 +8,31 @@ Ordenado por lo que cuesta no hacerlo.
 
 ---
 
+## Estado al 11 de agosto de 2026
+
+Se retomó el 11 (el 8 no se trabajó). Hecho, en este orden:
+
+| Punto                       | Estado                                                | Commit    |
+| --------------------------- | ----------------------------------------------------- | --------- |
+| 4 · ¿Fiado sí o no?         | **Decidido y ejecutado**: fuera del producto          | `28116b1` |
+| 1 · Interfaz de eliminar    | **Hecho**, más «hacer principal», que tampoco existía | `6c3ead2` |
+| 2 · Anillo de foco          | **Hecho**, medido en Chromium antes y después         | `e4bc418` |
+| 3 · Seis bordes decorativos | **Hecho** (catorce, con guard que recorre el JSX)     | `8209c92` |
+
+Correcciones a este documento, comprobadas contra el código:
+
+- **`api.ts` sí tenía método de borrado**, y se llama `del`. Existía desde el commit del
+  diseño y no lo llamaba nadie, que era el problema de verdad.
+- **Playwright NO es dependencia del repo.** Lo que hay es el Chromium que dejaron en
+  caché los agentes. El punto 8.1 pide un test de navegador y eso sigue sin decidirse:
+  costaría meter `playwright` como devDependency más un `playwright install chromium` en
+  el workflow.
+
+Sigue pendiente todo el punto 5 (imágenes), el 6 (PDF, IA de notas, pantalla de Clientes)
+y el 7 entero (VPS). Del 8, se cerraron 8.1 en parte y 8.2 en su caso concreto.
+
+---
+
 ## 1 · ⛔ La interfaz de eliminar sucursales y usuarios — NO EXISTE
 
 **Es lo primero, y es una entrega a medias mía.**
