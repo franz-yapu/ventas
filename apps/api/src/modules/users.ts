@@ -295,10 +295,10 @@ export async function userRoutes(app: FastifyInstance) {
   /**
    * DELETE /users/:id — borra si no ha hecho nada; si ha hecho algo, desactiva y lo dice.
    *
-   * Ver `lib/borrado.ts`. Aquí lo que las claves foráneas NO defienden son los abonos, los
-   * movimientos de caja y la bitácora: los tres quedan en SET NULL, así que un borrado
-   * físico dejaría un abono sin saber quién lo cobró y una bitácora sin autor — que es
-   * como no tener bitácora, porque su único trabajo es decir quién hizo qué.
+   * Ver `lib/borrado.ts`. Aquí lo que las claves foráneas NO defienden son los movimientos
+   * de caja y la bitácora: los dos quedan en SET NULL, así que un borrado físico dejaría un
+   * retiro sin saber quién lo hizo —indistinguible de un faltante— y una bitácora sin
+   * autor, que es como no tener bitácora, porque su único trabajo es decir quién hizo qué.
    */
   app.delete(
     '/users/:id',

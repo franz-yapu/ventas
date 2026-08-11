@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Pencil, Plus, Users } from 'lucide-react';
+import { Check, Copy, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
+import { EliminarModal } from '@/components/EliminarModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,6 +23,7 @@ export function UsersPage() {
   // Cuando el admin asigna/cambia una contraseña, se muestra este modal para que
   // la copie y se la envíe al usuario.
   const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [borrando, setBorrando] = useState<AppUserRow | null>(null);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
@@ -97,13 +99,22 @@ export function UsersPage() {
                     </Badge>
                   </td>
                   <td className="p-3">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-3">
                       <button
                         onClick={() => setEditing(u)}
                         className="text-muted hover:text-primary"
                         title="Editar"
+                        aria-label={`Editar ${u.name}`}
                       >
                         <Pencil size={16} />
+                      </button>
+                      <button
+                        onClick={() => setBorrando(u)}
+                        className="text-muted hover:text-danger"
+                        title="Eliminar"
+                        aria-label={`Eliminar ${u.name}`}
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>
@@ -133,12 +144,21 @@ export function UsersPage() {
               <br />
               {locName(u.locationId)}
             </div>
-            <button
-              onClick={() => setEditing(u)}
-              className="mt-3.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
-            >
-              <Pencil size={16} /> Editar
-            </button>
+            <div className="mt-3.5 flex gap-2">
+              <button
+                onClick={() => setEditing(u)}
+                className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border bg-surface text-[13px] font-semibold"
+              >
+                <Pencil size={16} /> Editar
+              </button>
+              <button
+                onClick={() => setBorrando(u)}
+                aria-label={`Eliminar ${u.name}`}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] border border-danger/30 bg-danger-bg text-danger"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -157,6 +177,21 @@ export function UsersPage() {
       )}
 
       {credentials && <CredentialsModal creds={credentials} onClose={() => setCredentials(null)} />}
+
+      {borrando && (
+        <EliminarModal
+          que={`a ${borrando.name}`}
+          advertencia="Si nunca vendió ni movió caja, se elimina y no se puede deshacer. Si tiene historial, se desactivará en su lugar: deja de entrar, y lo que hizo se conserva con su nombre."
+          onEliminar={async () => {
+            const r = await api.del<{ eliminado: boolean; mensaje: string; colgando?: string[] }>(
+              `/users/${borrando.id}`,
+            );
+            return r;
+          }}
+          onCambio={() => qc.invalidateQueries({ queryKey: ['users'] })}
+          onCerrar={() => setBorrando(null)}
+        />
+      )}
     </Page>
   );
 }

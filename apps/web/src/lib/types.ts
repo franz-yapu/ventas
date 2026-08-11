@@ -59,6 +59,24 @@ export interface HistoryEntry {
   userName: string | null;
 }
 
+/**
+ * Lo que contesta un `DELETE` de sucursal o de usuario.
+ *
+ * Son **dos desenlaces con el mismo 200**, y confundirlos es el error fácil: si no
+ * colgaba nada se borró de verdad; si colgaba algo NO se borró, se desactivó, y el
+ * `mensaje` dice qué colgaba. Un tercer desenlace —bloqueado— llega como 409 y por
+ * tanto como `ApiError`, no por aquí.
+ *
+ * El API usa `eliminada` para sucursales y `eliminado` para usuarios; cada pantalla lo
+ * normaliza a este tipo al llamar.
+ */
+export interface RespuestaBorrado {
+  eliminado: boolean;
+  mensaje: string;
+  /** Qué colgaba, en palabras: `['340 ventas registradas', '12 turnos de caja']`. */
+  colgando?: string[];
+}
+
 export interface AppUserRow {
   id: string;
   name: string;
