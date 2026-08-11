@@ -3,6 +3,8 @@ packages:
   - 'packages/*'
 allowBuilds:
   argon2: true
+  # Lo arrastra jspdf. Su postinstall solo imprime un mensaje pidiendo donaciones.
+  core-js: false
   esbuild: true
 
 # Versiones forzadas de dependencias que no son nuestras.

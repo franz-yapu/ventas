@@ -67,7 +67,14 @@ export function SalesPage() {
       <PageHeader
         titulo="Ventas"
         descripcion="Historial de recibos. Cancelar una venta devuelve su stock y queda registrado."
-        acciones={<Exportar seccion="ventas" filtros={{ from, to, locationId }} />}
+        acciones={
+          <Exportar
+            seccion="ventas"
+            filtros={{ from, to, locationId }}
+            // El PDF se firma: tiene que decir de qué sucursal es, no su identificador.
+            alcance={locations?.find((l) => l.id === locationId)?.name}
+          />
+        }
       />
 
       <div className="flex flex-wrap gap-2">

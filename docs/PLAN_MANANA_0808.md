@@ -18,6 +18,9 @@ Se retomó el 11 (el 8 no se trabajó). Hecho, en este orden:
 | 1 · Interfaz de eliminar    | **Hecho**, más «hacer principal», que tampoco existía | `6c3ead2` |
 | 2 · Anillo de foco          | **Hecho**, medido en Chromium antes y después         | `e4bc418` |
 | 3 · Seis bordes decorativos | **Hecho** (catorce, con guard que recorre el JSX)     | `8209c92` |
+| 6 · Pantalla de Clientes    | **Hecha**, más las tres rutas que le faltaban al API  | `123400b` |
+| 5 · Imágenes de producto    | **Hecho**, conectado de punta a punta                 | `76eee2d` |
+| 6 · Exportar en PDF         | **Hecho**, con tope, cabecera de marca y firma        | (este)    |
 
 Correcciones a este documento, comprobadas contra el código:
 
@@ -28,8 +31,22 @@ Correcciones a este documento, comprobadas contra el código:
   costaría meter `playwright` como devDependency más un `playwright install chromium` en
   el workflow.
 
-Sigue pendiente todo el punto 5 (imágenes), el 6 (PDF, IA de notas, pantalla de Clientes)
-y el 7 entero (VPS). Del 8, se cerraron 8.1 en parte y 8.2 en su caso concreto.
+Del punto 6 queda **sólo la IA de notas a mano**, que está bloqueada por lo legal y no por
+el código: el inventario del cliente saldría hacia un servicio externo y eso tiene que
+estar en los términos antes de encenderlo. Y queda el **7 entero (VPS)**, que es lo único
+irrecuperable. Del 8, se cerraron 8.1 en parte y 8.2 en su caso concreto.
+
+**El PDF, con lo que se decidió** (11 de agosto, por la tarde): un botón al lado del de Excel, en las
+seis pantallas que ya exportaban. Lleva logo y nombre del negocio, los filtros escritos en
+castellano ("del 1 al 31 de agosto de 2026 · Sucursal Norte"), quién lo generó y cuándo, y
+las dos rayas de firma al final. Por encima de **1.500 filas avisa y no genera** —"son
+8.320 filas, unas 333 páginas; para este tamaño usa Excel"—, que es lo contrario de
+recortar en silencio.
+
+Dos cosas que sólo se vieron **mirando el PDF impreso**, no en los tests: la hoja de la
+firma salía sin cabecera cuando la tabla terminaba pegada al borde (una hoja suelta con dos
+rayas, sin decir de qué informe era), y la estimación de páginas del aviso se quedaba corta
+casi a la mitad, porque se supusieron 40 filas por hoja y entran 24.
 
 ---
 
@@ -145,16 +162,19 @@ contenedor, cada despliegue borra las fotos de todos los negocios. Falta añadir
 
 ## 6 · Lo que queda del plan de observaciones
 
-- **Exportar en PDF** (bloque C, segunda mitad). El Excel ya está y cubre el 90 % de lo que
-  se pide. El PDF es para imprimir y firmar, que es el caso más raro. **Tres días.**
+- ~~**Exportar en PDF** (bloque C, segunda mitad). El Excel ya está y cubre el 90 % de lo
+  que se pide. El PDF es para imprimir y firmar, que es el caso más raro. **Tres días.**~~
+  **HECHO** el 11 de agosto por la tarde, en unas horas y no en tres días: el endpoint `/export/:seccion`
+  ya devolvía las columnas en castellano y con los códigos traducidos, así que el PDF no
+  tuvo que decidir nada sobre los datos. Ver el bloque de estado de arriba.
 - **D.2 · Foto de notas a mano con IA.** Decidido que entra en el precio del plan. Falta lo
   que no es código: **el inventario del cliente saldría hacia un servicio externo, y eso
   tiene que estar en los términos antes de encenderlo.** Va por el skill `legal`. Aterriza
   en la misma vista previa de la importación, que ya está hecha. **Tres días + lo legal.**
-- **No hay pantalla de Clientes.** El API tiene `/customers` completo —lista, detalle,
+- ~~**No hay pantalla de Clientes.** El API tiene `/customers` completo —lista, detalle,
   saldo, abonos— y en la web no existe ninguna ruta que lo use. Lo descubrí conectando la
   exportación. No estaba en tus observaciones, pero es un hueco del mismo tipo que el #1 de
-  arriba.
+  arriba.~~ **HECHA** (`123400b`), con las tres rutas que al API le faltaban de verdad.
 
 ---
 

@@ -67,7 +67,11 @@ export function InventoryPage() {
         }
         acciones={
           <>
-            <Exportar seccion="inventario" filtros={{ locationId }} />
+            <Exportar
+              seccion="inventario"
+              filtros={{ locationId }}
+              alcance={locations?.find((l) => l.id === locationId)?.name}
+            />
             {canTransfer && (
               <Button variant="secondary" onClick={() => setTransferOpen(true)}>
                 <ArrowLeftRight size={18} /> Transferir
