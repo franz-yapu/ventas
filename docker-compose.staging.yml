@@ -81,8 +81,25 @@ services:
       # arranca sin ella en producción, ni si es igual a JWT_ACCESS_SECRET.
       JWT_PLATFORM_SECRET: ${JWT_PLATFORM_SECRET}
       DB_POOL_MAX: ${DB_POOL_MAX:-8}
-      # Sin RESEND_API_KEY los correos se escriben en el log del contenedor en vez de
-      # enviarse: `docker logs vf-staging-api` es el buzón de staging.
+      # ⚠️ RESEND_API_KEY es OBLIGATORIA aquí, aunque el `:-` de abajo diga lo contrario.
+      #
+      # Este comentario prometía que sin ella los correos se escribían en el log y que
+      # `docker logs vf-staging-api` era el buzón de staging. Dejó de ser cierto el 7 de
+      # agosto de 2026, cuando el arranque pasó a exigirla en producción — y este stack
+      # corre con `NODE_ENV: production` a propósito, para ensayar el VPS. Sin la variable
+      # el API NO ARRANCA: muere en `env.ts` antes de escuchar, y lo hace después de migrar
+      # y de activar RLS, que es lo que hace que en el log parezca que arrancó bien.
+      #
+      # Las dos salidas, y ninguna es gratis:
+      #   - Clave INVÁLIDA: el stack sube y ensaya production tal cual, pero el mailer llama
+      #     a Resend, se lleva un 401 y lo deja en el log. Los correos no salen y el enlace
+      #     de verificación no aparece: no se puede completar un registro ni un
+      #     restablecimiento de contraseña.
+      #   - Bajar `NODE_ENV`: vuelve el buzón en el log, y con él se van las comprobaciones
+      #     de arranque que este staging existe para ensayar.
+      #
+      # Un comentario que describe lo que el código hacía deja de describirlo cuando el
+      # código cambia, y el comentario no se entera.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       APP_URL_TEMPLATE: ${APP_URL_TEMPLATE}
       ALERT_EMAIL: ${ALERT_EMAIL:-}
