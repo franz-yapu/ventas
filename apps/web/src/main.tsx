@@ -34,16 +34,18 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       {/*
-        Las dos banderas de v7 van activadas a propósito.
-        - Silencian los dos avisos de consola que salían en cada arranque, y un aviso
-          que sale siempre es un aviso que nadie lee.
-        - Adelantan el comportamiento de React Router 7, que es donde vive el parche de
-          las dos redirecciones abiertas de la 6.30.4. Hoy no son alcanzables aquí
-          —ningún `navigate()` recibe datos de fuera, todas las rutas son literales, y
-          no hay SSR—, así que la migración no urge; pero cuando toque, con esto ya
-          está medio hecha.
+        Sin banderas `future`: esto YA es React Router 7 (12 de agosto de 2026).
+
+        Estaban puestas para adelantar el comportamiento de la 7 y silenciar sus dos
+        avisos de consola. En la 7 ese comportamiento es el único que hay, así que la
+        prop ni existe — pasarla no compila. Que la migración costara un solo error de
+        tipos es justamente porque se habían activado antes.
+
+        El motivo de subir: el aviso de redirección abierta de `<Link>` y `useNavigate`
+        alcanza a TODA la línea 6 (>=6.0.0 <7.18.0), así que no se cerraba con ningún
+        parche de la 6.x — la 6.30.4 que había era ya la última.
       */}
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter>
         {/* El modo va por encima de la sesión: el login y la recuperación de
             contraseña también se miran de noche. */}
         <ModoProvider>
