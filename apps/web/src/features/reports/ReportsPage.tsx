@@ -13,6 +13,8 @@ import {
   TopProducts,
   Trend30,
 } from '@/features/dashboard/widgets';
+import { FuncionDeOtroPlan } from '@/features/subscription/FuncionDeOtroPlan';
+import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { api } from '@/lib/api';
 import { currentWeek, money } from '@/lib/format';
 import type { DashboardData, ReportSummary } from '@/lib/types';
@@ -29,10 +31,23 @@ export function ReportsPage() {
     params.set('to', new Date(`${to}T23:59:59.999`).toISOString());
   }
 
-  // Datos visuales (tendencia, por sucursal, top productos…) — mismo endpoint que el Panel.
+  /*
+    Los datos visuales (tendencia, por sucursal, top productos…) son de un plan superior.
+
+    `enabled` evita pedirlos cuando el plan no los incluye, y no es sólo por ahorrar una
+    petición: sin esto el API respondía 402, los widgets iban con `{dash && …}` y no se
+    pintaba NADA — media pantalla en blanco, sin decir por qué. El manejador global calla
+    los 402 a propósito (para no llenar de errores a quien está bloqueado), así que el
+    hueco quedaba mudo por partida doble.
+
+    Lo que decide de verdad sigue siendo el API; esto es comodidad, no seguridad.
+  */
+  const { has } = useSubscription();
+  const conAnalitica = has('reportes_avanzados');
   const { data: dash, isLoading: cargandoDash } = useQuery({
     queryKey: ['report-dashboard'],
     queryFn: () => api.get<DashboardData>('/reports/dashboard'),
+    enabled: conAnalitica,
   });
   // Comparativo por ubicación + rango personalizado.
   const { data } = useQuery({
@@ -87,7 +102,9 @@ export function ReportsPage() {
 
       {/* KPIs. Mientras cargan, esqueletos del mismo alto: así la página no da el
           salto que hace pulsar el botón equivocado. */}
-      {cargandoDash ? (
+      {!conAnalitica ? (
+        <FuncionDeOtroPlan que="Los gráficos y las comparativas" />
+      ) : cargandoDash ? (
         <SkeletonTiles n={4} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

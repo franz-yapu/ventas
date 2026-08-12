@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/ui/page';
+import { FuncionDeOtroPlan } from '@/features/subscription/FuncionDeOtroPlan';
+import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { api } from '@/lib/api';
 import { money } from '@/lib/format';
 import { downloadCsv, printPage } from '@/lib/print';
@@ -21,9 +23,20 @@ export function DashboardPage() {
   const [editing, setEditing] = useState(false);
   const [layout, setLayout] = useState<string[]>(DEFAULT_WIDGET_IDS);
 
+  /*
+    El panel entero es de un plan superior, y por eso no se pide sin él.
+
+    El menú ya lo oculta cuando el plan no lo incluye, pero esta ruta se alcanza igual
+    escribiéndola o desde un enlace guardado — y entonces el API respondía 402, los
+    widgets se quedaban sin datos y la pantalla salía vacía sin explicar nada. Ocultar
+    una entrada del menú no es lo mismo que contestar a quien llega por otra puerta.
+  */
+  const { has } = useSubscription();
+  const conAnalitica = has('reportes_avanzados');
   const { data } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => api.get<DashboardData>('/reports/dashboard'),
+    enabled: conAnalitica,
   });
   const { data: config } = useQuery({
     queryKey: ['dashboard-config'],
@@ -89,6 +102,8 @@ export function DashboardPage() {
       <div className="hidden print:block">
         <h2 className="text-lg font-bold">Reporte de ventas</h2>
       </div>
+
+      {!conAnalitica && <FuncionDeOtroPlan que="El panel" />}
 
       {editing && (
         <Card className="no-print">
