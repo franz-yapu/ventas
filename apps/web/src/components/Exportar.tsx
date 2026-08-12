@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api } from '@/lib/api';
+import { fechaDeArchivo } from '@/lib/format';
 import { avisoDeTamano, construirPdf, describirFiltros, MAX_FILAS_PDF, tituloDe } from '@/lib/pdf';
 import { useMarca } from '@/theme/ThemeProvider';
 
@@ -91,7 +92,10 @@ export function Exportar({ seccion, filtros, alcance, etiquetas, className }: Pr
   }
 
   function descargar(blob: Blob, extension: string) {
-    const hoy = new Date().toISOString().slice(0, 10);
+    // En la zona del NEGOCIO, no en UTC: si no, un informe sacado a las 21:00 del 11 se
+    // guarda como `…-2026-08-12.pdf` y la hoja dice «Generado … 11/8/26». Estos papeles se
+    // archivan, así que la carpeta y el papel tienen que hablar del mismo día.
+    const hoy = fechaDeArchivo(new Date());
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

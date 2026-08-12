@@ -115,6 +115,32 @@ describe('el botón de PDF', () => {
     expect(descargas[0]).toMatch(/^ventas-\d{4}-\d{2}-\d{2}\.pdf$/);
   });
 
+  /**
+   * Y esa fecha es la del NEGOCIO, no la de UTC.
+   *
+   * A las 21:00 del 11 de agosto en Bolivia ya es el 12 en UTC, así que el archivo se
+   * guardaba como `ventas-2026-08-12.pdf` con una hoja que decía «Generado … 11/8/26,
+   * 9:00 p. m.». Estos papeles se archivan: la carpeta y el papel no pueden discrepar sobre
+   * qué día se hizo.
+   *
+   * Con el reloj congelado en esa franja de cuatro horas, que es la única en la que las dos
+   * zonas dan días distintos — sin fijarlo, el test pasaría 20 de cada 24 horas sin probar
+   * nada.
+   */
+  it('la fecha del nombre es la del negocio, aunque en UTC ya sea otro día', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-12T01:00:00Z'));
+    try {
+      responde([VENTA]);
+      montar(<Exportar seccion="ventas" />);
+      await userEvent.click(screen.getByRole('button', { name: /PDF/ }));
+      await waitFor(() => expect(descargas).toHaveLength(1));
+      expect(descargas[0]).toBe('ventas-2026-08-11.pdf');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   /*
     Filtrado por sucursal y sin nombre: el componente lo DICE.
 
