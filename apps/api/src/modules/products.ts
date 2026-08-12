@@ -1,6 +1,6 @@
-import { schema, withTenant, type TenantTx } from '@ventafacil/db';
+import { db, schema, withTenant, type TenantTx } from '@ventafacil/db';
 import { upsertProductSchema } from '@ventafacil/shared';
-import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { borrar as borrarArchivo, ErrorDeArchivo, guardar, MAX_BYTES } from '../lib/almacen.js';
@@ -119,8 +119,6 @@ export async function productRoutes(app: FastifyInstance) {
         )!,
       );
     }
-    const where = and(...filters);
-
     /*
       ¿El stock de qué ubicación se enseña? La de quien mira.
 
@@ -132,6 +130,49 @@ export async function productRoutes(app: FastifyInstance) {
       casa con ninguna fila: el `leftJoin` deja el stock en null en vez de reventar.
     */
     const ubicacionDeStock = scope ?? q.locationId ?? user.locationId ?? NINGUNA_UBICACION;
+
+    /**
+     * Una sucursal ve SU surtido, no el del negocio entero.
+     *
+     * El catálogo sigue siendo del negocio —por eso una sucursal ve lo que dio de alta la
+     * central, que es lo que arregló el multi-sucursal en su día—, pero lo que le aparece
+     * es lo que tiene en su bodega: basta con que exista su fila de inventario.
+     *
+     * Sin esto, una sucursal recién abierta veía en el POS los 29 productos del negocio
+     * con «stock —», ninguno suyo: el cajero los tocaba, los metía al carrito y cobraba
+     * mercadería que no estaba en su local. El servidor ahora rechaza esa venta, pero el
+     * arreglo de verdad es no ofrecer lo que no se puede vender.
+     *
+     * La CENTRAL no se filtra: es quien reparte, y necesita ver el catálogo entero para
+     * mandar mercadería a donde falta.
+     *
+     * Va en `filters` —y no en el JOIN— para que la CUENTA salga igual de filtrada: si el
+     * total contara todo el catálogo mientras la lista trae sólo lo suyo, la sucursal
+     * vería un «Cargar más» que no trae nada.
+     */
+    /*
+      Quien no tiene ubicación asignada queda fuera de esta regla, a propósito: no tiene
+      surtido que filtrar. Sigue viendo el catálogo sin existencias de nadie, que es lo
+      que ya se decidió para ese caso —y vender no puede igualmente, porque la venta se
+      registra en la ubicación de quien cobra y él no tiene ninguna.
+    */
+    if (!user.isCentral && user.locationId) {
+      filters.push(
+        inArray(
+          schema.product.id,
+          db
+            .select({ id: schema.inventory.productId })
+            .from(schema.inventory)
+            .where(
+              and(
+                eq(schema.inventory.businessId, user.businessId),
+                eq(schema.inventory.locationId, ubicacionDeStock),
+              ),
+            ),
+        ),
+      );
+    }
+    const where = and(...filters);
 
     const { rows, count } = await withTenant(user.businessId, async (tx) => {
       const rows = await tx

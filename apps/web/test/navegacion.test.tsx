@@ -25,7 +25,7 @@ import { montar, screen } from './montar';
  */
 
 vi.mock('@/features/auth/AuthProvider', () => ({
-  useAuth: () => ({ user: USUARIO, logout: vi.fn() }),
+  useAuth: () => ({ user: usuario, logout: vi.fn() }),
 }));
 // Todas las funciones del plan disponibles: aquí se prueba la navegación, no el plan.
 vi.mock('@/features/subscription/SubscriptionProvider', () => ({
@@ -44,12 +44,13 @@ vi.mock('@/offline/sync', () => ({ startSyncWorker: vi.fn() }));
 const USUARIO = {
   sub: 'u1',
   businessId: 'b1',
-  locationId: null,
+  locationId: 'loc-1',
   isCentral: true,
   role: 'admin' as const,
   name: 'Ana Pérez',
+  locationName: 'Sucursal Norte',
 };
-let usuario = USUARIO;
+let usuario: Record<string, unknown> = { ...USUARIO };
 
 const { Layout } = await import('@/components/Layout');
 
@@ -81,7 +82,7 @@ function destinos(): string[] {
 }
 
 beforeEach(() => {
-  usuario = USUARIO;
+  usuario = { ...USUARIO };
 });
 
 describe('el menú', () => {
@@ -105,6 +106,26 @@ describe('el menú', () => {
     // Un fallo del enrutador deja el marco en pie y el contenido fuera; se ve en blanco.
     montarEn('/productos');
     expect(screen.getByText('contenido de la pantalla')).toBeTruthy();
+  });
+});
+
+/**
+ * En qué sucursal estamos.
+ *
+ * Pedido tras probar el sistema con dos locales: la aplicación no lo decía en ninguna
+ * parte. Y no es un adorno — el stock que se mira, la caja que se abre y la venta que se
+ * cobra son de UNA sucursal; sin saber cuál, los tres números pueden leerse mal.
+ */
+describe('la sucursal en la que se trabaja', () => {
+  it('se ve en la barra de arriba', () => {
+    montarEn('/');
+    expect(screen.getByText('Sucursal Norte')).toBeTruthy();
+  });
+
+  it('quien no tiene ubicación asignada no ve una inventada', () => {
+    usuario = { ...USUARIO, locationName: null };
+    montarEn('/');
+    expect(screen.queryByText('Sucursal Norte')).toBeNull();
   });
 });
 

@@ -163,6 +163,97 @@ describe('una sucursal puede vender lo que tiene', () => {
     expect(p.stock).toBe(7);
   });
 
+  /**
+   * Y lo que NO tiene, no lo ve.
+   *
+   * Encontrado probando en el NAS: en una sucursal recién abierta, el POS ofrecía los 29
+   * productos del negocio con «stock —», ninguno suyo. El cajero los tocaba, los metía al
+   * carrito y cobraba mercadería que no existía en su local.
+   *
+   * Decisión de franz (12 de agosto de 2026): una sucursal ve en su catálogo lo que tiene
+   * en su bodega. El catálogo sigue siendo del negocio —por eso Norte ve arriba lo que
+   * creó la central—, pero lo que aparece es su surtido, no el de los demás.
+   */
+  it('lo que NO está en su bodega no le aparece', async () => {
+    const [soloCentral] = await db
+      .insert(schema.product)
+      .values({
+        businessId: t.businessId,
+        locationId: t.locationId,
+        sku: 'SOLO-CENTRAL',
+        name: 'Producto que sólo está en la central',
+        price: '80.00',
+      })
+      .returning();
+    await db.insert(schema.inventory).values({
+      businessId: t.businessId,
+      productId: soloCentral!.id,
+      locationId: t.locationId,
+      quantity: 25,
+      minStock: 1,
+    });
+
+    const norte = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products?limit=100',
+      headers: auth(vendedorNorte),
+    });
+    const idsNorte = norte.json().data.items.map((p: { id: string }) => p.id);
+    expect(idsNorte, 'Norte ve un producto que no tiene').not.toContain(soloCentral!.id);
+
+    // La central sí: es suyo y lo tiene.
+    const central = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products?limit=100',
+      headers: auth(t.adminToken),
+    });
+    const idsCentral = central.json().data.items.map((p: { id: string }) => p.id);
+    expect(idsCentral).toContain(soloCentral!.id);
+  });
+
+  it('en cuanto le mandan mercadería, aparece', async () => {
+    // Es la otra mitad: el filtro no puede dejar a una sucursal sin poder vender lo que
+    // acaba de recibir. Basta con que exista su fila de inventario.
+    const [recibido] = await db
+      .insert(schema.product)
+      .values({
+        businessId: t.businessId,
+        locationId: t.locationId,
+        sku: 'REPARTIDO',
+        name: 'Producto repartido a Norte',
+        price: '40.00',
+      })
+      .returning();
+    await db.insert(schema.inventory).values({
+      businessId: t.businessId,
+      productId: recibido!.id,
+      locationId: norteId,
+      quantity: 3,
+      minStock: 1,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products?limit=100',
+      headers: auth(vendedorNorte),
+    });
+    const suyo = res.json().data.items.find((p: { id: string }) => p.id === recibido!.id);
+    expect(suyo, 'no ve lo que le acaban de repartir').toBeTruthy();
+    expect(suyo.stock).toBe(3);
+  });
+
+  it('el total de la lista cuenta lo mismo que se ve', async () => {
+    // El contador alimenta el «Cargar más»: si contara todo el catálogo mientras la lista
+    // trae sólo lo suyo, la sucursal vería un botón que no trae nada.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products?limit=100',
+      headers: auth(vendedorNorte),
+    });
+    const d = res.json().data;
+    expect(d.total).toBe(d.items.length);
+  });
+
   it('un vendedor NO puede espiar el stock de otra sucursal con ?locationId', async () => {
     // El parámetro es para administrar, no para curiosear: a quien tiene alcance de
     // sucursal se le ignora y sigue viendo el suyo.
@@ -1215,5 +1306,50 @@ describe('el sync traduce sus errores', () => {
     expect(results.find((r) => r.id === idA)!.status).toBe('ok');
     expect(results.find((r) => r.id === idB)!.status).toBe('ok');
     expect(results[1]!.status).toBe('error');
+  });
+});
+
+/**
+ * Dónde estoy trabajando.
+ *
+ * En un negocio con varias sucursales, la aplicación no decía en ninguna parte en cuál
+ * estabas. Con la misma pantalla para todas, quien administra dos locales no tenía forma
+ * de saber si el stock que mira, la caja que abre o la venta que cobra son de una o de la
+ * otra — y las tres cosas dependen de eso.
+ *
+ * Va en `/auth/me`, con el resto de la identidad, y no en una consulta aparte: la sucursal
+ * de alguien no cambia mientras usa el sistema, y un vendedor no puede pedir `/locations`.
+ */
+describe('la sesión dice en qué sucursal estás', () => {
+  const yo = (token: string) =>
+    app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: auth(token) });
+
+  it('el vendedor de Norte sabe que está en Norte', async () => {
+    const d = (await yo(vendedorNorte)).json().data;
+    expect(d.locationName).toBe('Sucursal Norte');
+    expect(d.isCentral).toBe(false);
+  });
+
+  it('y quien está en la central, que está en la central', async () => {
+    const d = (await yo(t.adminToken)).json().data;
+    expect(d.locationName).toBeTruthy();
+    expect(d.isCentral).toBe(true);
+  });
+
+  it('quien no tiene ubicación asignada no inventa ninguna', async () => {
+    const [suelto] = await db
+      .insert(schema.appUser)
+      .values({
+        businessId: t.businessId,
+        locationId: null,
+        name: 'Sin sucursal',
+        username: 'sin.sucursal',
+        passwordHash: await argon2.hash('secreto123'),
+        role: 'admin',
+      })
+      .returning();
+    expect(suelto).toBeTruthy();
+    const d = (await yo(await entrar('sin.sucursal'))).json().data;
+    expect(d.locationName).toBeNull();
   });
 });

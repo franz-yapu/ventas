@@ -46,11 +46,14 @@ describe('la miniatura de una lista', () => {
     expect(img.getAttribute('src')).toMatch(/^https?:\/\/.+\/media\/negocio-1\/abc\.webp$/);
   });
 
-  it('sin foto no deja un hueco vacío ni un icono roto', () => {
-    const { container } = montar(<Miniatura url={null} />);
+  it('sin foto no se pinta ninguna imagen, y el recuadro sigue ahí', () => {
+    // Antes este caso comprobaba el hueco A TRAVÉS del icono de imagen tachada. Ese icono
+    // se quitó —parecía un error de carga en un producto que simplemente no tiene foto—,
+    // así que el hueco se comprueba por lo que de verdad importa: que ocupe su sitio y la
+    // fila no baile entre productos con y sin foto.
+    const { container } = montar(<Miniatura url={null} className="h-10 w-10" />);
     expect(container.querySelector('img')).toBeNull();
-    // El recuadro sigue estando, para que la fila no baile entre productos con y sin foto.
-    expect(container.querySelector('svg')).toBeTruthy();
+    expect((container.firstElementChild as HTMLElement).className).toContain('h-10');
   });
 
   it('si la imagen NO CARGA cae al mismo hueco: es el caso de vender sin señal', () => {
@@ -62,6 +65,53 @@ describe('la miniatura de una lista', () => {
 
     expect(container.querySelector('img'), 'se quedó el icono roto del navegador').toBeNull();
     expect(container.querySelector('svg')).toBeTruthy();
+  });
+
+  /**
+   * Sin foto no se pinta un icono de «imagen rota».
+   *
+   * Reportado probando en el NAS: en la rejilla de Vender, los productos sin foto salían
+   * con el icono de imagen tachada — que es exactamente lo que parece un error de carga.
+   * Un producto sin foto no es un fallo: es un producto sin foto.
+   *
+   * Se distingue de lo otro, que sí merece marcador: una foto que EXISTE y no cargó (sin
+   * señal en el mostrador). Ahí el hueco tachado informa de algo real y temporal.
+   */
+  it('un producto sin foto deja el hueco vacío, sin icono de rota', () => {
+    const { container } = montar(<Miniatura url={null} />);
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('svg'), 'pinta el icono de imagen rota').toBeNull();
+  });
+
+  it('pero el hueco sigue ocupando su sitio, para que la rejilla no baile', () => {
+    const { container } = montar(<Miniatura url={null} className="h-20 w-full" />);
+    const hueco = container.firstElementChild as HTMLElement;
+    expect(hueco.className).toContain('h-20');
+  });
+
+  it('una foto que SÍ existe pero no carga sí lleva marcador: es un fallo real', () => {
+    const { container } = montar(<Miniatura url="/media/n1/abc.webp" />);
+    fireEvent.error(container.querySelector('img')!);
+    expect(
+      container.querySelector('svg'),
+      'sin marcador no se distingue de no tener foto',
+    ).toBeTruthy();
+  });
+
+  /*
+    Y la foto se ve ENTERA y centrada, no recortada y ampliada.
+
+    Las fotos se guardan cuadradas (recorte central 800×800), pero en el POS el hueco es
+    una banda ancha y baja: con `object-cover` se recortaba arriba y abajo y se ampliaba el
+    centro — «se ve muy grande», que es como lo describió quien lo probó.
+  */
+  it('la imagen se ve completa dentro de su hueco', () => {
+    const { container } = montar(<Miniatura url="/media/n1/abc.webp" className="h-20 w-full" />);
+    const img = container.querySelector('img')!;
+    expect(img.className).toContain('object-contain');
+    expect(img.className, 'recorta la foto en vez de mostrarla entera').not.toContain(
+      'object-cover',
+    );
   });
 
   /**

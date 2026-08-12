@@ -45,6 +45,27 @@ function errorDeVenta(e: unknown): { status: number; error: string; code?: strin
   if (s.includes('PRODUCT_SCOPE')) {
     return { status: 400, error: 'Algún producto de la venta no es de este negocio' };
   }
+  /*
+    Sin existencias. El mensaje dice QUÉ producto y CUÁNTO queda porque quien lo lee está
+    en el mostrador con el cliente delante: «no se pudo cobrar» le obliga a ir producto por
+    producto adivinando cuál falla.
+
+    409 y no 400: la venta está bien formada, lo que pasa es que el estado del inventario
+    no la permite. La diferencia importa para la cola offline, que reintenta los fallos de
+    red pero no debe reintentar esto en bucle.
+  */
+  const sinStock = /NO_STOCK:(.+):(\d+)$/.exec(s);
+  if (sinStock) {
+    const [, nombre, hay] = sinStock;
+    return {
+      status: 409,
+      error:
+        Number(hay) === 0
+          ? `No hay existencias de «${nombre}» en esta sucursal.`
+          : `Sólo quedan ${hay} de «${nombre}» en esta sucursal.`,
+      code: 'sin_stock',
+    };
+  }
   return null;
 }
 

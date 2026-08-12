@@ -225,7 +225,25 @@ export function Layout({ children }: { children: ReactNode }) {
             <Marca size="sm" className="h-7 w-7 rounded-[8px]" />
             <NombreDeMarca className="truncate font-semibold" />
           </div>
-          <span className="hidden md:block" />
+          {/*
+            En qué sucursal se está trabajando.
+
+            Ocupa el hueco que antes era un separador vacío. En un negocio con dos locales,
+            el stock que se mira, la caja que se abre y la venta que se cobra son de UNO de
+            ellos, y hasta ahora nada en la pantalla lo decía. Se enseña también en móvil
+            —truncado— porque ahí es donde se vende.
+          */}
+          {user?.locationName ? (
+            <span
+              className="ml-2 flex min-w-0 items-center gap-1.5 text-[13px] text-muted md:ml-0"
+              title={`Estás en ${user.locationName}`}
+            >
+              <MapPin size={14} className="shrink-0" />
+              <span className="truncate font-medium">{user.locationName}</span>
+            </span>
+          ) : (
+            <span className="hidden md:block" />
+          )}
           <div className="flex items-center gap-3">
             <SyncIndicator />
             {/* Avatar (sólo móvil): acceso a Mi perfil, que incluye "Cerrar sesión". */}

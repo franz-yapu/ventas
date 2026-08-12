@@ -69,6 +69,21 @@ async function desenvolver<T>(res: Response): Promise<T> {
   return body!.data as T;
 }
 
+/**
+ * Cuánto se espera una respuesta antes de rendirse.
+ *
+ * Sin límite, `fetch` deja la promesa viva para siempre si la respuesta no llega, y quien
+ * la espera se queda ahí. Eso bloqueó una caja: se seleccionaban varios productos, se
+ * pulsaba Cobrar y el botón se quedaba en «Cobrando…» sin volver — con el carrito dentro,
+ * y sin más salida que recargar la página.
+ *
+ * 20 segundos es holgado para lo que hace este sistema (la exportación más pesada devuelve
+ * JSON, no genera archivos) y corto comparado con «para siempre». La venta se guarda en la
+ * cola local ANTES de intentar subirla, así que rendirse pronto no pierde nada: se
+ * sincroniza luego.
+ */
+const TIEMPO_LIMITE_MS = 20_000;
+
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   /*
@@ -83,7 +98,25 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   }
   if (tokens.access) headers.set('Authorization', `Bearer ${tokens.access}`);
 
-  const res = await fetch(BASE + path, { ...init, headers });
+  const cortar = new AbortController();
+  const reloj = setTimeout(() => cortar.abort(), TIEMPO_LIMITE_MS);
+  let res: Response;
+  try {
+    res = await fetch(BASE + path, { ...init, headers, signal: init.signal ?? cortar.signal });
+  } catch (e) {
+    /*
+      Se distingue «tardó demasiado» de «no hay red», porque no se arreglan igual: lo
+      primero suele ser un servidor que no responde y lo segundo, un wifi caído. Las dos
+      salen como `ApiError` con status 0 para que quien las reciba no tenga que saber de
+      `DOMException`.
+    */
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new ApiError(0, 'La conexión tardó demasiado. Inténtalo de nuevo.');
+    }
+    throw new ApiError(0, 'No se pudo conectar con el servidor.');
+  } finally {
+    clearTimeout(reloj);
+  }
 
   // Intenta refrescar el access token una vez ante un 401.
   if (res.status === 401 && retry && tokens.refresh && path !== '/auth/refresh') {

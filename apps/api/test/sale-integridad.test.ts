@@ -1,6 +1,6 @@
 import { db, schema } from '@ventafacil/db';
 import argon2 from 'argon2';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { clearAccessCache } from '../src/lib/subscription.js';
@@ -170,6 +170,24 @@ describe('la venta tiene que ser de este negocio', () => {
 });
 
 describe('tope de descuento del vendedor', () => {
+  /*
+    Repone existencias antes de cada caso. Aquí se prueba el TOPE, no el inventario, y
+    desde que vender exige stock estas ventas repetidas agotaban las 10 unidades con las
+    que nace el tenant y empezaban a fallar por otro motivo — un test que falla por algo
+    distinto de lo que vigila es peor que uno que no existe.
+  */
+  beforeEach(async () => {
+    await db
+      .update(schema.inventory)
+      .set({ quantity: 100 })
+      .where(
+        and(
+          eq(schema.inventory.productId, t.productId),
+          eq(schema.inventory.locationId, t.locationId),
+        ),
+      );
+  });
+
   let vendedor: string;
 
   beforeAll(async () => {
@@ -240,5 +258,126 @@ describe('tope de descuento del vendedor', () => {
       .where(eq(schema.business.id, t.businessId));
     expect((await venderComoCajera('1.00')).statusCode).toBe(403);
     expect((await venderComoCajera('0')).statusCode).toBe(201);
+  });
+});
+
+/**
+ * No se vende lo que no se tiene.
+ *
+ * Encontrado probando en el NAS, y es el peor de los que salieron ese día: un vendedor de
+ * una sucursal recién creada vendió un producto **del que no tenía ni una unidad**. El
+ * recibo se emitió (#72) y el inventario NO registró nada — no había fila para esa
+ * sucursal, y la otra conservó sus existencias intactas. Se cobró mercadería que no salió
+ * de ningún sitio, y el stock del negocio pasó a mentir sin que nada lo dijera.
+ *
+ * La causa estaba escrita en el propio comentario del descuento: «sólo … productos con
+ * inventario en la ubicación». Es un `UPDATE` que, cuando no encuentra fila, afecta a cero
+ * filas y sigue como si nada. Un descuento que no descuenta y no protesta.
+ *
+ * Decisión de franz (12 de agosto de 2026): rechazarlo. Vender sin existencias emite un
+ * papel que no se corresponde con ninguna mercadería, y el descuadre aparece días después
+ * en un arqueo que nadie sabe explicar.
+ */
+describe('no se vende lo que no hay en la sucursal', () => {
+  /** Deja el inventario del producto del tenant en una cantidad concreta. */
+  async function dejarStock(cantidad: number) {
+    await db
+      .update(schema.inventory)
+      .set({ quantity: cantidad })
+      .where(
+        and(
+          eq(schema.inventory.productId, t.productId),
+          eq(schema.inventory.locationId, t.locationId),
+        ),
+      );
+  }
+
+  const stockActual = async () => {
+    const [fila] = await db
+      .select()
+      .from(schema.inventory)
+      .where(
+        and(
+          eq(schema.inventory.productId, t.productId),
+          eq(schema.inventory.locationId, t.locationId),
+        ),
+      );
+    return fila?.quantity ?? null;
+  };
+
+  it('con existencias de sobra, la venta pasa y descuenta', async () => {
+    await dejarStock(10);
+    expect((await vender(venta())).statusCode).toBe(201);
+    expect(await stockActual(), 'no descontó las 2 unidades vendidas').toBe(8);
+  });
+
+  it('pedir más de lo que hay se rechaza, y lo dice con el nombre y cuánto queda', async () => {
+    await dejarStock(1);
+    const res = await vender(venta());
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json().error).toMatch(/Producto secreto/);
+    expect(res.json().error).toMatch(/1/);
+    expect(res.json().code).toBe('sin_stock');
+  });
+
+  it('y no se descuenta NADA: o entra entera, o no entra', async () => {
+    // Media venta descontada sería peor que ninguna: el papel no sale y la mercadería
+    // desaparece del sistema igual.
+    await dejarStock(1);
+    await vender(venta());
+    expect(await stockActual()).toBe(1);
+  });
+
+  /*
+    Y tampoco se gasta un número de recibo. El correlativo es lo que le da sentido a la
+    numeración de un talonario: un hueco obliga a explicar dónde fue a parar ese papel.
+  */
+  it('una venta rechazada no consume el correlativo', async () => {
+    await dejarStock(10);
+    const antes = (await vender(venta())).json().data.receiptNumber;
+    await dejarStock(0);
+    await vender(venta());
+    await dejarStock(10);
+    const despues = (await vender(venta())).json().data.receiptNumber;
+    expect(despues).toBe(antes + 1);
+  });
+
+  /*
+    El caso exacto del NAS: un producto que existe en el negocio pero del que esta
+    sucursal no tiene NI UNA fila de inventario. Antes pasaba, porque el UPDATE no
+    encontraba nada que actualizar y nadie miraba cuántas filas había tocado.
+  */
+  it('sin fila de inventario en esa sucursal, tampoco', async () => {
+    const [otraSucursal] = await db
+      .insert(schema.location)
+      .values({ businessId: t.businessId, name: 'Sin nada', isCentral: false })
+      .returning();
+    await db.insert(schema.appUser).values({
+      businessId: t.businessId,
+      locationId: otraSucursal!.id,
+      name: 'Cajero de la nueva',
+      username: 'cajero.nuevo',
+      passwordHash: await argon2.hash('secreto123'),
+      role: 'seller',
+    });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { username: 'cajero.nuevo', password: 'secreto123', business: t.slug },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(login.json().data.accessToken),
+      payload: venta({ locationId: otraSucursal!.id }),
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json().code).toBe('sin_stock');
+
+    const ventas = await db
+      .select()
+      .from(schema.sale)
+      .where(eq(schema.sale.locationId, otraSucursal!.id));
+    expect(ventas, 'se emitió el recibo igualmente').toHaveLength(0);
   });
 });

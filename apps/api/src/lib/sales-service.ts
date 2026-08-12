@@ -115,15 +115,72 @@ export async function persistSale(
     ...new Set(input.items.map((it) => it.productId).filter(Boolean)),
   ] as string[];
   const costoDeProducto = new Map<string, string | null>();
+  const nombreDeProducto = new Map<string, string>();
   if (productIds.length > 0) {
     const propios = await tx
-      .select({ id: schema.product.id, cost: schema.product.cost })
+      .select({ id: schema.product.id, cost: schema.product.cost, name: schema.product.name })
       .from(schema.product)
       .where(
         and(inArray(schema.product.id, productIds), eq(schema.product.businessId, ctx.businessId)),
       );
     if (propios.length !== productIds.length) throw new Error('PRODUCT_SCOPE');
-    for (const p of propios) costoDeProducto.set(p.id, p.cost);
+    for (const p of propios) {
+      costoDeProducto.set(p.id, p.cost);
+      nombreDeProducto.set(p.id, p.name);
+    }
+  }
+
+  /**
+   * No se vende lo que no hay en ESTA sucursal.
+   *
+   * Sin esta comprobación se cobraba igual, y de las dos formas posibles: si la sucursal
+   * tenía fila de inventario, el stock se iba a NEGATIVO; y si no la tenía —una sucursal
+   * recién abierta, por ejemplo—, el `UPDATE` de más abajo no encontraba nada que
+   * actualizar, afectaba a cero filas y seguía adelante sin protestar. En los dos casos
+   * salía un recibo por mercadería que no salió de ningún sitio, y el descuadre aparecía
+   * días después en un arqueo que nadie sabía explicar.
+   *
+   * Se cuenta por PRODUCTO y no por línea: el mismo artículo puede venir en dos líneas de
+   * la misma venta, y cada una por separado cabría en el stock aunque juntas no.
+   *
+   * `FOR UPDATE` sobre las filas de inventario, y no una lectura suelta: sin el bloqueo,
+   * dos cajas vendiendo la última unidad a la vez leen «queda 1» las dos y las dos cobran.
+   * Con él, la segunda espera y ve el stock ya descontado.
+   *
+   * Sólo para ventas COMPLETADAS: una anulada no mueve existencias.
+   */
+  if (input.status === 'completed' && productIds.length > 0) {
+    const pedidoPorProducto = new Map<string, number>();
+    for (const it of input.items) {
+      if (!it.productId) continue;
+      pedidoPorProducto.set(it.productId, (pedidoPorProducto.get(it.productId) ?? 0) + it.quantity);
+    }
+
+    const enSucursal = await tx
+      .select({
+        productId: schema.inventory.productId,
+        quantity: schema.inventory.quantity,
+      })
+      .from(schema.inventory)
+      .where(
+        and(
+          eq(schema.inventory.businessId, ctx.businessId),
+          eq(schema.inventory.locationId, input.locationId),
+          inArray(schema.inventory.productId, [...pedidoPorProducto.keys()]),
+        ),
+      )
+      .for('update');
+    const disponible = new Map(enSucursal.map((f) => [f.productId, f.quantity]));
+
+    for (const [productId, pedido] of pedidoPorProducto) {
+      // Sin fila de inventario en esta sucursal, lo disponible es cero. No es lo mismo
+      // que «no se controla el stock»: aquí todo producto nace con su fila.
+      const hay = disponible.get(productId) ?? 0;
+      if (hay < pedido) {
+        const nombre = nombreDeProducto.get(productId) ?? 'ese producto';
+        throw new Error(`NO_STOCK:${nombre}:${hay}`);
+      }
+    }
   }
 
   const existing = await tx

@@ -16,6 +16,14 @@ export interface AuthUser {
    */
   email?: string | null;
   emailVerified?: boolean;
+  /**
+   * En qué sucursal trabaja, por su nombre. Lo añade `GET /auth/me`, como el correo.
+   *
+   * La aplicación no lo decía en ninguna parte: con la misma pantalla para todas, quien
+   * administra dos locales no sabía si el stock que mira, la caja que abre o la venta que
+   * cobra son de uno o del otro. `null` para quien no tiene ubicación asignada.
+   */
+  locationName?: string | null;
 }
 
 interface LoginResponse {

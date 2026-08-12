@@ -80,7 +80,11 @@ export function FotoDeProducto({ actual, nueva, onNueva, quitar, onQuitar }: Pro
       <div className="flex items-center gap-3">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-theme border border-field bg-bg">
           {previa ? (
-            <img src={previa} alt="" className="h-full w-full object-cover" />
+            // `contain` como en la miniatura: la vista previa tiene que enseñar la foto
+            // ENTERA y centrada. Con `cover`, una foto todavía sin recortar —la que acaba
+            // de elegirse de la galería— se veía a trozos, y quien la elige no puede saber
+            // si escogió la que quería.
+            <img src={previa} alt="" className="h-full w-full object-contain" />
           ) : (
             <ImageOff size={22} className="text-muted" aria-hidden="true" />
           )}
@@ -202,17 +206,35 @@ export function Miniatura({
       className={`flex shrink-0 items-center justify-center overflow-hidden rounded-theme-sm border border-border bg-bg ${className}`}
     >
       {src && !falló ? (
-        // `alt` vacío a propósito: el nombre del producto ya está al lado, y repetirlo
-        // hace que un lector de pantalla lo diga dos veces por fila.
+        /*
+          `object-contain`, no `cover`.
+
+          Las fotos se guardan CUADRADAS (recorte central 800×800), pero este hueco no
+          siempre lo es: en la rejilla del POS es una banda ancha y baja. Con `cover` la
+          foto se recortaba arriba y abajo y se ampliaba el centro — se veía un trozo del
+          producto, grande y descuadrado. Con `contain` se ve entera y centrada, que es
+          para lo que está ahí.
+
+          `alt` vacío a propósito: el nombre del producto ya está al lado, y repetirlo hace
+          que un lector de pantalla lo diga dos veces por fila.
+        */
         <img
           src={src}
           alt=""
           loading="lazy"
           onError={() => setUrlFallida(src)}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
         />
       ) : (
-        <ImageOff size={icono} className="text-muted" aria-hidden="true" />
+        /*
+          El marcador es SÓLO para una foto que existe y no cargó — sin señal en el
+          mostrador, típicamente—, porque ahí informa de algo real y temporal.
+
+          Un producto sin foto no lleva nada: el icono de imagen tachada se lee como un
+          error, y no tener foto no es un error. El hueco se queda reservado igual, que es
+          lo que impide que la rejilla baile entre unos productos y otros.
+        */
+        falló && <ImageOff size={icono} className="text-muted" aria-hidden="true" />
       )}
     </div>
   );

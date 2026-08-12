@@ -38,6 +38,25 @@ beforeAll(async () => {
     passwordHash: await argon2.hash('secreto123'),
     role: 'seller',
   });
+  /*
+    Mercadería en la sucursal nueva.
+
+    Hace falta desde que vender exige existencias EN esa sucursal. Sin esto, este archivo
+    fallaba con «no hay existencias» — un motivo que no tiene nada que ver con lo que
+    vigila (que una sucursal desactivada deje de usarse), y que lo habría dejado en verde
+    falso el día que alguien lo "arreglara" bajando la expectativa.
+
+    Y es, además, el escenario real que destapó aquel fallo: una sucursal recién abierta
+    vendiendo productos de los que no tenía ni una unidad.
+  */
+  await db.insert(schema.inventory).values({
+    businessId: t.businessId,
+    productId: t.productId,
+    locationId: sucursalId,
+    quantity: 50,
+    minStock: 1,
+  });
+
   const login = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/login',

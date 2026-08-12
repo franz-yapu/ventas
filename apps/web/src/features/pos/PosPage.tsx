@@ -27,7 +27,7 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { Receipt } from '@/features/sales/Receipt';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { money, PAYMENT_LABELS } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { printReceipt } from '@/lib/print';
@@ -225,9 +225,39 @@ export function PosPage() {
     }
   }
 
+  /**
+   * Cobrar. Con `try/finally`, y no es un detalle de estilo.
+   *
+   * El botón se apaga con `busy` mientras dura, y el `setBusy(false)` estaba al final del
+   * cuerpo: cualquier cosa que lanzara por el camino —o cualquier espera que no volviera—
+   * lo dejaba encendido para siempre. Eso bloqueó una caja de verdad: «Cobrando…» fijo,
+   * con el carrito dentro y sin más salida que recargar la página. Ahora el botón se
+   * libera pase lo que pase, que es la diferencia entre un intento fallido y una caja
+   * inservible.
+   *
+   * La otra mitad del arreglo está en el cliente del API, que ya no espera indefinidamente
+   * una respuesta que no llega.
+   */
   async function checkout() {
     if (cart.length === 0 || !activeLocation) return;
     setBusy(true);
+    try {
+      await registrarVenta();
+    } catch (e) {
+      /*
+        Que el cajero se entere. Antes esto no existía: si algo fallaba, el botón se
+        quedaba pensando y no se decía nada — la peor combinación, porque quien está
+        cobrando no sabe si la venta entró, si tiene que repetirla, o si acaba de cobrar
+        dos veces.
+      */
+      const msg = e instanceof ApiError ? e.message : 'No se pudo registrar la venta.';
+      showToast(msg, false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registrarVenta() {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const lines = cart.map((l) => ({
@@ -309,7 +339,8 @@ export function PosPage() {
     setDiscount('0');
     setCustomerId('');
     setMobileCartOpen(false);
-    setBusy(false);
+    // El `setBusy(false)` vive en el `finally` de `checkout`: aquí volvía a quedarse sin
+    // ejecutar en cuanto algo lanzara por encima.
   }
 
   const canCheckout = cart.length > 0 && !!activeLocation && !busy;

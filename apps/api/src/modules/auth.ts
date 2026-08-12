@@ -239,8 +239,22 @@ export async function authRoutes(app: FastifyInstance) {
         .select({
           email: schema.appUser.email,
           emailVerifiedAt: schema.appUser.emailVerifiedAt,
+          /*
+            En qué sucursal trabaja, por su nombre.
+
+            La aplicación no lo decía en ninguna parte: con la misma pantalla para todas,
+            quien administra dos locales no sabía si el stock que mira, la caja que abre o
+            la venta que cobra son de uno o del otro — y las tres cosas dependen de eso.
+
+            Viaja aquí, con el resto de la identidad, y no en una consulta aparte: no
+            cambia mientras se usa el sistema, y un vendedor no puede pedir `/locations`.
+            El `leftJoin` deja el nombre en null para quien no tiene ubicación asignada, en
+            vez de dejarlo fuera de la respuesta.
+          */
+          locationName: schema.location.name,
         })
         .from(schema.appUser)
+        .leftJoin(schema.location, eq(schema.location.id, schema.appUser.locationId))
         .where(eq(schema.appUser.id, req.authUser!.sub))
         .limit(1),
     );
@@ -249,6 +263,7 @@ export async function authRoutes(app: FastifyInstance) {
         ...req.authUser,
         email: row?.email ?? null,
         emailVerified: !!row?.emailVerifiedAt,
+        locationName: row?.locationName ?? null,
       },
       error: null,
     });
