@@ -1,5 +1,5 @@
 import { db, schema, withTenant } from '@ventafacil/db';
-import { and, asc, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, lte, or } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import {
   AUDIT_ACTION_LABELS,
@@ -235,6 +235,38 @@ export async function exportRoutes(app: FastifyInstance) {
           from: z.string().min(8).optional(),
           to: z.string().min(8).optional(),
           locationId: z.string().uuid().optional(),
+
+          /*
+            Los filtros que NO son de fecha, y por qué están aquí.
+
+            Esta ruta aceptaba `from`, `to` y `locationId` y nada más, mientras las
+            pantallas filtraban por bastante más. Un admin ponía Ventas en «Anuladas», veía
+            12 filas, pulsaba PDF y se llevaba un papel titulado «Ventas · del 1 al 31 de
+            agosto» con TODAS las completadas dentro. En el Excel ya era un incordio; en el
+            PDF es peor, porque la línea de filtros afirma por escrito lo que contiene, y
+            ese papel se firma y se archiva.
+
+            Se validan con el mismo criterio que las fechas: lo que no se entiende se
+            rechaza. Aceptar un `status=loquesea` e ignorarlo devuelve el listado COMPLETO
+            con un 200 — el informe llega, sólo que con todo dentro, que es la peor forma
+            de fallar porque nadie lo revisa.
+          */
+          status: z.enum(['completed', 'cancelled']).optional(),
+          // Lo que se teclea en el buscador de Productos. El tope es para que un `%…%` de
+          // un kilobyte no se convierta en un recorrido de tabla por capricho.
+          search: z.string().trim().min(1).max(100).optional(),
+          // Contra las MISMAS listas que llenan los desplegables de la pantalla y que
+          // traducen la columna más abajo: si no está ahí, no hay filtro que la pantalla
+          // haya podido pedir ni rótulo con el que escribirlo en el papel.
+          action: z
+            .string()
+            .refine((v) => v in AUDIT_ACTION_LABELS)
+            .optional(),
+          entity: z
+            .string()
+            .refine((v) => v in AUDIT_ENTITY_LABELS)
+            .optional(),
+          userId: z.string().uuid().optional(),
         })
         .safeParse(req.query);
       if (!q.success) return reply.code(400).send({ data: null, error: 'Parámetros inválidos' });
@@ -324,6 +356,7 @@ export async function exportRoutes(app: FastifyInstance) {
             const alcance = filtroDeUbicacion(user, schema.sale.locationId);
             if (alcance) w.push(alcance);
             if (q.data.locationId) w.push(eq(schema.sale.locationId, q.data.locationId));
+            if (q.data.status) w.push(eq(schema.sale.status, q.data.status));
             if (desde) w.push(gte(schema.sale.clientCreatedAt, desde));
             if (hasta) w.push(lte(schema.sale.clientCreatedAt, hasta));
             return tx
@@ -347,7 +380,30 @@ export async function exportRoutes(app: FastifyInstance) {
               .orderBy(desc(schema.sale.clientCreatedAt));
           }
 
-          case 'productos':
+          case 'productos': {
+            const w = [eq(schema.product.businessId, businessId)];
+            /*
+              Las tres columnas de `GET /products`, no sólo el nombre.
+
+              Quien teclea un SKU en el buscador ve tres filas y espera bajarse esas tres.
+              Buscando sólo por nombre bajaría cero, y un archivo vacío después de una
+              búsqueda que sí daba resultados parece un fallo del sistema.
+
+              `locationId` NO se aplica aquí a propósito: en esa pantalla decide de qué
+              sucursal es el STOCK que se enseña, no qué productos salen —el catálogo es
+              del negocio—, y esta exportación no lleva columna de stock. Aplicarlo
+              recortaría un listado que en pantalla no estaba recortado.
+            */
+            if (q.data.search) {
+              const like = `%${q.data.search}%`;
+              w.push(
+                or(
+                  ilike(schema.product.name, like),
+                  ilike(schema.product.sku, like),
+                  ilike(schema.product.barcode, like),
+                )!,
+              );
+            }
             return tx
               .select({
                 Código: schema.product.sku,
@@ -361,8 +417,9 @@ export async function exportRoutes(app: FastifyInstance) {
               })
               .from(schema.product)
               .leftJoin(schema.category, eq(schema.category.id, schema.product.categoryId))
-              .where(eq(schema.product.businessId, businessId))
+              .where(and(...w))
               .orderBy(asc(schema.product.name));
+          }
 
           case 'inventario':
             return tx
@@ -424,6 +481,9 @@ export async function exportRoutes(app: FastifyInstance) {
 
           case 'actividad': {
             const w = [eq(schema.auditLog.businessId, businessId)];
+            if (q.data.action) w.push(eq(schema.auditLog.action, q.data.action));
+            if (q.data.entity) w.push(eq(schema.auditLog.entity, q.data.entity));
+            if (q.data.userId) w.push(eq(schema.auditLog.userId, q.data.userId));
             if (desde) w.push(gte(schema.auditLog.createdAt, desde));
             if (hasta) w.push(lte(schema.auditLog.createdAt, hasta));
             return tx

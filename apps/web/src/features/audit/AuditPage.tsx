@@ -73,7 +73,15 @@ export function AuditPage() {
       <PageHeader
         titulo="Registro de actividad"
         descripcion="Quién cambió qué y cuándo. Se escribe solo y no se puede editar."
-        acciones={<Exportar seccion="actividad" filtros={{ from, to }} />}
+        acciones={
+          <Exportar
+            seccion="actividad"
+            filtros={{ from, to, action, entity, userId }}
+            // El papel dice «por Ana Pérez», no un uuid: la lista de usuarios la tiene
+            // cargada esta pantalla, igual que pasa con el nombre de la sucursal.
+            etiquetas={{ userId: users?.find((u) => u.id === userId)?.name }}
+          />
+        }
       />
 
       <div className="flex flex-wrap gap-2">

@@ -41,7 +41,9 @@ vi.mock('@/theme/ThemeProvider', () => ({
 }));
 
 const { api } = await import('@/lib/api');
-const { construirPdf, avisoDeTamano } = await import('@/lib/pdf');
+// `lineaDeFiltros` es el de verdad —sólo `construirPdf` va simulado—: lo que se comprueba
+// es el texto que se imprime, no una copia suya escrita a mano en el test.
+const { construirPdf, avisoDeTamano, lineaDeFiltros } = await import('@/lib/pdf');
 
 const VENTA = { Recibo: 'R-1', Fecha: '2026-08-11T14:00:00.000Z', Total: '120.50' };
 const responde = (filas: unknown[]) =>
@@ -125,6 +127,50 @@ describe('el botón de PDF', () => {
     await userEvent.click(screen.getByRole('button', { name: /PDF/ }));
     await waitFor(() => expect(construirPdf).toHaveBeenCalled());
     expect(vi.mocked(construirPdf).mock.calls[0]![0].alcanceSinNombre).toBe(true);
+  });
+
+  /*
+    Los filtros que no son de fecha, en sus DOS mitades.
+
+    El fallo que esto impide: la pantalla de Ventas filtrada a «Anuladas» pedía al servidor
+    todas las ventas del rango y las imprimía bajo un título que decía «del 1 al 31 de
+    agosto» sin más. Las dos mitades tienen que estar — que el filtro VIAJE al API, y que
+    el papel lo DIGA — porque cada una tapa el fallo de la otra: si sólo viaja, el papel
+    trae las anuladas sin decir que lo son; si sólo se escribe, el papel dice «Anulada» con
+    todas las ventas dentro, que es peor.
+  */
+  it('manda los filtros de la pantalla al API y los escribe en el papel', async () => {
+    responde([VENTA]);
+    montar(
+      <Exportar
+        seccion="ventas"
+        filtros={{ from: '2026-08-01', to: '2026-08-31', status: 'cancelled' }}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /PDF/ }));
+    await waitFor(() => expect(construirPdf).toHaveBeenCalled());
+
+    expect(vi.mocked(api.get).mock.calls[0]![0]).toContain('status=cancelled');
+    // Y llega hasta la línea que se imprime bajo el título, que es lo que alguien firma.
+    const datos = vi.mocked(construirPdf).mock.calls[0]![0];
+    expect(lineaDeFiltros(datos)).toBe('Anulada · del 1 al 31 de agosto de 2026');
+  });
+
+  it('el nombre del usuario que filtra la actividad llega al papel, y no su uuid', async () => {
+    responde([VENTA]);
+    montar(
+      <Exportar
+        seccion="actividad"
+        filtros={{ userId: 'u-9', action: 'price_change' }}
+        etiquetas={{ userId: 'Ana Pérez' }}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /PDF/ }));
+    await waitFor(() => expect(construirPdf).toHaveBeenCalled());
+
+    const linea = lineaDeFiltros(vi.mocked(construirPdf).mock.calls[0]![0]);
+    expect(linea).toBe('Cambio de precio · por Ana Pérez');
+    expect(linea).not.toContain('u-9');
   });
 
   /*

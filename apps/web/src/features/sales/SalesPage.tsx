@@ -70,7 +70,9 @@ export function SalesPage() {
         acciones={
           <Exportar
             seccion="ventas"
-            filtros={{ from, to, locationId }}
+            // `status` también: filtrar a «Anuladas» y bajarse un papel con todas las
+            // completadas dentro es un informe que miente, y de los que se firman.
+            filtros={{ from, to, locationId, status }}
             // El PDF se firma: tiene que decir de qué sucursal es, no su identificador.
             alcance={locations?.find((l) => l.id === locationId)?.name}
           />

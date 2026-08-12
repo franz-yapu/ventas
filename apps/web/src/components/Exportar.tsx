@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { api } from '@/lib/api';
-import { avisoDeTamano, construirPdf, MAX_FILAS_PDF, tituloDe } from '@/lib/pdf';
+import { avisoDeTamano, construirPdf, describirFiltros, MAX_FILAS_PDF, tituloDe } from '@/lib/pdf';
 import { useMarca } from '@/theme/ThemeProvider';
 
 /**
@@ -37,6 +37,15 @@ interface Props {
    * informe dice "una sucursal" en vez de callarlo.
    */
   alcance?: string;
+  /**
+   * Cómo se llama en castellano un filtro cuyo valor es un identificador — hoy sólo
+   * `userId`, en el registro de actividad.
+   *
+   * Mismo motivo que `alcance`: el papel tiene que decir «por Ana Pérez», no un uuid, y la
+   * única que tiene la lista de usuarios cargada es la pantalla. Lo que sí se traduce solo
+   * es lo que tiene rótulo en `@ventafacil/shared` (estado, acción, entidad).
+   */
+  etiquetas?: Record<string, string | undefined>;
   className?: string;
 }
 
@@ -56,7 +65,7 @@ function anchoDe(col: string, filas: Array<Record<string, unknown>>): number {
   return Math.min(Math.max(largo + 2, 10), 45);
 }
 
-export function Exportar({ seccion, filtros, alcance, className }: Props) {
+export function Exportar({ seccion, filtros, alcance, etiquetas, className }: Props) {
   const { user } = useAuth();
   const marca = useMarca();
   const [bajando, setBajando] = useState<null | 'excel' | 'pdf'>(null);
@@ -122,6 +131,9 @@ export function Exportar({ seccion, filtros, alcance, className }: Props) {
           hasta: filtros?.to,
           alcance,
           alcanceSinNombre: !!filtros?.locationId && !alcance,
+          // Los demás filtros de la pantalla, escritos en el papel. Sin esto, un listado
+          // de «Anuladas» sale titulado como si fueran todas las ventas del mes.
+          extras: describirFiltros(filtros, etiquetas),
         }),
         'pdf',
       );

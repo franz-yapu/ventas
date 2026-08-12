@@ -1,6 +1,6 @@
 import { db, schema } from '@ventafacil/db';
 import argon2 from 'argon2';
-import { TERMS_VERSION } from '@ventafacil/shared';
+import { AUDIT_ACTION_LABELS, SALE_STATUS_LABELS, TERMS_VERSION } from '@ventafacil/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -385,5 +385,109 @@ describe('exportar los datos de una pantalla', () => {
       headers: auth(t.adminToken),
     });
     expect(res.statusCode).toBe(200);
+  });
+
+  /**
+   * Los filtros que NO eran de fecha, que es por donde el papel mentía.
+   *
+   * La ruta aceptaba `from`, `to` y `locationId` y nada más, así que un admin que filtraba
+   * Ventas a «Anuladas» y pulsaba PDF se llevaba un papel titulado «Ventas · del 1 al 31 de
+   * agosto» **con todas las completadas dentro**. En el Excel era un incordio; en el PDF es
+   * peor, porque la línea de filtros AFIRMA por escrito lo que contiene, y ese papel se
+   * firma y se archiva.
+   *
+   * Cada uno se comprueba con las dos mitades: que lo pedido entra y que lo demás se queda
+   * fuera. Con sólo la primera, una ruta que ignorara el filtro pasaría el test.
+   */
+  describe('los filtros de la pantalla llegan a la exportación', () => {
+    const filas = async (url: string) => {
+      const res = await app.inject({ method: 'GET', url, headers: auth(t.adminToken) });
+      expect(res.statusCode, res.body.slice(0, 150)).toBe(200);
+      return res.json().data.filas as Array<Record<string, unknown>>;
+    };
+
+    beforeAll(async () => {
+      // El tenant nace con una venta completada (ver `helpers.ts`). Le hace falta una
+      // anulada para que «sólo las anuladas» pueda distinguirse de «todas».
+      await db.insert(schema.sale).values({
+        id: crypto.randomUUID(),
+        businessId: t.businessId,
+        locationId: t.locationId,
+        userId: t.adminId,
+        status: 'cancelled',
+        subtotal: '333.00',
+        total: '333.00',
+        paymentMethod: 'cash',
+        receiptNumber: 8801,
+        clientCreatedAt: new Date(),
+      });
+      await db.insert(schema.product).values({
+        businessId: t.businessId,
+        locationId: t.locationId,
+        sku: 'FILTRO-1',
+        name: 'Filtro de aceite',
+        price: '80.00',
+      });
+    });
+
+    it('ventas: `status` deja fuera las completadas', async () => {
+      const anuladas = await filas('/api/v1/export/ventas?status=cancelled');
+      expect(anuladas.length).toBeGreaterThan(0);
+      // El estado sale traducido en la columna, que es lo que lee quien abre el archivo.
+      // Contra el rótulo de verdad y no contra una copia: son los mismos que usa la
+      // aplicación justo para que no haya dos listas que se separen.
+      expect(anuladas.every((f) => f['Estado'] === SALE_STATUS_LABELS.cancelled)).toBe(true);
+
+      const todas = await filas('/api/v1/export/ventas');
+      expect(todas.length, 'sin filtro salen las mismas: el filtro no hizo nada').toBeGreaterThan(
+        anuladas.length,
+      );
+    });
+
+    it('productos: `search` busca por nombre y por SKU, igual que la pantalla', async () => {
+      const porNombre = await filas('/api/v1/export/productos?search=Filtro');
+      expect(porNombre).toHaveLength(1);
+      expect(porNombre[0]!['Producto']).toBe('Filtro de aceite');
+
+      const porSku = await filas('/api/v1/export/productos?search=FILTRO-1');
+      expect(porSku).toHaveLength(1);
+
+      const todos = await filas('/api/v1/export/productos');
+      expect(todos.length).toBeGreaterThan(1);
+    });
+
+    it('actividad: `action`, `entity` y `userId` filtran', async () => {
+      // El login del tenant ya dejó su rastro en la auditoría.
+      const logins = await filas('/api/v1/export/actividad?action=login');
+      expect(logins.length).toBeGreaterThan(0);
+      expect(logins.every((f) => f['Acción'] === AUDIT_ACTION_LABELS.login)).toBe(true);
+
+      expect(await filas('/api/v1/export/actividad?action=delete')).toHaveLength(0);
+      expect(await filas(`/api/v1/export/actividad?userId=${t.adminId}`)).not.toHaveLength(0);
+      expect(await filas(`/api/v1/export/actividad?userId=${otro.adminId}`)).toHaveLength(0);
+    });
+
+    /*
+      Un filtro que no se entiende se RECHAZA, no se ignora — lo mismo que ya se decidió
+      para las fechas. Ignorarlo devuelve el listado COMPLETO con un 200: el papel llega,
+      sólo que con todo dentro, y quien lo firma no tiene forma de notarlo.
+    */
+    it('un estado inventado es 400, no el listado entero', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/export/ventas?status=loquesea',
+        headers: auth(t.adminToken),
+      });
+      expect(res.statusCode, res.body.slice(0, 150)).toBe(400);
+    });
+
+    it('una acción inventada es 400', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/export/actividad?action=noexiste',
+        headers: auth(t.adminToken),
+      });
+      expect(res.statusCode).toBe(400);
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { AUDIT_ACTION_LABELS, AUDIT_ENTITY_LABELS, SALE_STATUS_LABELS } from '@ventafacil/shared';
 import type { Seccion } from '@/components/Exportar';
 import { dateTime } from '@/lib/format';
 
@@ -102,8 +103,10 @@ export function lineaDeFiltros(f: {
   alcance?: string;
   /** Hay un filtro de sucursal pero nadie dijo cómo se llama. Ver `Exportar`. */
   alcanceSinNombre?: boolean;
+  /** Los demás filtros de la pantalla, ya en castellano. Ver `describirFiltros`. */
+  extras?: string[];
 }): string {
-  const partes: string[] = [];
+  const partes: string[] = [...(f.extras ?? [])];
 
   const desde = f.desde && FECHA_PELADA.test(f.desde) ? f.desde : undefined;
   const hasta = f.hasta && FECHA_PELADA.test(f.hasta) ? f.hasta : undefined;
@@ -127,6 +130,89 @@ export function lineaDeFiltros(f: {
   else if (f.alcanceSinNombre) partes.push('una sucursal');
 
   return partes.length ? partes.join(' · ') : 'todo el registro';
+}
+
+/**
+ * De los parámetros que se le mandan al API al castellano que se imprime.
+ *
+ * Es la mitad visible de un fallo que duró hasta el 12 de agosto de 2026: las pantallas
+ * filtraban por estado, por búsqueda y por quién hizo qué, y a la exportación sólo le
+ * llegaban las fechas y la sucursal. Un admin ponía Ventas en «Anuladas», veía doce filas,
+ * pulsaba PDF y se llevaba un papel que **afirmaba por escrito** «Ventas · del 1 al 31 de
+ * agosto» con todas las completadas dentro. Un papel que se firma no puede describirse a
+ * medias.
+ *
+ * Se traduce con las MISMAS listas de rótulos que usa la aplicación y que usa el
+ * exportador del servidor. Escribirlas otra vez aquí daría dos listas que se separan en
+ * silencio — que es exactamente lo que ya pasó con las acciones de la bitácora, donde el
+ * API emitía 21 y la pantalla sabía traducir 8.
+ *
+ * Las fechas y la sucursal NO salen por aquí: las escribe `lineaDeFiltros`, que sabe no
+ * repetir el mes ni el año, y el nombre de la sucursal lo pasa la pantalla aparte.
+ *
+ * @param etiquetas Cómo se llama en castellano un filtro cuyo valor es un identificador
+ *   (hoy sólo `userId`). Lo pasa la pantalla, que es la que tiene la lista cargada.
+ */
+export function describirFiltros(
+  filtros: Record<string, string | undefined> = {},
+  etiquetas: Record<string, string | undefined> = {},
+): string[] {
+  const partes: string[] = [];
+  const { status, action, entity, userId, search } = filtros;
+
+  if (status) partes.push(SALE_STATUS_LABELS[status as keyof typeof SALE_STATUS_LABELS] ?? status);
+  if (action) {
+    partes.push(AUDIT_ACTION_LABELS[action as keyof typeof AUDIT_ACTION_LABELS] ?? action);
+  }
+  if (entity) {
+    const rotulo = AUDIT_ENTITY_LABELS[entity as keyof typeof AUDIT_ENTITY_LABELS] ?? entity;
+    partes.push(`sobre ${rotulo}`);
+  }
+  // Sin nombre se dice igualmente que está filtrado, por lo mismo que `alcanceSinNombre`:
+  // callarlo deja un papel que parece de todo el equipo siendo de una sola persona.
+  if (userId) partes.push(`por ${etiquetas.userId ?? 'un usuario'}`);
+  if (search) partes.push(`búsqueda "${search}"`);
+
+  return partes;
+}
+
+/**
+ * La línea de filtros partida en las que hagan falta para no pisar la de origen.
+ *
+ * Las dos comparten renglón: los filtros a la izquierda y "Generado por … " alineado a la
+ * derecha. Mientras los filtros eran sólo las fechas, sobraba sitio; en cuanto la
+ * actividad empezó a decir también la acción, la entidad y la persona, el texto creció
+ * hasta meterse debajo del otro y **los dos quedaban ilegibles** — se leía
+ * "…de 2026 · SucGenersaldoNporteAna Pérez". Lo destapó mirar el PDF, no un test.
+ *
+ * Se parte por palabras y nunca se recorta: este texto es lo que dice qué recorte de los
+ * datos es el papel, y un papel que se firma no puede describirse a medias. Si una sola
+ * palabra ya no cabe (un nombre de sucursal larguísimo), va en su propia línea y se sale
+ * antes que desaparecer.
+ *
+ * `medir` se inyecta para poder probar esto sin generar un PDF: dentro de `construirPdf`
+ * es `doc.getTextWidth`, que depende del cuerpo de letra puesto en ese momento.
+ */
+export function partirFiltros(
+  texto: string,
+  anchoDisponible: number,
+  medir: (t: string) => number,
+): string[] {
+  if (anchoDisponible <= 0 || medir(texto) <= anchoDisponible) return [texto];
+
+  const lineas: string[] = [];
+  let actual = '';
+  for (const palabra of texto.split(' ')) {
+    const prueba = actual ? `${actual} ${palabra}` : palabra;
+    if (actual && medir(prueba) > anchoDisponible) {
+      lineas.push(actual);
+      actual = palabra;
+    } else {
+      actual = prueba;
+    }
+  }
+  if (actual) lineas.push(actual);
+  return lineas;
 }
 
 /**
@@ -174,6 +260,8 @@ export interface DatosDelInforme {
   hasta?: string;
   alcance?: string;
   alcanceSinNombre?: boolean;
+  /** El resto de filtros de la pantalla, ya en castellano. Ver `describirFiltros`. */
+  extras?: string[];
 }
 
 /**
@@ -201,8 +289,6 @@ export async function construirPdf(d: DatosDelInforme): Promise<Blob> {
   const ancho = doc.internal.pageSize.getWidth();
   const alto = doc.internal.pageSize.getHeight();
   const MARGEN = 12;
-  // Lo que se reserva arriba para que la tabla no pise la cabecera al pasar de página.
-  const ALTO_CABECERA = 30;
 
   const titulo = tituloDe(d.seccion);
   const filtros = lineaDeFiltros(d);
@@ -226,6 +312,25 @@ export async function construirPdf(d: DatosDelInforme): Promise<Blob> {
     }
   }
   const xTexto = MARGEN + (conLogo ? 16 : 0);
+
+  /*
+    Cuánto sitio le queda a los filtros antes de chocar con "Generado por …".
+
+    Se mide con el MISMO cuerpo de letra con el que se van a dibujar (9 pt): pedirle el
+    ancho a jspdf con otro tamaño puesto da una medida que no se parece a lo que sale. Los
+    3 mm son el aire mínimo entre las dos, para que no se lean como una sola frase.
+  */
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const ALTO_LINEA = 4;
+  const lineasFiltros = partirFiltros(
+    filtros,
+    ancho - MARGEN - xTexto - doc.getTextWidth(origen) - 3,
+    (t) => doc.getTextWidth(t),
+  );
+  // Lo que se reserva arriba para que la tabla no pise la cabecera al pasar de página.
+  // Crece con los filtros: si no, la primera fila de la tabla se le echa encima.
+  const ALTO_CABECERA = 30 + (lineasFiltros.length - 1) * ALTO_LINEA;
 
   /**
    * La cabecera de una página, sea de la tabla o la que se abre para la firma.
@@ -251,7 +356,11 @@ export async function construirPdf(d: DatosDelInforme): Promise<Blob> {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(90);
-    doc.text(filtros, xTexto, MARGEN + 8.5);
+    // Los filtros pueden ocupar varias líneas; el origen se queda en la primera, que es
+    // donde hay hueco libre a la derecha.
+    for (const [i, linea] of lineasFiltros.entries()) {
+      doc.text(linea, xTexto, MARGEN + 8.5 + i * ALTO_LINEA);
+    }
     doc.text(origen, ancho - MARGEN, MARGEN + 8.5, { align: 'right' });
 
     doc.setDrawColor(200);

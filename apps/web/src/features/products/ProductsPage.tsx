@@ -79,7 +79,12 @@ export function ProductsPage() {
         }
         acciones={
           <>
-            <Exportar seccion="productos" />
+            {/*
+              `search` sí, `locationId` no: en esta pantalla la ubicación cambia de qué
+              sucursal es el STOCK que se enseña, no qué productos salen —el catálogo es
+              del negocio— y la exportación no lleva columna de stock.
+            */}
+            <Exportar seccion="productos" filtros={{ search }} />
             {puedeGestionarCatalogo && (
               <>
                 <ImportarProductos onDone={reload} />

@@ -10,9 +10,11 @@ import {
   celda,
   construirPdf,
   esNumerica,
+  describirFiltros,
   lineaDeFiltros,
   lineaDeOrigen,
   MAX_FILAS_PDF,
+  partirFiltros,
   paginasAprox,
   tituloDe,
 } from '@/lib/pdf';
@@ -90,6 +92,129 @@ describe('la línea de filtros', () => {
 
   it('ignora una fecha que no tenga la forma esperada, en vez de escribir "Invalid Date"', () => {
     expect(lineaDeFiltros({ desde: 'ayer', hasta: '' })).toBe('todo el registro');
+  });
+
+  /*
+    Los filtros que no son fechas ni sucursal.
+
+    Es la mitad visible del fallo que arregla el punto 1: un papel de «Ventas · del 1 al 31
+    de agosto» que en realidad traía sólo las anuladas —o, peor, que traía TODAS mientras
+    la pantalla enseñaba doce— es indistinguible del correcto encima de una mesa.
+  */
+  it('escribe en el papel los filtros de la pantalla, delante de las fechas', () => {
+    expect(lineaDeFiltros({ extras: ['Anulada'], desde: '2026-08-01', hasta: '2026-08-31' })).toBe(
+      'Anulada · del 1 al 31 de agosto de 2026',
+    );
+  });
+
+  it('varios filtros van todos, y con la sucursal al final', () => {
+    expect(
+      lineaDeFiltros({
+        extras: ['Cambio de precio', 'sobre Producto'],
+        desde: '2026-08-01',
+        alcance: 'Sucursal Norte',
+      }),
+    ).toBe('Cambio de precio · sobre Producto · desde el 1 de agosto de 2026 · Sucursal Norte');
+  });
+
+  it('con filtros pero sin fechas ya no dice "todo el registro", porque sería falso', () => {
+    expect(lineaDeFiltros({ extras: ['búsqueda "filtro"'] })).toBe('búsqueda "filtro"');
+  });
+});
+
+/**
+ * Que la línea de filtros no se meta debajo de "Generado por …".
+ *
+ * Las dos comparten renglón. Mientras los filtros eran sólo las fechas sobraba sitio; al
+ * empezar a decir también la acción, la entidad y la persona, el texto creció hasta pisar
+ * al otro y los DOS quedaban ilegibles: "…de 2026 · SucGenersaldoNporteAna Pérez". No lo
+ * vio ningún test ni el typecheck — se vio con `pdftoppm -png`, que es la cuarta vez que
+ * esa es la herramienta que encuentra el fallo.
+ */
+describe('partir la línea de filtros', () => {
+  // Un carácter, dos milímetros. Con una medida inventada pero coherente se prueba el
+  // reparto sin depender de las métricas de una tipografía.
+  const medir = (t: string) => t.length * 2;
+
+  it('lo que cabe se queda en una línea', () => {
+    expect(partirFiltros('del 1 al 31 de agosto', 100, medir)).toEqual(['del 1 al 31 de agosto']);
+  });
+
+  it('lo que no cabe se parte por palabras, y ninguna línea se pasa', () => {
+    const largo = 'Cambio de precio · sobre Producto · por Ana Pérez · del 1 al 31 de agosto';
+    const lineas = partirFiltros(largo, 60, medir);
+    expect(lineas.length).toBeGreaterThan(1);
+    for (const l of lineas) expect(medir(l)).toBeLessThanOrEqual(60);
+  });
+
+  /*
+    Nunca se recorta: este texto dice qué recorte de los datos es el papel, y un papel que
+    se firma no puede describirse a medias. Truncarlo con "…" sería volver al mismo fallo
+    por otro camino.
+  */
+  it('no se pierde ni una palabra al partir', () => {
+    const largo = 'Anulada · del 1 al 31 de agosto de 2026 · Sucursal Norte';
+    expect(partirFiltros(largo, 40, medir).join(' ')).toBe(largo);
+  });
+
+  it('una sola palabra más ancha que el hueco se sale antes que desaparecer', () => {
+    expect(partirFiltros('Supercalifragilisticoespialidoso', 10, medir)).toEqual([
+      'Supercalifragilisticoespialidoso',
+    ]);
+  });
+
+  it('sin hueco ninguno devuelve el texto entero, en vez de un bucle o una lista vacía', () => {
+    expect(partirFiltros('todo el registro', 0, medir)).toEqual(['todo el registro']);
+    expect(partirFiltros('todo el registro', -20, medir)).toEqual(['todo el registro']);
+  });
+});
+
+/**
+ * De los parámetros que se le mandan al API al castellano que se imprime.
+ *
+ * Se traduce con las MISMAS listas de rótulos que usa la aplicación y que usa el
+ * exportador del servidor. Escribirlas otra vez aquí daría dos listas que se separan: el
+ * día que cambie un rótulo, el papel seguiría diciendo el viejo.
+ */
+describe('describir los filtros de una pantalla', () => {
+  it('traduce el estado de una venta', () => {
+    expect(describirFiltros({ status: 'cancelled' })).toEqual(['Anulada']);
+  });
+
+  it('traduce la acción y la entidad de la actividad', () => {
+    expect(describirFiltros({ action: 'price_change', entity: 'product' })).toEqual([
+      'Cambio de precio',
+      'sobre Producto',
+    ]);
+  });
+
+  it('dice de quién es la actividad usando el nombre que pasa la pantalla', () => {
+    expect(describirFiltros({ userId: 'u-1' }, { userId: 'Ana Pérez' })).toEqual(['por Ana Pérez']);
+  });
+
+  /*
+    El mismo criterio que `alcanceSinNombre`: si la pantalla filtró por una persona y no
+    dijo cuál, se dice que está filtrado. Callarlo deja un papel que parece de todo el
+    equipo siendo de una sola persona.
+  */
+  it('si no le pasan el nombre, dice igualmente que está filtrado por alguien', () => {
+    expect(describirFiltros({ userId: 'u-1' })).toEqual(['por un usuario']);
+  });
+
+  it('escribe lo que se tecleó en el buscador', () => {
+    expect(describirFiltros({ search: 'filtro de aceite' })).toEqual([
+      'búsqueda "filtro de aceite"',
+    ]);
+  });
+
+  it('las fechas y la sucursal NO salen por aquí: ya las escribe la línea de filtros', () => {
+    expect(describirFiltros({ from: '2026-08-01', to: '2026-08-31', locationId: 'loc-1' })).toEqual(
+      [],
+    );
+  });
+
+  it('un valor vacío no cuenta como filtro', () => {
+    expect(describirFiltros({ status: '', search: undefined })).toEqual([]);
   });
 });
 
