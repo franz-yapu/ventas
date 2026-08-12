@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TERMS_VERSION } from '@ventafacil/shared';
+import { debeAceptarTerminos, TERMS_VERSION, TERMS_VERSION_MATERIAL } from '@ventafacil/shared';
 import { PRIVACIDAD, TERMINOS, ULTIMA_ACTUALIZACION } from '@/features/legal/textos';
 
 /**
@@ -25,6 +25,60 @@ describe('la versión de los términos', () => {
   it('el sufijo, si lo hay, sólo puede ser un número de edición', () => {
     const resto = TERMS_VERSION.slice(10);
     expect(resto === '' || /^\.\d+$/.test(resto)).toBe(true);
+  });
+});
+
+/**
+ * A quién hay que avisarle de que los términos cambiaron.
+ *
+ * `TERMS_VERSION` se guardaba al registrarse y ahí moría: no se comparaba con nada, así
+ * que un negocio que ya opera no se enteraba nunca. Y los términos prometen por escrito
+ * que «si el cambio es importante, te avisaremos con antelación razonable; seguir usando
+ * el servicio después implica aceptarlas» — una cláusula que se apoya en un aviso que no
+ * existía.
+ *
+ * Se compara contra el último cambio MATERIAL y no contra la versión actual, porque el
+ * texto promete aviso sólo para lo importante y `TERMS_VERSION` sube hasta por una tilde.
+ */
+describe('cuándo hay que volver a aceptar los términos', () => {
+  it('quien aceptó la versión material vigente no ve nada', () => {
+    expect(debeAceptarTerminos(TERMS_VERSION_MATERIAL)).toBe(false);
+  });
+
+  it('quien aceptó una versión anterior, sí', () => {
+    expect(debeAceptarTerminos('2026-08-01')).toBe(true);
+    expect(debeAceptarTerminos('2025-12-31.4')).toBe(true);
+  });
+
+  it('un negocio sin aceptación registrada también: no consta que aceptara nada', () => {
+    expect(debeAceptarTerminos(null)).toBe(true);
+    expect(debeAceptarTerminos(undefined)).toBe(true);
+    expect(debeAceptarTerminos('')).toBe(true);
+  });
+
+  /*
+    Una edición POSTERIOR y no material no molesta a nadie: es el caso de corregir una
+    coma, que sube `TERMS_VERSION` pero no `TERMS_VERSION_MATERIAL`.
+  */
+  it('una edición posterior a la material no vuelve a preguntar', () => {
+    expect(debeAceptarTerminos('2099-01-01')).toBe(false);
+  });
+
+  /*
+    El orden es por fecha y luego por NÚMERO de edición. Comparando como texto,
+    '2026-08-11.10' saldría ANTES que '2026-08-11.2' —porque '1' < '2'— y a quien aceptó
+    la décima edición del día se le pediría aceptar otra vez la segunda.
+  */
+  it('la edición 10 es posterior a la 2, no anterior', () => {
+    expect(debeAceptarTerminos('2026-08-11.10')).toBe(false);
+    expect(debeAceptarTerminos('2026-08-11.1')).toBe(true);
+    expect(debeAceptarTerminos('2026-08-11')).toBe(true);
+  });
+
+  it('la versión material nunca puede ser posterior a la actual', () => {
+    // Si alguien sube la material y olvida la de verdad, el aviso saldría pidiendo
+    // aceptar un texto que todavía no existe — y no se podría cerrar nunca.
+    expect(debeAceptarTerminos(TERMS_VERSION)).toBe(false);
   });
 });
 

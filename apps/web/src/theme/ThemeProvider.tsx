@@ -15,6 +15,13 @@ export interface BusinessConfig {
   taxRate: string;
   /** Tope de descuento del vendedor, en % del subtotal. */
   maxSellerDiscountPct: number;
+  /**
+   * Qué versión de los términos aceptó este negocio, o `null` si no consta ninguna.
+   *
+   * Es lo que decide si sale el aviso de que cambiaron. Ver `debeAceptarTerminos` en
+   * `@ventafacil/shared` y `AvisoDeTerminos`.
+   */
+  termsVersion: string | null;
 }
 
 /**

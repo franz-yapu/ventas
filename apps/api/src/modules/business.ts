@@ -1,5 +1,5 @@
 import { db, schema } from '@ventafacil/db';
-import { productSchemaJson, themeSchema } from '@ventafacil/shared';
+import { productSchemaJson, themeSchema, TERMS_VERSION } from '@ventafacil/shared';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
@@ -14,6 +14,14 @@ const businessSelect = {
   currency: schema.business.currency,
   taxRate: schema.business.taxRate,
   maxSellerDiscountPct: schema.business.maxSellerDiscountPct,
+  /*
+    La versión de términos que este negocio aceptó.
+
+    Viaja a la web porque es ahí donde se decide si hay que enseñar el aviso de que
+    cambiaron. Sin este dato, `TERMS_VERSION` se guardaba al registrarse y no se comparaba
+    con nada: un negocio que ya opera no se enteraba nunca — y el texto promete avisar.
+  */
+  termsVersion: schema.business.termsVersion,
 };
 
 // El logo se guarda como data URI (base64). Límite razonable para no inflar la BD/respuestas.
@@ -90,6 +98,57 @@ export async function businessRoutes(app: FastifyInstance) {
     if (!biz) return reply.code(404).send({ data: null, error: 'Negocio no encontrado' });
     return reply.send({ data: biz, error: null });
   });
+
+  /**
+   * POST /business/terms — dejar constancia de que se aceptó la versión de ahora.
+   *
+   * La aceptación se guardaba SÓLO al registrarse y no se volvía a mirar, así que un
+   * negocio que ya opera nunca se enteraba de que el texto había cambiado. Los términos
+   * prometen lo contrario por escrito —«si el cambio es importante, te avisaremos con
+   * antelación razonable; seguir usando el servicio después implica aceptarlas»—, y esa
+   * cláusula se apoyaba en un aviso que no existía.
+   *
+   * **Sólo la central**, por lo mismo que exportar los datos o cambiar la configuración:
+   * esto es un compromiso contractual del NEGOCIO, y quien responde por él es quien lo
+   * registró. Un encargado de sucursal no puede aceptar condiciones en nombre de otro.
+   *
+   * Se mueve también `termsAcceptedAt`: la constancia que importa es cuándo se aceptó
+   * ESTA versión, no cuándo se abrió la cuenta. La fecha original queda en la bitácora.
+   */
+  app.post(
+    '/business/terms',
+    { preHandler: [app.requireAuth, app.requireCentralAdmin] },
+    async (req, reply) => {
+      const businessId = req.authUser!.businessId;
+      const [antes] = await db
+        .select({
+          termsVersion: schema.business.termsVersion,
+          termsAcceptedAt: schema.business.termsAcceptedAt,
+        })
+        .from(schema.business)
+        .where(eq(schema.business.id, businessId))
+        .limit(1);
+      if (!antes) return reply.code(404).send({ data: null, error: 'Negocio no encontrado' });
+
+      const [row] = await db
+        .update(schema.business)
+        .set({ termsVersion: TERMS_VERSION, termsAcceptedAt: new Date() })
+        .where(eq(schema.business.id, businessId))
+        .returning({
+          termsVersion: schema.business.termsVersion,
+          termsAcceptedAt: schema.business.termsAcceptedAt,
+        });
+
+      await app.audit(req, {
+        action: 'update',
+        entity: 'business',
+        entityId: businessId,
+        before: antes,
+        after: { ...row, motivo: 'aceptación de términos' },
+      });
+      return reply.send({ data: row, error: null });
+    },
+  );
 
   // PATCH /business -> configuración white-label. Auditado (incluye cambio de tema).
   // Sólo la central: el nombre, el logo, el impuesto y el tope de descuento son del

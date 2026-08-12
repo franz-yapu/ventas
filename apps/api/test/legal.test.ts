@@ -1,7 +1,7 @@
 import { db, schema } from '@ventafacil/db';
 import argon2 from 'argon2';
 import { AUDIT_ACTION_LABELS, SALE_STATUS_LABELS, TERMS_VERSION } from '@ventafacil/shared';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { clearAccessCache } from '../src/lib/subscription.js';
@@ -298,6 +298,88 @@ describe('exportación de datos', () => {
       });
       expect(res.statusCode).toBe(402);
     });
+  });
+});
+
+/**
+ * Volver a aceptar los términos cuando cambian.
+ *
+ * `termsVersion` se guardaba al registrarse y ahí moría: no se comparaba con nada, así que
+ * un negocio que ya opera no se enteraba jamás de que el texto había cambiado. Y los
+ * términos prometen por escrito «si el cambio es importante, te avisaremos con antelación
+ * razonable; seguir usando el servicio después implica aceptarlas» — una cláusula apoyada
+ * en un aviso que no existía.
+ *
+ * Lo que se fija aquí es la constancia: que quede guardado QUÉ versión aceptó cada negocio
+ * y CUÁNDO, que es para lo único que sirve la columna, y que sólo pueda aceptarla quien
+ * responde por el negocio.
+ */
+describe('aceptar una versión nueva de los términos', () => {
+  const aceptar = (token: string) =>
+    app.inject({ method: 'POST', url: '/api/v1/business/terms', headers: auth(token) });
+
+  const versionGuardada = async () => {
+    const [b] = await db.select().from(schema.business).where(eq(schema.business.id, t.businessId));
+    return b!;
+  };
+
+  beforeEach(async () => {
+    // Como si este negocio se hubiera registrado con un texto viejo.
+    await db
+      .update(schema.business)
+      .set({ termsVersion: '2026-01-01', termsAcceptedAt: new Date('2026-01-01T10:00:00Z') })
+      .where(eq(schema.business.id, t.businessId));
+  });
+
+  it('el admin de la central acepta, y se guarda QUÉ y CUÁNDO', async () => {
+    const antes = await versionGuardada();
+    const res = await aceptar(t.adminToken);
+    expect(res.statusCode, res.body).toBe(200);
+
+    const despues = await versionGuardada();
+    expect(despues.termsVersion).toBe(TERMS_VERSION);
+    // La fecha se mueve: es la constancia de cuándo aceptó ESTA versión, no la primera.
+    expect(despues.termsAcceptedAt!.getTime()).toBeGreaterThan(antes.termsAcceptedAt!.getTime());
+  });
+
+  it('queda en la bitácora, con la versión que se aceptó', async () => {
+    await aceptar(t.adminToken);
+    const [ultima] = await db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.businessId, t.businessId))
+      .orderBy(desc(schema.auditLog.createdAt))
+      .limit(1);
+    expect(ultima!.entity).toBe('business');
+    // La columna es `after_json`; en el modelo, `afterJson`.
+    expect(JSON.stringify(ultima!.afterJson)).toContain(TERMS_VERSION);
+  });
+
+  /*
+    Un encargado de sucursal NO acepta condiciones en nombre del negocio, igual que no
+    exporta sus datos ni cambia su configuración: quien responde por el negocio es la
+    central, y esto es un compromiso contractual, no una preferencia de pantalla.
+  */
+  it('un encargado de sucursal no puede aceptar por el negocio', async () => {
+    expect((await aceptar(sucursalToken)).statusCode).toBe(403);
+
+    const b = await versionGuardada();
+    expect(b.termsVersion, 'aceptó igualmente').toBe('2026-01-01');
+  });
+
+  it('sin sesión, tampoco', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/business/terms' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('la versión guardada viaja en /business/me, que es quien decide si avisar', async () => {
+    // Sin este dato la web no puede saber si hay que enseñar el aviso.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/business/me',
+      headers: auth(t.adminToken),
+    });
+    expect(res.json().data.termsVersion).toBe('2026-01-01');
   });
 });
 

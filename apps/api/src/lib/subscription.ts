@@ -157,6 +157,21 @@ const RUTAS_LIBRES = new Set(
       ruta (5/hora por IP) ya evita que se use como forma barata de castigar al servidor.
     */
     '/business/export',
+    /*
+      Aceptar los términos tampoco se bloquea, por dos razones.
+
+      La primera es que no es OPERAR: no vende, no consume cupo y no toca datos del
+      negocio; deja constancia de que alguien leyó un texto. La segunda es más práctica:
+      el aviso de que los términos cambiaron sale en el marco de la aplicación, y con la
+      ruta cerrada un negocio suspendido se quedaría con una franja que no puede quitar y
+      con un botón que responde 402 — justo encima de la pantalla que le explica cómo
+      volver.
+
+      `/business/me` ya estaba libre, que es de donde sale la versión aceptada con la que
+      se decide si enseñar el aviso. Dejar entrar a leer y no a responder sería la mitad
+      de la conversación.
+    */
+    '/business/terms',
   ].map((r) => API_PREFIX + r),
 );
 

@@ -23,6 +23,7 @@ import { Marca, NombreDeMarca } from '@/components/Marca';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { EmailVerifyBanner } from '@/features/auth/EmailVerifyBanner';
+import { AvisoDeTerminos } from '@/features/legal/AvisoDeTerminos';
 import { SubscriptionBanner } from '@/features/subscription/SubscriptionBanner';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { startSyncWorker } from '@/offline/sync';
@@ -240,6 +241,9 @@ export function Layout({ children }: { children: ReactNode }) {
         <AvisoDeError />
         <SubscriptionBanner />
         <EmailVerifyBanner />
+        {/* El último de los tres a propósito: el de la suscripción y el del correo piden
+            algo que hay que hacer para no quedarse fuera; éste sólo pide leer. */}
+        <AvisoDeTerminos />
         {children}
       </main>
     </div>

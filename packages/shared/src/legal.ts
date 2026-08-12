@@ -24,6 +24,52 @@
  */
 export const TERMS_VERSION = '2026-08-11.2';
 
+/**
+ * La última versión cuyo cambio fue MATERIAL: afecta a lo que el cliente puede esperar
+ * del servicio, no a una coma.
+ *
+ * Existe porque `TERMS_VERSION` sube con cualquier edición —hasta una tilde corregida— y
+ * los términos prometen aviso sólo «si el cambio es importante». Avisar por una
+ * corrección de estilo convertiría el aviso en ruido, y un aviso que sale siempre es un
+ * aviso que nadie lee: la próxima vez que cambie algo de verdad, se cerraría igual.
+ *
+ * **Súbela a mano**, y sólo cuando el cambio toque lo que el cliente puede esperar: qué
+ * datos se guardan, cuánto duran, quién los ve, qué puede hacer soporte, cómo se cancela o
+ * qué se cobra. Cambiarla hace que a TODOS los negocios que aceptaron una versión anterior
+ * les salga el aviso.
+ */
+export const TERMS_VERSION_MATERIAL = '2026-08-11.2';
+
+/** `2026-08-11.2` → `['2026-08-11', 2]`. Sin sufijo, la edición es 0. */
+function partesDeVersion(v: string): [string, number] {
+  const [fecha, edicion] = v.split('.');
+  return [fecha ?? '', Number(edicion ?? 0)];
+}
+
+/**
+ * ¿Hay que avisar a este negocio de que los términos cambiaron?
+ *
+ * Compara lo que aceptó contra el último cambio IMPORTANTE, no contra la versión actual.
+ *
+ * Vive aquí, en compartido, porque la respuesta la necesitan los dos lados: el servidor
+ * para registrar la nueva aceptación y la web para decidir si enseña el aviso. Escrita dos
+ * veces acabaría respondiendo distinto, y entonces habría un banner que no se puede cerrar
+ * o una aceptación que se guarda sin que nadie la haya visto.
+ *
+ * Sin nada aceptado (`null`) también se avisa: de un negocio así no consta que aceptara
+ * ninguna versión, que es exactamente el caso que esto tiene que resolver.
+ *
+ * La comparación es por fecha y luego por número de edición, y no de texto: `'2026-08-11.10'`
+ * es POSTERIOR a `'2026-08-11.2'`, pero como cadenas el orden sale al revés.
+ */
+export function debeAceptarTerminos(aceptada: string | null | undefined): boolean {
+  if (!aceptada) return true;
+  const [fechaA, edicionA] = partesDeVersion(aceptada);
+  const [fechaM, edicionM] = partesDeVersion(TERMS_VERSION_MATERIAL);
+  if (fechaA !== fechaM) return fechaA < fechaM;
+  return edicionA < edicionM;
+}
+
 export const EMPRESA = {
   /** Nombre comercial del producto. */
   producto: 'VentaFácil',
