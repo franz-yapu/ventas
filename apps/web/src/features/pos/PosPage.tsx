@@ -33,7 +33,13 @@ import { cn } from '@/lib/utils';
 import { printReceipt } from '@/lib/print';
 import type { Customer, Location, Product, SaleDetail } from '@/lib/types';
 import { getCachedLocations } from '@/offline/db';
-import { findByBarcode, findByCode, searchCatalog, syncCatalog } from '@/offline/catalog';
+import {
+  findByBarcode,
+  findByCode,
+  hayFotosEnCatalogo,
+  searchCatalog,
+  syncCatalog,
+} from '@/offline/catalog';
 import { enqueueSale, syncPending } from '@/offline/sync';
 import { motivoParaConfirmar } from '@/features/pos/confirmar';
 import { useBusiness } from '@/theme/ThemeProvider';
@@ -86,11 +92,17 @@ export function PosPage() {
   /*
     ¿Este negocio usa fotos? La respuesta decide la rejilla ENTERA (ver la tarjeta abajo).
 
-    Se mira sobre lo que hay en pantalla y no sobre el catálogo completo a propósito: es una
-    consulta que ya está hecha, y con ella la banda aparece en cuanto se sube la primera
-    foto en vez de esperar a que se recargue el catálogo local.
+    Se le pregunta al CATÁLOGO, no a `products`, que son las 24 filas que devuelve
+    `searchCatalog`. Derivarlo de lo visible tenía dos desenlaces, y el segundo se sentía en
+    el mostrador: una tienda con fotos en unos pocos productos no veía ninguna si esos pocos
+    no caían en la primera página; y al teclear en el buscador la respuesta cambiaba, así
+    que TODAS las tarjetas ganaban 80 px de golpe y la rejilla se recolocaba a mitad de
+    pulsación — con el dedo del cajero ya bajando sobre otro producto.
+
+    Sigue siendo `useLiveQuery`, así que la banda aparece igual en cuanto se sincroniza el
+    catálogo con la primera foto subida.
   */
-  const hayFotos = useMemo(() => (products ?? []).some((p) => p.imageUrl), [products]);
+  const hayFotos = useLiveQuery(hayFotosEnCatalogo, [], false);
 
   // Compradores (a quién se le vendió): sólo con conexión.
   const { data: customers } = useQuery({
