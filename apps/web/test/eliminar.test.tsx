@@ -80,6 +80,89 @@ describe('los tres desenlaces de eliminar', () => {
     expect(eliminar).not.toHaveBeenCalled();
   });
 
+  /**
+   * Mientras el DELETE está en vuelo ya no se puede cancelar, y el modal no puede decir
+   * que sí.
+   *
+   * `Cancelar` seguía habilitado, y `cerrar()` sólo avisaba a la lista si `cambio` era
+   * `true` — que se pone DESPUÉS de que resuelva la promesa. Un admin confirmaba el borrado
+   * de «Marta Quispe», la petición iba lenta, pulsaba Cancelar (o Esc, o el aspa, que son
+   * el mismo `cerrar`): la lista no se invalidaba y —con `refetchOnWindowFocus: false`—
+   * seguía enseñando a Marta como si nada. Pero el DELETE terminaba igual: en el servidor
+   * ya no estaba. Volvía a pulsar la papelera y recibía «no encontrado».
+   *
+   * Se cierra la puerta en vez de invalidar por detrás porque es lo honesto: la operación
+   * ya no se puede cancelar. Y en sucursales y usuarios, además, ese cierre se llevaba por
+   * delante el «se desactivó en su lugar», que es el mensaje que evita que alguien se ponga
+   * a borrar otras cosas para destrabarlo.
+   */
+  describe('mientras el borrado está en vuelo', () => {
+    /** Un `onEliminar` que se queda colgado hasta que el test decide terminarlo. */
+    function enVuelo() {
+      let resolver!: (r: unknown) => void;
+      const promesa = new Promise((res) => {
+        resolver = res;
+      });
+      return { onEliminar: () => promesa as Promise<any>, resolver };
+    }
+
+    it('Cancelar se deshabilita: ya no se puede cancelar nada', async () => {
+      const { onEliminar } = enVuelo();
+      abrir(onEliminar);
+      await userEvent.click(screen.getByRole('button', { name: /Eliminar/ }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Cancelar' }).hasAttribute('disabled')).toBe(
+          true,
+        ),
+      );
+    });
+
+    it('ni Escape ni el aspa cierran el modal a medias', async () => {
+      const { onEliminar } = enVuelo();
+      const onCerrar = vi.fn();
+      const onCambio = vi.fn();
+      montar(
+        <EliminarModal
+          que="a Marta Quispe"
+          onEliminar={onEliminar}
+          onCambio={onCambio}
+          onCerrar={onCerrar}
+        />,
+      );
+      await userEvent.click(screen.getByRole('button', { name: /Eliminar/ }));
+      await waitFor(() => expect(screen.getByText('Eliminando…')).toBeTruthy());
+
+      await userEvent.keyboard('{Escape}');
+      await userEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+
+      expect(onCerrar, 'se cerró con el DELETE en vuelo').not.toHaveBeenCalled();
+      // Y sin avisar a la lista, que es la mitad que dejaba la fila fantasma.
+      expect(onCambio).not.toHaveBeenCalled();
+    });
+
+    it('cuando termina se puede cerrar, y la lista se entera', async () => {
+      // La otra mitad: cerrar la puerta no puede dejarla cerrada para siempre.
+      const { onEliminar, resolver } = enVuelo();
+      const onCerrar = vi.fn();
+      const onCambio = vi.fn();
+      montar(
+        <EliminarModal
+          que="a Marta Quispe"
+          onEliminar={onEliminar}
+          onCambio={onCambio}
+          onCerrar={onCerrar}
+        />,
+      );
+      await userEvent.click(screen.getByRole('button', { name: /Eliminar/ }));
+      resolver({ eliminado: true, mensaje: 'Marta Quispe se eliminó.' });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Entendido' }));
+      expect(onCerrar).toHaveBeenCalled();
+      expect(onCambio).toHaveBeenCalled();
+    });
+  });
+
   it('ELIMINADO: lo dice y no habla de desactivar', async () => {
     abrir(async () => ({ eliminado: true, mensaje: '«Norte» se eliminó.' }));
     await userEvent.click(screen.getByRole('button', { name: /Eliminar/ }));

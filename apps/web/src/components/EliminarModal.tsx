@@ -62,8 +62,25 @@ export function EliminarModal({ que, advertencia, onEliminar, onCambio, onCerrar
     justo lo que hay que leer antes de que la pantalla se mueva.
   */
   const [cambio, setCambio] = useState(false);
+  const enviando = estado.paso === 'enviando';
 
+  /**
+   * Con el DELETE en vuelo no se cierra, por ninguna de las cuatro puertas.
+   *
+   * Aquí entran `Cancelar`, Escape, el aspa y el clic fuera de la hoja — todas llaman a
+   * esto. Y cerrar a mitad dejaba la lista mintiendo: `cambio` se pone DESPUÉS de que
+   * resuelva la promesa, así que salir antes no invalidaba nada y —con
+   * `refetchOnWindowFocus: false`— la fila seguía en pantalla. Pero la petición terminaba
+   * igual: en el servidor ya no estaba, y el siguiente clic en la papelera respondía «no
+   * encontrado». En sucursales y usuarios se perdía además el «se desactivó en su lugar»,
+   * que es el mensaje que evita que alguien se ponga a borrar otras cosas para destrabarlo.
+   *
+   * Se cierra la puerta en vez de invalidar por detrás porque es lo honesto: la operación
+   * ya salió y no se puede cancelar. Un botón que dice que sí y no hace nada es peor que
+   * uno apagado.
+   */
   function cerrar() {
+    if (enviando) return;
     if (cambio) onCambio();
     onCerrar();
   }
@@ -106,17 +123,19 @@ export function EliminarModal({ que, advertencia, onEliminar, onCambio, onCerrar
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={cerrar}>
+              {/* Apagado mientras se envía: la operación ya no se puede cancelar, así que
+                  el botón no puede decir que sí. Ver `cerrar`. */}
+              <Button variant="outline" className="flex-1" disabled={enviando} onClick={cerrar}>
                 Cancelar
               </Button>
               <Button
                 variant="danger"
                 className="flex-1"
-                disabled={estado.paso === 'enviando'}
+                disabled={enviando}
                 onClick={() => void eliminar()}
               >
                 <Trash2 size={16} />
-                {estado.paso === 'enviando' ? 'Eliminando…' : 'Eliminar'}
+                {enviando ? 'Eliminando…' : 'Eliminar'}
               </Button>
             </div>
           </>
