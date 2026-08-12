@@ -63,6 +63,52 @@ describe('la miniatura de una lista', () => {
     expect(container.querySelector('img'), 'se quedó el icono roto del navegador').toBeNull();
     expect(container.querySelector('svg')).toBeTruthy();
   });
+
+  /**
+   * Caerse al hueco es correcto; QUEDARSE ahí, no.
+   *
+   * `falló` se ponía a `true` en el primer `onError` y no se reiniciaba nunca. En el POS
+   * las filas mantienen `key={p.id}`, así que las mismas instancias siguen montadas: un
+   * vendedor perdía señal, todas las miniaturas caían al marcador (bien), volvía la señal
+   * — y **el catálogo se quedaba sin fotos el resto de la sesión**, hasta recargar.
+   *
+   * Lo mismo al reemplazar una foto cuya URL anterior había fallado: la nueva salía como
+   * marcador y la subida parecía no haber hecho nada.
+   */
+  it('al cambiar la foto vuelve a intentarlo, en vez de quedarse en el hueco', () => {
+    const { container, rerender } = montar(<Miniatura url="/media/negocio-1/vieja.webp" />);
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')).toBeNull();
+
+    rerender(<Miniatura url="/media/negocio-1/nueva.webp" />);
+
+    const img = container.querySelector('img');
+    expect(img, 'la foto nueva heredó el fallo de la anterior').toBeTruthy();
+    expect(img!.getAttribute('src')).toContain('nueva.webp');
+  });
+
+  it('y una foto que falló sigue fallando si no cambia, sin parpadear', () => {
+    // La otra mitad: reintentar en cada render dejaría el icono roto entrando y saliendo.
+    const { container, rerender } = montar(<Miniatura url="/media/negocio-1/abc.webp" />);
+    fireEvent.error(container.querySelector('img')!);
+    rerender(<Miniatura url="/media/negocio-1/abc.webp" />);
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  /*
+    Y cuando vuelve la conexión. Es el caso del docstring del componente: en el POS no hay
+    remontaje que valga —las filas conservan su `key`— así que sin esto la única salida es
+    recargar la página, con una venta a medias.
+  */
+  it('cuando vuelve la red reintenta las que se cayeron sin señal', () => {
+    const { container } = montar(<Miniatura url="/media/negocio-1/abc.webp" />);
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')).toBeNull();
+
+    fireEvent(window, new Event('online'));
+
+    expect(container.querySelector('img'), 'sigue en el hueco con la red de vuelta').toBeTruthy();
+  });
 });
 
 describe('elegir la foto en el formulario', () => {

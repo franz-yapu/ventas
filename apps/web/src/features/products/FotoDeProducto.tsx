@@ -166,8 +166,37 @@ export function Miniatura({
   className?: string;
   icono?: number;
 }) {
-  const [falló, setFalló] = useState(false);
+  /**
+   * Se guarda QUÉ url falló, no un simple "falló".
+   *
+   * Con un booleano, el primer `onError` lo dejaba en `true` para siempre: ni al cambiar
+   * la prop `url` ni al volver la red se reintentaba. Y en el POS las filas conservan
+   * `key={p.id}`, así que las mismas instancias siguen montadas — un vendedor perdía
+   * señal, todas las miniaturas caían al marcador (que es lo correcto), volvía la señal y
+   * **el catálogo se quedaba sin fotos el resto de la sesión**. Igual al reemplazar una
+   * foto cuya url anterior había fallado: la nueva salía como marcador y la subida parecía
+   * no haber hecho nada.
+   *
+   * Comparando con la url de ahora, cambiarla ya es reintentar, sin ningún efecto de por
+   * medio. Y una que sigue fallando no parpadea: se compara contra la misma cadena.
+   */
+  const [urlFallida, setUrlFallida] = useState<string | null>(null);
   const src = urlDeMedia(url);
+  const falló = !!src && urlFallida === src;
+
+  /*
+    Y al volver la conexión se olvida el fallo.
+
+    Es el caso que describe el docstring de arriba y el único que no se arregla solo: la
+    url no cambia, así que sin esto la única salida sería recargar la página — con una
+    venta a medias en la pantalla.
+  */
+  useEffect(() => {
+    const alVolver = () => setUrlFallida(null);
+    window.addEventListener('online', alVolver);
+    return () => window.removeEventListener('online', alVolver);
+  }, []);
+
   return (
     <div
       className={`flex shrink-0 items-center justify-center overflow-hidden rounded-theme-sm border border-border bg-bg ${className}`}
@@ -179,7 +208,7 @@ export function Miniatura({
           src={src}
           alt=""
           loading="lazy"
-          onError={() => setFalló(true)}
+          onError={() => setUrlFallida(src)}
           className="h-full w-full object-cover"
         />
       ) : (
