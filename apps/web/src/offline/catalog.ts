@@ -54,22 +54,6 @@ export async function findByCode(code: string): Promise<Product | undefined> {
   return db.catalog.filter((p) => p.sku.toLowerCase() === bajo).first();
 }
 
-/**
- * ¿Este negocio usa fotos? Se le pregunta al catálogo ENTERO, no a lo que está pintado.
- *
- * La rejilla del POS enseña la banda de imagen en todas las tarjetas o en ninguna —media
- * rejilla con foto queda descuadrada—, así que esta respuesta la decide entera. Sacarla de
- * los 24 productos visibles daba dos fallos: una tienda con fotos en unos pocos no veía
- * ninguna si esos pocos no caían en la primera página, y al teclear en el buscador la
- * respuesta cambiaba y **todas** las tarjetas crecían 80 px de golpe, recolocando la
- * rejilla a mitad de pulsación — con el dedo del cajero ya bajando sobre otro producto.
- *
- * Corta en el primero que encuentra: no hay que contarlas, sólo saber si hay alguna.
- */
-export async function hayFotosEnCatalogo(): Promise<boolean> {
-  return (await db.catalog.filter((p) => !!p.imageUrl).first()) !== undefined;
-}
-
 /** Búsqueda local (funciona offline). */
 export async function searchCatalog(term: string, limit = 24): Promise<Product[]> {
   const t = term.trim().toLowerCase();

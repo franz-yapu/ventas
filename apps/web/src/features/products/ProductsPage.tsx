@@ -328,6 +328,7 @@ function ProductForm({
   const [form, setForm] = useState({
     sku: product?.sku ?? '',
     name: product?.name ?? '',
+    description: product?.description ?? '',
     price: product?.price ?? '',
     cost: product?.cost ?? '',
     costWholesale: product?.costWholesale ?? '',
@@ -359,8 +360,10 @@ function ProductForm({
   const save = useMutation({
     mutationFn: async () => {
       const base = {
-        sku: form.sku.trim() || undefined,
+        // El SKU no se manda NUNCA desde aquí: lo pone el servidor al crear, y al editar
+        // no se toca. El campo del formulario es de sólo lectura.
         name: form.name,
+        description: form.description.trim(),
         price: form.price,
         cost: form.cost || null,
         costWholesale: form.costWholesale || null,
@@ -430,16 +433,58 @@ function ProductForm({
             </Select>
           </>
         )}
-        <label className="text-sm text-muted">
-          SKU {isNew && <span className="text-xs">(opcional · se genera solo)</span>}
+        {/*
+          El SKU se MUESTRA, no se escribe.
+
+          Lo genera el sistema (correlativo por negocio) y antes se podía teclear encima,
+          al crear y al editar. Un código que el sistema controla y que a la vez cualquiera
+          reescribe no es un código: invita a duplicados y a erratas, y ese SKU ya viajó a
+          recibos y exportaciones que no se pueden corregir.
+
+          Al crear todavía no existe —se asigna al guardar—, así que se dice eso en vez de
+          enseñar un campo vacío que parece rellenable. Quien necesite su propio código
+          tiene el de barras, que el buscador ya admite.
+        */}
+        <label htmlFor="pf-sku" className="text-sm text-muted">
+          SKU
         </label>
         <Input
-          value={form.sku}
-          placeholder={isNew ? 'Se genera automáticamente' : undefined}
-          onChange={(e) => setForm({ ...form, sku: e.target.value })}
+          id="pf-sku"
+          readOnly
+          value={isNew ? '' : form.sku}
+          placeholder={isNew ? 'Se genera solo al guardar' : undefined}
+          className="text-muted"
         />
-        <label className="text-sm text-muted">Nombre</label>
-        <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+
+        <label htmlFor="pf-nombre" className="text-sm text-muted">
+          Nombre
+        </label>
+        <Input
+          id="pf-nombre"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+
+        {/*
+          Descripción: existía en la base y el POS ya la enseñaba, pero no había forma de
+          escribirla. Es lo que distingue dos productos que se llaman casi igual —«Llanta
+          175/70R13» y «…reforzada»— cuando quien atiende no es quien compró la mercadería.
+
+          `textarea` y no `Input`: en una línea no cabe, y este es el hueco donde cada
+          negocio pone lo suyo — la talla y el color en ropa, el sabor en caramelos, la
+          medida en llantas.
+        */}
+        <label htmlFor="pf-desc" className="text-sm text-muted">
+          Descripción <span className="text-xs">(opcional)</span>
+        </label>
+        <textarea
+          id="pf-desc"
+          rows={3}
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          placeholder="Lo que ayude a distinguirlo: talla, color, sabor, medida…"
+          className="ds-field w-full resize-y rounded-theme border border-field bg-surface px-3 py-2 text-sm"
+        />
 
         <FotoDeProducto
           actual={product?.imageUrl}
@@ -449,8 +494,11 @@ function ProductForm({
           onQuitar={setQuitarFoto}
         />
 
-        <label className="text-sm text-muted">Precio de venta</label>
+        <label htmlFor="pf-precio" className="text-sm text-muted">
+          Precio de venta
+        </label>
         <Input
+          id="pf-precio"
           inputMode="decimal"
           value={form.price}
           onChange={(e) => setForm({ ...form, price: e.target.value })}

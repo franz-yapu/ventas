@@ -33,13 +33,7 @@ import { cn } from '@/lib/utils';
 import { printReceipt } from '@/lib/print';
 import type { Customer, Location, Product, SaleDetail } from '@/lib/types';
 import { getCachedLocations } from '@/offline/db';
-import {
-  findByBarcode,
-  findByCode,
-  hayFotosEnCatalogo,
-  searchCatalog,
-  syncCatalog,
-} from '@/offline/catalog';
+import { findByBarcode, findByCode, searchCatalog, syncCatalog } from '@/offline/catalog';
 import { enqueueSale, syncPending } from '@/offline/sync';
 import { motivoParaConfirmar } from '@/features/pos/confirmar';
 import { useBusiness } from '@/theme/ThemeProvider';
@@ -89,21 +83,6 @@ export function PosPage() {
 
   // Búsqueda reactiva sobre el catálogo local -> funciona offline.
   const products = useLiveQuery(() => searchCatalog(search), [search], [] as Product[]);
-  /*
-    ¿Este negocio usa fotos? La respuesta decide la rejilla ENTERA (ver la tarjeta abajo).
-
-    Se le pregunta al CATÁLOGO, no a `products`, que son las 24 filas que devuelve
-    `searchCatalog`. Derivarlo de lo visible tenía dos desenlaces, y el segundo se sentía en
-    el mostrador: una tienda con fotos en unos pocos productos no veía ninguna si esos pocos
-    no caían en la primera página; y al teclear en el buscador la respuesta cambiaba, así
-    que TODAS las tarjetas ganaban 80 px de golpe y la rejilla se recolocaba a mitad de
-    pulsación — con el dedo del cajero ya bajando sobre otro producto.
-
-    Sigue siendo `useLiveQuery`, así que la banda aparece igual en cuanto se sincroniza el
-    catálogo con la primera foto subida.
-  */
-  const hayFotos = useLiveQuery(hayFotosEnCatalogo, [], false);
-
   // Compradores (a quién se le vendió): sólo con conexión.
   const { data: customers } = useQuery({
     queryKey: ['customers'],
@@ -466,7 +445,20 @@ export function PosPage() {
                   Así que la banda entra o no entra para TODA la rejilla, y quien nunca suba
                   una foto seguirá viendo exactamente el POS que tiene hoy.
                 */}
-                {hayFotos && (
+                {/*
+                  La foto la lleva la tarjeta que la tiene, y punto.
+
+                  Antes la banda era todo-o-nada para la rejilla entera, para que ninguna
+                  tarjeta fuera más alta que otra. El precio de esa regla se veía en el
+                  mostrador: en un negocio con fotos en unos pocos productos, TODAS las
+                  demás reservaban 80 px vacíos y en una pantalla de tienda eso son dos
+                  filas menos a la vista.
+                  
+                  Decisión de franz (12 de agosto de 2026): que la tarjeta sin foto se
+                  compacte. Las alturas quedan desiguales dentro de la rejilla; si al usarlo
+                  molesta, volver atrás es cambiar esta línea.
+                */}
+                {p.imageUrl && (
                   <Miniatura url={p.imageUrl} className="h-20 w-full rounded-theme" icono={20} />
                 )}
                 <span className="line-clamp-2 text-[15px] font-semibold leading-tight">

@@ -102,7 +102,7 @@ async function rellenarConFoto() {
     el siguiente. Contando cajas de texto a ojo se acertaba con el buscador de la pantalla
     en vez de con el nombre, y el producto se guardaba sin nombre sin que el test lo dijera.
   */
-  const sku = await screen.findByPlaceholderText('Se genera automáticamente');
+  const sku = await screen.findByPlaceholderText('Se genera solo al guardar');
   const cajas = screen.getAllByRole('textbox');
   const nombre = cajas[cajas.indexOf(sku as HTMLInputElement) + 1]!;
   await userEvent.type(nombre, 'Llanta 175/70 R13');
@@ -166,5 +166,71 @@ describe('cuando la foto falla al subir', () => {
     await waitFor(() => expect(api.postBinary).toHaveBeenCalledTimes(1));
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(api.patch).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * El SKU y la descripción, dos cosas que el formulario hacía al revés.
+ *
+ * Pedido tras usar el sistema (12 de agosto de 2026):
+ *
+ * - **El SKU se generaba solo, pero se podía escribir y corregir a mano.** Un código que
+ *   el sistema controla y que a la vez cualquiera puede reescribir no es un código: es una
+ *   invitación a duplicados y a erratas, y ese SKU viaja a recibos y exportaciones ya
+ *   emitidos.
+ * - **La descripción existía en la base y el POS la enseñaba —«Llanta 175/70R13» contra
+ *   «…reforzada» es la pregunta del mostrador—, pero NO había forma de escribirla.** Un
+ *   campo que se lee y no se puede rellenar es peor que no tenerlo: parece que el sistema
+ *   perdió el dato.
+ */
+describe('el SKU y la descripción en el formulario', () => {
+  async function abrirNuevo() {
+    conQuery(<ProductsPage />);
+    await userEvent.click((await screen.findAllByRole('button', { name: /Nuevo/ }))[0]!);
+  }
+
+  it('el SKU no se puede escribir: lo pone el sistema', async () => {
+    await abrirNuevo();
+    // Si sigue habiendo un campo donde teclear el SKU, esto lo encuentra.
+    const campos = screen.queryAllByLabelText(/SKU/i);
+    for (const c of campos) {
+      expect(
+        (c as HTMLInputElement).readOnly || (c as HTMLInputElement).disabled,
+        'el SKU se puede teclear',
+      ).toBe(true);
+    }
+    expect(screen.getByPlaceholderText(/se genera solo/i)).toBeTruthy();
+  });
+
+  it('y al guardar no se manda ninguno inventado', async () => {
+    vi.mocked(api.post).mockResolvedValue(PRODUCTO_CREADO as never);
+    await abrirNuevo();
+    await userEvent.type(screen.getByLabelText('Nombre'), 'Caramelo surtido');
+    await userEvent.type(screen.getByLabelText('Precio de venta'), '1.50');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const cuerpo = vi.mocked(api.post).mock.calls[0]![1] as Record<string, unknown>;
+    expect(cuerpo.sku, 'mandó un SKU escrito a mano').toBeUndefined();
+  });
+
+  /*
+    La descripción admite texto largo: es donde se distingue un producto de otro que se
+    llama casi igual, y en una sola línea no cabe.
+  */
+  it('la descripción se puede escribir, y viaja al guardar', async () => {
+    vi.mocked(api.post).mockResolvedValue(PRODUCTO_CREADO as never);
+    await abrirNuevo();
+    const desc = screen.getByLabelText(/Descripción/i);
+    expect(desc.tagName.toLowerCase(), 'la descripción no admite texto largo').toBe('textarea');
+
+    await userEvent.type(screen.getByLabelText('Nombre'), 'Polera algodón');
+    await userEvent.type(screen.getByLabelText('Precio de venta'), '80');
+    await userEvent.type(desc, 'Talla M, cuello redondo, algodón peinado');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const cuerpo = vi.mocked(api.post).mock.calls[0]![1] as Record<string, unknown>;
+    expect(cuerpo.description).toBe('Talla M, cuello redondo, algodón peinado');
   });
 });
