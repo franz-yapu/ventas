@@ -96,15 +96,47 @@ quedaría tomada mientras se escribe, y es justo la fila que el cajero necesita.
 
 ---
 
-## Lo que no era de esta lista y sigue esperando
+## Lo que no era de esta lista
 
-- **`react-router-dom` 6.27 → 6.30.5**: tres avisos moderados (open redirect → XSS) que el
-  CI no ve porque corta en `high`. Con la suite delante: en esta rama una subida de versión
-  ya rompió seis caminos sin test.
-- **`TERMS_VERSION` no se compara con nada.** Se guarda al registrarse y ahí muere.
+### `react-router-dom` ✅ — pero no como decía la nota
+
+El pendiente decía «6.27 → 6.30.5», y las dos mitades estaban mal: ya estábamos en 6.30.4
+(el rango `^6.27.0` la resolvió sola) y **6.30.5 no existe**. Sobre todo, el aviso alcanza a
+**toda la línea 6** (`>=6.0.0 <7.18.0`), así que ningún parche de la 6.x lo cerraba: es un
+bypass del CVE-2025-68470. Se subió a **7.18.2** y `pnpm audit --prod` pasa a «No known
+vulnerabilities found».
+
+Costó **un** error de tipos —la prop `future`, que en la 7 ya no existe porque ese es el
+único comportamiento—, y eso es mérito de haber dejado las banderas activadas antes.
+
+Dos cosas que salieron por el camino:
+
+- **Un open redirect propio, en el login.** `urlDelNegocio` armaba el destino concatenando
+  lo que la persona escribe: con `evil.com/` daba `https://evil.com/.midominio.com/`. No era
+  alcanzable —el API rechaza el login de un negocio que no existe—, pero la garantía la daba
+  el servidor y no la función. A la librería no le pasaba nada aquí; el agujero estaba doce
+  líneas más abajo.
+- **En la 7, un `NavLink to="/"` sin `end` ya NO se marca en las subrutas**; en la 6 sí, y
+  era el motivo de existir de `end`. Está escrito en `navegacion.test.tsx`, que es el test
+  nuevo que cubre el menú — la única pieza que usa `NavLink` y que no cubría nada.
+
+### `TERMS_VERSION` ✅
+
+Se guardaba al registrarse y ahí moría. Ahora hay un aviso en el marco cuando el negocio
+aceptó una versión anterior a la última **material**, con un botón que registra qué versión
+se aceptó y cuándo, auditado. No bloquea, y sólo lo ve el admin de la central. Las tres
+decisiones son de franz y están razonadas en el commit y en `AvisoDeTerminos`.
+
+Lo que lo hacía obligatorio: el texto promete «si el cambio es importante, te avisaremos con
+antelación razonable; seguir usando el servicio después implica aceptarlas» — una cláusula
+que se apoyaba en un aviso que no existía.
+
+### Sigue esperando
+
 - **El VPS entero**, que es lo único irrecuperable. Leer antes
   `docs/DESPLIEGUE_TRAS_REVISION.md`: los secretos de ejemplo, la migración 0019 y el volumen
   de las fotos.
+- **Los cinco datos de la empresa y el abogado**, que siguen bloqueando abrir el registro.
 
 ## Lo que apareció el 12 y no se tocó
 
@@ -117,3 +149,8 @@ quedaría tomada mientras se escribe, y es justo la fila que el cajero necesita.
   no se monta en la suite (arrastra Dexie, el escáner y el proveedor de tema, y está
   documentado por qué). La decisión sí está probada; la llamada se comprobó leyendo el
   cambio. Es la clase de hueco que en este proyecto ya costó tres veces.
+- **Los avisos de vitest (crítico) y vite (alto) siguen abiertos**, y el CI no los ve porque
+  `--prod` deja fuera las dependencias de desarrollo. Está razonado en el propio workflow y
+  es defendible —no llegan al servidor—, pero conviene decidirlo a la vista y no por
+  omisión: el de vitest sólo aplica con `vitest --ui` escuchando, y los de vite son de
+  Windows. Subir vitest 2.1.9 → 3.2.6 es otro salto de major.
