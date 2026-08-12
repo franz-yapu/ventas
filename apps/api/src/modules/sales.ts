@@ -311,7 +311,7 @@ export async function saleRoutes(app: FastifyInstance) {
         .send({ data: null, error: 'Sólo puedes cancelar ventas de tu ubicación' });
     }
     if (before.status === 'cancelled') {
-      return reply.code(409).send({ data: null, error: 'La venta ya está cancelada' });
+      return reply.code(409).send({ data: null, error: 'La venta ya está anulada' });
     }
 
     // Cancelar = status='cancelled' (nunca se borra) + devolver stock a la ubicación.

@@ -195,7 +195,7 @@ export function AuditPage() {
             <EmptyState
               icono={History}
               titulo="Sin actividad en este filtro"
-              descripcion="Prueba con otra acción o rango de fechas. Aquí sólo entra lo que cambia datos: ventas canceladas, precios, usuarios, configuración."
+              descripcion="Prueba con otra acción o rango de fechas. Aquí sólo entra lo que cambia datos: ventas anuladas, precios, usuarios, configuración."
             />
           )}
         </CardContent>

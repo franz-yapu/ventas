@@ -11,7 +11,8 @@ import { Select } from '@/components/ui/select';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { Receipt } from '@/features/sales/Receipt';
 import { api } from '@/lib/api';
-import { currentWeek, dateTime, money, PAYMENT_LABELS } from '@/lib/format';
+import { currentWeek, dateTime, etiquetaDeEstado, money, PAYMENT_LABELS } from '@/lib/format';
+import { SALE_STATUS_LABELS } from '@ventafacil/shared';
 import { printReceipt } from '@/lib/print';
 import type { Location, SaleDetail, SaleRow } from '@/lib/types';
 import { useInfiniteList } from '@/lib/useInfinite';
@@ -66,7 +67,7 @@ export function SalesPage() {
     <Page>
       <PageHeader
         titulo="Ventas"
-        descripcion="Historial de recibos. Cancelar una venta devuelve su stock y queda registrado."
+        descripcion="Historial de recibos. Anular una venta devuelve su stock y queda registrado."
         acciones={
           <Exportar
             seccion="ventas"
@@ -102,8 +103,12 @@ export function SalesPage() {
           onChange={(e) => setStatus(e.target.value)}
         >
           <option value="">Todos los estados</option>
-          <option value="completed">Completadas</option>
-          <option value="cancelled">Canceladas</option>
+          {/* Los rótulos salen de `@ventafacil/shared`, que es lo que sale también en el
+              Excel, en el PDF y en la línea de filtros del informe. Escritos aquí a mano
+              decían «Canceladas» mientras el papel decía «Anulada»: el mismo estado con
+              dos nombres, y nadie lo nota hasta comparar la pantalla con el papel. */}
+          <option value="completed">{SALE_STATUS_LABELS.completed}</option>
+          <option value="cancelled">{SALE_STATUS_LABELS.cancelled}</option>
         </Select>
         <div className="flex items-center gap-1">
           <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
@@ -179,7 +184,7 @@ export function SalesPage() {
                   <td className="p-3 text-right font-medium">{money(s.total)}</td>
                   <td className="p-3">
                     <Badge tone={s.status === 'cancelled' ? 'neutral' : 'success'}>
-                      {s.status === 'cancelled' ? 'Cancelada' : 'Completada'}
+                      {etiquetaDeEstado(s.status)}
                     </Badge>
                   </td>
                   <td className="p-3">
@@ -195,7 +200,7 @@ export function SalesPage() {
                         <button
                           onClick={() => setCancelId(s.id)}
                           className="text-muted hover:text-danger"
-                          title="Cancelar"
+                          title="Anular"
                         >
                           <Ban size={16} />
                         </button>
@@ -230,7 +235,7 @@ export function SalesPage() {
             <div className="mb-2.5 flex items-center justify-between">
               <span className="font-mono text-[13px] font-semibold">#{s.receiptNumber}</span>
               <Badge tone={s.status === 'cancelled' ? 'neutral' : 'success'}>
-                {s.status === 'cancelled' ? 'Cancelada' : 'Completada'}
+                {etiquetaDeEstado(s.status)}
               </Badge>
             </div>
             <div className="flex items-baseline justify-between">
@@ -253,7 +258,7 @@ export function SalesPage() {
                   onClick={() => setCancelId(s.id)}
                   className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-danger/40 bg-surface text-[13px] font-semibold text-danger"
                 >
-                  <Ban size={16} /> Cancelar
+                  <Ban size={16} /> Anular
                 </button>
               )}
             </div>
@@ -296,11 +301,11 @@ export function SalesPage() {
         )}
       </Modal>
 
-      {/* Cancelar */}
-      <Modal open={!!cancelId} onClose={() => setCancelId(null)} title="Cancelar venta">
+      {/* Anular */}
+      <Modal open={!!cancelId} onClose={() => setCancelId(null)} title="Anular venta">
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted">
-            La venta no se elimina; queda marcada como cancelada y se registra en auditoría.
+            La venta no se elimina; queda marcada como anulada y se registra en auditoría.
           </p>
           <label className="text-sm text-muted">Motivo (obligatorio)</label>
           <Input
@@ -308,7 +313,7 @@ export function SalesPage() {
             onChange={(e) => setReason(e.target.value)}
             placeholder="Ej. producto devuelto"
           />
-          {cancel.isError && <p className="text-sm text-danger">No se pudo cancelar</p>}
+          {cancel.isError && <p className="text-sm text-danger">No se pudo anular</p>}
           {/* Rojo de peligro, no el acento de la marca: anular una venta devuelve
               stock y no se deshace. Que llevara el color del negocio invitaba a
               pulsarlo. */}
@@ -317,7 +322,7 @@ export function SalesPage() {
             disabled={reason.length < 3 || cancel.isPending}
             onClick={() => cancel.mutate()}
           >
-            Confirmar cancelación
+            Confirmar anulación
           </Button>
         </div>
       </Modal>
