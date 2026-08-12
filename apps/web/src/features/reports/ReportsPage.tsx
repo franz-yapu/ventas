@@ -103,7 +103,7 @@ export function ReportsPage() {
       {/* KPIs. Mientras cargan, esqueletos del mismo alto: así la página no da el
           salto que hace pulsar el botón equivocado. */}
       {!conAnalitica ? (
-        <FuncionDeOtroPlan que="Los gráficos y las comparativas" />
+        <FuncionDeOtroPlan que="los gráficos ni las comparativas" />
       ) : cargandoDash ? (
         <SkeletonTiles n={4} />
       ) : (

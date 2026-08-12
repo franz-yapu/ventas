@@ -22,6 +22,14 @@ import { useSubscription } from '@/features/subscription/SubscriptionProvider';
  * exactamente la clase de promesa desactualizada que ya ha costado cara aquí—. Se dice
  * lo que se sabe seguro, y el enlace lleva a la pantalla que tiene la respuesta al día.
  */
+/**
+ * @param que Lo que falta, en minúscula y con su artículo: «los gráficos», «el panel».
+ *   La frase se construye como «Tu plan no incluye …», que es la única forma que
+ *   concuerda con un sujeto singular Y con uno plural. La primera versión decía
+ *   «{que} no entra en tu plan» y salía «Los gráficos y las comparativas no entra en tu
+ *   plan» — se vio en la captura, no en los tests, que sólo miraban que el aviso
+ *   estuviera.
+ */
 export function FuncionDeOtroPlan({ que }: { que: string }) {
   const { sub } = useSubscription();
   const plan = sub?.plan?.name;
@@ -33,10 +41,11 @@ export function FuncionDeOtroPlan({ que }: { que: string }) {
           <Lock size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold">{que} no entra en tu plan</p>
+          <p className="text-[15px] font-semibold">
+            {plan ? `Tu plan ${plan} no incluye ${que}` : `Tu plan no incluye ${que}`}
+          </p>
           <p className="mt-0.5 text-[13px] leading-[1.5] text-muted">
-            {plan ? `Tu plan es ${plan}.` : ''} Mira qué incluye cada uno y cambia cuando quieras;
-            lo que ya usas sigue igual.
+            Mira qué incluye cada uno y cambia cuando quieras; lo que ya usas sigue igual.
           </p>
         </div>
         <Link

@@ -107,7 +107,7 @@ describe('Reportes, con un plan que no incluye los gráficos', () => {
 
   it('lo DICE, en vez de dejar media pantalla en blanco', async () => {
     conQuery(<ReportsPage />);
-    expect(await screen.findByText(/no entra en tu plan/)).toBeTruthy();
+    expect(await screen.findByText(/no incluye/)).toBeTruthy();
   });
 
   it('y lleva a los planes, que es lo único que puede hacer con eso', async () => {
@@ -147,7 +147,7 @@ describe('Reportes, con el plan que sí los incluye', () => {
     await waitFor(() =>
       expect(pedidas().some((u) => u.startsWith('/reports/dashboard'))).toBe(true),
     );
-    expect(screen.queryByText(/no entra en tu plan/)).toBeNull();
+    expect(screen.queryByText(/no incluye/)).toBeNull();
   });
 });
 
@@ -163,7 +163,7 @@ describe('el Panel, al que se llega por la URL sin tener el plan', () => {
 
   it('explica por qué está vacío, en vez de salir en blanco', async () => {
     conQuery(<DashboardPage />);
-    expect(await screen.findByText(/no entra en tu plan/)).toBeTruthy();
+    expect(await screen.findByText(/no incluye/)).toBeTruthy();
     expect(pedidas().some((u) => u.startsWith('/reports/dashboard'))).toBe(false);
   });
 });

@@ -103,7 +103,7 @@ export function DashboardPage() {
         <h2 className="text-lg font-bold">Reporte de ventas</h2>
       </div>
 
-      {!conAnalitica && <FuncionDeOtroPlan que="El panel" />}
+      {!conAnalitica && <FuncionDeOtroPlan que="el panel" />}
 
       {editing && (
         <Card className="no-print">
