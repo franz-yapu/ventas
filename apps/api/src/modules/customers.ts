@@ -1,6 +1,6 @@
 import { schema, withTenant } from '@ventafacil/db';
 import { patchCustomerSchema, upsertCustomerSchema } from '@ventafacil/shared';
-import { and, count, desc, eq, max, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { colgandoDeComprador, mensajeDesactivado } from '../lib/borrado.js';
 import { filtroDeUbicacion } from '../lib/scope.js';
@@ -75,8 +75,27 @@ export async function customerRoutes(app: FastifyInstance) {
           phone: schema.customer.phone,
           notes: schema.customer.notes,
           isActive: schema.customer.isActive,
-          compras: count(schema.sale.id),
-          ultimaCompra: max(schema.sale.clientCreatedAt),
+          /*
+            Las dos cifras cuentan sólo las COMPLETADAS, y no es un detalle.
+
+            El `count` no filtraba por estado mientras el `totalGastado` del detalle sí, así
+            que un cliente cuyas dos únicas compras se anularon salía con «2 compras» y
+            «Bs. 0.00» gastados — dos números de la misma pantalla respondiendo preguntas
+            distintas sin avisar—, y `ultimaCompra` apuntaba a una venta que ya no contaba.
+
+            La columna responde «cuánto me ha comprado», no «cuántas veces pasó por caja»:
+            lo anulado no es una compra. El HISTORIAL del detalle sí las enseña, marcadas,
+            porque ahí la pregunta es otra —qué pasó con este comprador— y esconderlas
+            dejaría un hueco inexplicable.
+
+            Va con `FILTER` y no en el WHERE ni en el ON: en el WHERE se llevaría por delante
+            el LEFT JOIN (ver abajo), y en el ON desaparecerían del historial las anuladas
+            que sí queremos poder contar aparte.
+          */
+          compras: sql<number>`COUNT(${schema.sale.id}) FILTER (WHERE ${schema.sale.status} = 'completed')::int`,
+          ultimaCompra: sql<
+            string | null
+          >`MAX(${schema.sale.clientCreatedAt}) FILTER (WHERE ${schema.sale.status} = 'completed')`,
         })
         .from(schema.customer)
         /*

@@ -115,6 +115,46 @@ describe('la lista', () => {
     expect(fila.ultimaCompra).toBeNull();
   });
 
+  /**
+   * La columna «compras» cuenta lo MISMO que el dinero: sólo las completadas.
+   *
+   * El `count` de la lista no filtraba por estado y el `totalGastado` del detalle sí, así
+   * que un cliente cuyas dos únicas compras se anularon aparecía con «2 compras» y
+   * «Bs. 0.00» gastados. Dos cifras de la misma pantalla respondiendo preguntas distintas
+   * sin decirlo, y `ultimaCompra` apuntando a una venta que ya no cuenta.
+   *
+   * Decisión de producto (franz, 12 de agosto de 2026): la columna responde «cuánto me ha
+   * comprado», no «cuántas veces pasó por caja». Lo anulado no es una compra.
+   */
+  it('las ANULADAS no cuentan como compras, igual que no cuentan como dinero', async () => {
+    const id = await crearComprador('Todo devuelto');
+    await venderle(id, '200.00', 930, 'cancelled');
+    await venderle(id, '300.00', 931, 'cancelled');
+
+    const fila = (await lista()).find((c: any) => c.id === id);
+    expect(fila.compras, '«2 compras» junto a «Bs. 0.00» gastados').toBe(0);
+    expect(fila.ultimaCompra, 'apunta a una venta que ya no cuenta').toBeNull();
+  });
+
+  it('y con una anulada de por medio, cuenta las buenas y la fecha es la de la buena', async () => {
+    const id = await crearComprador('Compró y luego devolvió');
+    await venderle(id, '100.00', 940);
+    // La anulada es la MÁS RECIENTE: es la que se llevaba `ultimaCompra` por delante.
+    await venderle(id, '500.00', 941, 'cancelled');
+
+    const fila = (await lista()).find((c: any) => c.id === id);
+    expect(fila.compras).toBe(1);
+    expect(fila.ultimaCompra).toBeTruthy();
+
+    // Y coincide con lo que dice el detalle, que es lo que se abre justo después.
+    const d = (await detalle(id)).json().data;
+    expect(d.comprasCompletadas).toBe(fila.compras);
+    expect(Number(d.totalGastado)).toBe(100);
+    // El historial sí las enseña las dos: es parte de lo que pasó con este comprador.
+    expect(d.compras).toHaveLength(2);
+    expect(d.comprasRegistradas).toBe(2);
+  });
+
   it('los DESACTIVADOS siguen en la lista, marcados', async () => {
     /*
       A propósito: un comprador desactivado sigue siendo el dueño de su historial, y
