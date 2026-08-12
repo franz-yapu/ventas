@@ -147,15 +147,44 @@ export function PosPage() {
   const descuentoRecortado = pedido > topeDescuento + 0.005;
   const total = subtotal - discountNum;
 
-  function addToCart(p: Product) {
+  /**
+   * Cuántas unidades quedan por vender, descontando lo que ya está en el carrito.
+   *
+   * Sin fila de inventario en esta sucursal cuenta como CERO, igual que en el servidor: no
+   * es «no se controla el stock», es que aquí no hay ninguna. Antes eso se trataba como
+   * «desconocido» y la tarjeta llegaba a mostrar «Disp. null».
+   */
+  function disponible(p: Product): number {
+    return (p.stock ?? 0) - (cartQtyById.get(p.id) ?? 0);
+  }
+
+  /*
+    El carrito no puede pasar de lo que hay.
+
+    Esta comprobación vive aquí y no sólo en la tarjeta porque al carrito se llega por tres
+    caminos: tocando el producto, escaneando un código de barras y pulsando «+». Los tres
+    acaban aquí, y dejar dos sin cubrir sería tener la puerta cerrada y la ventana abierta:
+    el servidor rechaza la venta entera al cobrar, con el cliente delante.
+  */
+  function addToCart(p: Product): boolean {
+    if (disponible(p) <= 0) {
+      showToast(`Sin existencias de ${p.name} en esta sucursal`, false);
+      return false;
+    }
     setCart((c) => {
       const found = c.find((l) => l.product.id === p.id);
       if (found)
         return c.map((l) => (l.product.id === p.id ? { ...l, quantity: l.quantity + 1 } : l));
       return [...c, { product: p, quantity: 1 }];
     });
+    return true;
   }
   function setQty(id: string, delta: number) {
+    const linea = cart.find((l) => l.product.id === id);
+    if (delta > 0 && linea && disponible(linea.product) <= 0) {
+      showToast(`No quedan más unidades de ${linea.product.name}`, false);
+      return;
+    }
     setCart((c) =>
       c
         .map((l) => (l.product.id === id ? { ...l, quantity: l.quantity + delta } : l))
@@ -194,7 +223,10 @@ export function PosPage() {
     */
     const exacto = await findByCode(texto);
     if (exacto) {
-      addToCart(exacto);
+      // Sólo se anuncia si ENTRÓ. Antes se cantaba «Agregado» pasara lo que pasara, así
+      // que un producto agotado se escaneaba, no entraba, y el cajero seguía a lo suyo
+      // creyendo que sí — hasta el momento de cobrar.
+      if (!addToCart(exacto)) return;
       showToast(`Agregado: ${exacto.name}`);
       // Se vacía para que el siguiente escaneo entre limpio, sin borrar a mano.
       setSearch('');
@@ -431,10 +463,11 @@ export function PosPage() {
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {products?.map((p) => {
-            // Stock restante = existencia menos lo ya cargado en el carrito.
-            const remaining = p.stock == null ? null : p.stock - (cartQtyById.get(p.id) ?? 0);
-            const out = remaining != null && remaining <= 0;
-            const low = remaining != null && p.minStock != null && remaining <= p.minStock && !out;
+            // Stock restante = existencia menos lo ya cargado en el carrito. Sin fila de
+            // inventario en esta sucursal, cero: es lo mismo que decide el servidor.
+            const remaining = disponible(p);
+            const out = remaining <= 0;
+            const low = p.minStock != null && remaining <= p.minStock && !out;
             const textCol = out ? 'text-danger' : low ? 'text-warning' : 'text-success';
             // Del token, no del hexadecimal: en oscuro estos tres se aclaran para
             // seguir leyéndose como agotado / poco / disponible.
@@ -443,20 +476,30 @@ export function PosPage() {
               : low
                 ? 'var(--color-warning)'
                 : 'var(--color-success)';
+
             /*
-              Sin existencias se puede vender igual, y se avisa.
+              Sin existencias NO se puede añadir al carrito.
 
-              Antes el botón se deshabilitaba. Suena prudente y en el mostrador es peor:
-              una llantería que acaba de recibir mercadería sin registrarla se queda sin
-              poder cobrar, con el cliente delante — y lo que pasa entonces es que se
-              cobra por fuera y la venta no se registra en ninguna parte. Vale más una
-              existencia en rojo que una venta invisible.
+              Esto estuvo al revés, y el porqué del cambio importa. El razonamiento anterior
+              era: «una tienda que acaba de recibir mercadería sin registrarla se queda sin
+              poder cobrar con el cliente delante, y entonces se cobra por fuera y la venta
+              no se registra en ninguna parte». Válido mientras el servidor aceptaba la
+              venta y sólo dejaba el stock en rojo.
 
-              Cuando ya está en negativo se dice cuánto falta, en vez de repetir
-              "Agotado": el número es lo que le dice al dueño cuánto tiene que ajustar.
+              Desde el 12 de agosto de 2026 el servidor la RECHAZA (decisión de franz, tras
+              encontrar recibos emitidos de mercadería que no salió de ningún sitio). Con
+              eso, dejar la tarjeta activa ya no permite cobrar: sólo deja montar el carrito
+              entero para chocar contra un 409 al final, con el cliente esperando. Peor sitio
+              para enterarse, imposible.
+
+              La salida para la mercadería recién llegada sigue existiendo y es la correcta:
+              registrarla en Inventario. Un minuto ahí, y el producto vuelve a venderse.
+
+              Cuando ya está en negativo se dice cuánto falta, en vez de repetir "Agotado":
+              el número es lo que le dice al dueño cuánto tiene que ajustar.
             */
             const stockLabel =
-              remaining != null && remaining < 0
+              remaining < 0
                 ? `Faltan ${Math.abs(remaining)}`
                 : out
                   ? 'Sin stock'
@@ -472,7 +515,15 @@ export function PosPage() {
               <button
                 key={p.id}
                 onClick={() => addToCart(p)}
-                className={`flex min-h-[112px] flex-col gap-2 rounded-theme border bg-surface p-3.5 text-left shadow-card transition hover:shadow-card-hover active:scale-[0.98] ${cardBorder}`}
+                disabled={out}
+                title={out ? `${p.name} · sin existencias en esta sucursal` : undefined}
+                className={cn(
+                  'flex min-h-[112px] flex-col gap-2 rounded-theme border bg-surface p-3.5 text-left shadow-card transition',
+                  out
+                    ? 'cursor-not-allowed opacity-55'
+                    : 'hover:shadow-card-hover active:scale-[0.98]',
+                  cardBorder,
+                )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-mono text-[10px] font-medium text-muted">{p.sku}</span>
@@ -598,8 +649,11 @@ export function PosPage() {
                     <div className="text-xs text-muted">{money(l.product.price)} c/u</div>
                   </div>
                   <div className="flex items-center overflow-hidden rounded-[11px] border border-field">
+                    {/* Con etiqueta: sin ella, un lector de pantalla lee «botón, botón»
+                        entre las dos y no hay forma de saber cuál suma y cuál resta. */}
                     <button
                       onClick={() => setQty(l.product.id, -1)}
+                      aria-label={`Quitar una unidad de ${l.product.name}`}
                       className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10"
                     >
                       <Minus size={14} />
@@ -607,6 +661,7 @@ export function PosPage() {
                     <span className="w-7 text-center text-sm font-semibold">{l.quantity}</span>
                     <button
                       onClick={() => setQty(l.product.id, 1)}
+                      aria-label={`Añadir una unidad de ${l.product.name}`}
                       className="flex h-9 w-9 items-center justify-center bg-bg text-fg hover:bg-muted/10"
                     >
                       <Plus size={14} />
