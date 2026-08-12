@@ -1,5 +1,73 @@
 import { describe, expect, it } from 'vitest';
 import { esSubdominioPlataforma, slugDesdeHostname } from '@/features/auth/AuthProvider';
+import { urlDelNegocio } from '@/features/auth/LoginPage';
+
+/**
+ * A dónde manda el login a quien entra por el dominio base.
+ *
+ * Es el ÚNICO sitio de la aplicación donde una redirección se arma con texto escrito por
+ * una persona: `https://{lo que escribió}.{dominio}/`. Con una barra dentro —`evil.com/`—
+ * el resultado es `https://evil.com/.midominio.com/`, y ahí el host ya no es el nuestro:
+ * el navegador se va a evil.com y el resto queda de ruta.
+ *
+ * Hoy no era alcanzable de verdad, porque el API rechaza el login de un negocio que no
+ * existe y el campo no se puede rellenar desde la URL. Pero esa garantía la daba el
+ * servidor, no esta función — y en esta misma rama ya se cayó una excepción de alcance que
+ * se sostenía en algo de fuera. Aquí la comprobación cuesta una línea.
+ */
+describe('urlDelNegocio', () => {
+  const D = 'ventafacil.com';
+  const EN_BASE = { protocol: 'https:', port: '', hostname: 'ventafacil.com' };
+
+  it('manda al subdominio del negocio que se escribió', () => {
+    expect(urlDelNegocio('llantas', D, EN_BASE)).toBe('https://llantas.ventafacil.com/');
+  });
+
+  it('conserva el puerto, para que en local siga funcionando', () => {
+    expect(urlDelNegocio('llantas', D, { ...EN_BASE, port: '5173' })).toBe(
+      'https://llantas.ventafacil.com:5173/',
+    );
+  });
+
+  it('estando ya en el subdominio no manda a ninguna parte', () => {
+    expect(
+      urlDelNegocio('llantas', D, { ...EN_BASE, hostname: 'llantas.ventafacil.com' }),
+    ).toBeNull();
+  });
+
+  it('sin dominio base configurado, tampoco', () => {
+    expect(urlDelNegocio('llantas', undefined, EN_BASE)).toBeNull();
+  });
+
+  /*
+    Lo que de verdad defiende este test: que ningún carácter permita escaparse del
+    dominio. Cada uno de estos rompe la URL por un sitio distinto —la barra abre la ruta,
+    la arroba convierte lo anterior en credenciales, los dos puntos en puerto, y el
+    interrogante y la almohadilla cortan el host.
+  */
+  it('un slug que no es un slug NO redirige a ninguna parte', () => {
+    for (const malo of [
+      'evil.com/',
+      'evil.com/x',
+      'evil.com\\',
+      'evil.com@',
+      'evil.com:8080',
+      'evil.com?',
+      'evil.com#',
+      'evil com',
+      '..',
+      'a.b',
+      '',
+      '   ',
+    ]) {
+      expect(urlDelNegocio(malo, D, EN_BASE), `dejó pasar ${JSON.stringify(malo)}`).toBeNull();
+    }
+  });
+
+  it('lo que sí es un slug pasa, con espacios y mayúsculas de más', () => {
+    expect(urlDelNegocio('  Ferre-Dos  ', D, EN_BASE)).toBe('https://ferre-dos.ventafacil.com/');
+  });
+});
 
 /**
  * Deducir el negocio del subdominio es lo que evita pedirle a nadie un "código de

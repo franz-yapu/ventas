@@ -7,19 +7,43 @@ import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 /**
+ * Un slug de negocio y nada más: letras sin tilde, números y guiones.
+ *
+ * Es lo que hace que la URL de abajo no se pueda torcer. Ver `urlDelNegocio`.
+ */
+const SLUG_VALIDO = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
  * A dónde mandar a alguien que inició sesión desde el dominio base. Devuelve `null`
  * cuando ya se está en el subdominio correcto (el caso normal) y no hay que ir a
  * ninguna parte.
+ *
+ * ⚠️ Es el único sitio de la aplicación donde una redirección se arma con texto escrito
+ * por una persona, y por eso el slug se COMPRUEBA antes de pegarlo. Sin la comprobación,
+ * escribir `evil.com/` en el campo del negocio daba
+ * `https://evil.com/.midominio.com/` — el host pasa a ser `evil.com` y lo nuestro se
+ * queda de ruta. Lo mismo con `@` (lo de delante se vuelve credenciales), con `:`
+ * (puerto) y con `?` o `#`, que cortan el host.
+ *
+ * No era alcanzable de verdad —el API rechaza el login de un negocio que no existe, y
+ * este campo no se puede rellenar desde la URL—, pero esa garantía la daba el servidor y
+ * no esta función. En esta misma rama ya se cayó una excepción de alcance que se sostenía
+ * en algo de fuera; aquí la comprobación cuesta una línea y no depende de nadie.
+ *
+ * Los parámetros tienen valor por defecto para poder probarla sin montar la pantalla ni
+ * tocar `window.location`.
  */
-function urlDelNegocio(slugEscrito: string): string | null {
-  const dominio = import.meta.env.VITE_APP_DOMAIN;
+export function urlDelNegocio(
+  slugEscrito: string,
+  dominio: string | undefined = import.meta.env.VITE_APP_DOMAIN,
+  loc: { protocol: string; port: string; hostname: string } = window.location,
+): string | null {
   if (!dominio) return null;
   // Ya estamos en el subdominio de un negocio: nada que hacer.
-  if (slugDesdeHostname(window.location.hostname, dominio)) return null;
+  if (slugDesdeHostname(loc.hostname, dominio)) return null;
   const slug = slugEscrito.trim().toLowerCase();
-  if (!slug) return null;
-  const { protocol, port } = window.location;
-  return `${protocol}//${slug}.${dominio}${port ? `:${port}` : ''}/`;
+  if (!SLUG_VALIDO.test(slug)) return null;
+  return `${loc.protocol}//${slug}.${dominio}${loc.port ? `:${loc.port}` : ''}/`;
 }
 
 export function LoginPage() {
