@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { SALE_STATUS_LABELS } from '@ventafacil/shared';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { montar, screen, waitFor } from './montar';
+import { montar, screen, userEvent, waitFor } from './montar';
 
 /**
  * Cómo se llama en la pantalla una venta que se anuló.
@@ -122,5 +122,23 @@ describe('el estado de una venta en la pantalla', () => {
     conQuery(<SalesPage />);
     await waitFor(() => expect(screen.getAllByTitle('Anular').length).toBeGreaterThan(0));
     expect(screen.queryAllByTitle('Cancelar')).toHaveLength(0);
+  });
+
+  /*
+    Y el diálogo entero, que es donde vivía el resto del vocabulario viejo: se titulaba
+    «Cancelar venta» y su botón decía «Confirmar cancelación». Va aquí porque es lo único
+    de este arreglo que no se puede mirar en una captura — hay que abrirlo.
+  */
+  it('el diálogo de anular habla de anular, de principio a fin', async () => {
+    conQuery(<SalesPage />);
+    const botones = await screen.findAllByTitle('Anular');
+    await userEvent.click(botones[0]!);
+
+    expect(await screen.findByRole('heading', { name: 'Anular venta' })).toBeTruthy();
+    expect(screen.getByText(/queda marcada como anulada/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Confirmar anulación' })).toBeTruthy();
+    // El «Cancelar» que queda en la interfaz es el de cerrar sin hacer nada, y ése está
+    // bien: una venta se anula, un diálogo se cancela.
+    expect(screen.queryByText(/cancelación/)).toBeNull();
   });
 });
