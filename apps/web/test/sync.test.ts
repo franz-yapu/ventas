@@ -122,14 +122,40 @@ describe('cola de ventas', () => {
     expect(await db.pendingSales.count()).toBe(0);
   });
 
-  it('sin conexión no se envía nada y la venta se conserva', async () => {
+  /**
+   * Sin conexión SE INTENTA igual, y la venta se conserva.
+   *
+   * Antes este caso comprobaba lo contrario: que con `navigator.onLine` en `false` no se
+   * llamara al API. Esa comprobación resultó ser el fallo, no la garantía — ese indicador
+   * da falsos negativos justo donde vive este producto: un equipo en el wifi de la tienda
+   * SIN salida a Internet se declara «offline» aunque el servidor esté en la misma red.
+   * Con ella, la cola no enviaba nada y las ventas se acumulaban con un «se sincroniza
+   * luego» que no llegaba nunca.
+   *
+   * Lo que este caso protegía de verdad —que una venta que no se puede subir NO se pierda—
+   * se sigue comprobando, que es lo único que no puede fallar aquí.
+   */
+  it('sin conexión se intenta igual, y si falla la venta se conserva', async () => {
     setOnline(false);
     await enqueueSale(sale(UUID_A));
+    post.mockRejectedValue(new Error('sin red'));
 
     const r = await syncPending();
-    expect(post).not.toHaveBeenCalled();
+    expect(post, 'ni siquiera lo intentó').toHaveBeenCalled();
     expect(r.synced).toBe(0);
-    expect(await db.pendingSales.count()).toBe(1);
+    expect(await db.pendingSales.count(), 'se perdió la venta').toBe(1);
+  });
+
+  it('y si el servidor SÍ contesta, la sube aunque el navegador se crea desconectado', async () => {
+    // El caso exacto de la red local sin Internet: el API está ahí, el navegador dice que
+    // no. Antes esta venta se quedaba en la cola para siempre.
+    setOnline(false);
+    await enqueueSale(sale(UUID_A));
+    post.mockResolvedValue({ results: [{ id: UUID_A, status: 'ok', receiptNumber: 3 }] });
+
+    const r = await syncPending();
+    expect(r.synced).toBe(1);
+    expect(await db.pendingSales.count()).toBe(0);
   });
 
   it('encolar la misma venta dos veces no la duplica (idempotencia por UUID)', async () => {

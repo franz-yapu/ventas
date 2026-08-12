@@ -31,6 +31,7 @@ import { api, ApiError } from '@/lib/api';
 import { money, PAYMENT_LABELS } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { printReceipt } from '@/lib/print';
+import { uuid } from '@/lib/uuid';
 import type { Customer, Location, Product, SaleDetail } from '@/lib/types';
 import { getCachedLocations } from '@/offline/db';
 import { findByBarcode, findByCode, searchCatalog, syncCatalog } from '@/offline/catalog';
@@ -70,15 +71,25 @@ export function PosPage() {
   const [customerId, setCustomerId] = useState('');
   const [newCustOpen, setNewCustOpen] = useState(false);
 
-  // Refresca el catálogo local al entrar (si hay conexión). La UI siempre lee de Dexie.
+  /*
+    Se INTENTA sincronizar siempre, aunque el navegador diga que no hay conexión.
+
+    `navigator.onLine` da falsos negativos justo en el caso de uso de este producto: un
+    equipo conectado al wifi de la tienda que no tiene salida a Internet —o que la tiene
+    detrás de un portal cautivo— se declara «offline» aunque el servidor esté en la misma
+    red, a un metro. Con la comprobación delante, el POS se quedaba sin catálogo, sin
+    clientes y sin poder sincronizar, teniendo el API perfectamente accesible.
+
+    Intentarlo no cuesta nada: si de verdad no hay red, la petición falla y se cae al
+    catálogo local, que es para lo que existe. Y desde que el cliente tiene tiempo límite,
+    fallar es rápido en vez de eterno.
+  */
   useEffect(() => {
     getCachedLocations().then(setLocations);
-    if (navigator.onLine) {
-      // Al terminar el sync, vuelve a leer ubicaciones (evita que queden vacías en el 1er uso).
-      syncCatalog()
-        .then(() => getCachedLocations().then(setLocations))
-        .catch(() => {});
-    }
+    // Al terminar el sync, vuelve a leer ubicaciones (evita que queden vacías en el 1er uso).
+    syncCatalog()
+      .then(() => getCachedLocations().then(setLocations))
+      .catch(() => {});
   }, []);
 
   // Búsqueda reactiva sobre el catálogo local -> funciona offline.
@@ -87,7 +98,8 @@ export function PosPage() {
   const { data: customers } = useQuery({
     queryKey: ['customers'],
     queryFn: () => api.get<Customer[]>('/customers'),
-    enabled: navigator.onLine,
+    // Sin `enabled: navigator.onLine`, por lo mismo que el catálogo: en la red de una
+    // tienda sin salida a Internet eso dejaba la lista de compradores vacía para siempre.
   });
 
   /**
@@ -113,7 +125,15 @@ export function PosPage() {
     for (const l of cart) m.set(l.product.id, l.quantity);
     return m;
   }, [cart]);
-  // Descuentos sólo con conexión (evita conflictos offline, según el plan).
+  /*
+    `online` sólo alimenta el AVISO de arriba, no bloquea nada.
+
+    Antes decidía además si se podían aplicar descuentos. En una red sin salida a Internet
+    —el navegador se declara «offline» aunque el servidor esté al lado— eso dejaba la caja
+    sin poder descontar ni un boliviano, sin explicación y sin que nada estuviera roto. El
+    tope del vendedor lo hace cumplir el SERVIDOR, que es donde de verdad se defiende; aquí
+    sólo se recorta para que la pantalla no prometa un total que el API va a rechazar.
+  */
   const online = navigator.onLine;
   /**
    * Tope de descuento del vendedor. El administrador no tiene: se supone que es su
@@ -122,7 +142,7 @@ export function PosPage() {
    */
   const topePct = user?.role === 'seller' ? (business?.maxSellerDiscountPct ?? 0) : 100;
   const topeDescuento = (subtotal * topePct) / 100;
-  const pedido = online ? Math.max(0, Number(discount) || 0) : 0;
+  const pedido = Math.max(0, Number(discount) || 0);
   const discountNum = Math.min(pedido, subtotal, topeDescuento);
   const descuentoRecortado = pedido > topeDescuento + 0.005;
   const total = subtotal - discountNum;
@@ -229,7 +249,14 @@ export function PosPage() {
         cobrando no sabe si la venta entró, si tiene que repetirla, o si acaba de cobrar
         dos veces.
       */
-      const msg = e instanceof ApiError ? e.message : 'No se pudo registrar la venta.';
+      // Se enseña la causa, no un genérico: quien está en el mostrador tiene que poder
+      // decir qué pasó, y sin esto la única pista vivía en la consola del navegador.
+      const msg =
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'No se pudo registrar la venta.';
       showToast(msg, false);
     } finally {
       setBusy(false);
@@ -237,7 +264,7 @@ export function PosPage() {
   }
 
   async function registrarVenta() {
-    const id = crypto.randomUUID();
+    const id = uuid();
     const now = new Date().toISOString();
     const lines = cart.map((l) => ({
       productId: l.product.id,
@@ -260,10 +287,26 @@ export function PosPage() {
       items: lines,
     };
 
-    // Se guarda SIEMPRE en la cola local primero (offline-first): la venta nunca se pierde.
-    // Sellada con quién la cobró: la cola sobrevive al cierre de sesión, y sin esto se
-    // subía con el token del siguiente que entrara, quedando a su nombre.
-    await enqueueSale(input, user ? { userId: user.sub, businessId: user.businessId } : undefined);
+    /*
+      Se guarda SIEMPRE en la cola local primero (offline-first): la venta nunca se pierde.
+      Sellada con quién la cobró: la cola sobrevive al cierre de sesión, y sin esto se subía
+      con el token del siguiente que entrara, quedando a su nombre.
+
+      Si ESTO falla, la venta no está en ninguna parte —ni aquí ni en el servidor— y hay que
+      decirlo con esas palabras. La cola vive en IndexedDB, que puede no estar disponible
+      (ventana privada, almacenamiento bloqueado, cuota llena), y el mensaje genérico
+      anterior —«No se pudo registrar la venta»— no distinguía este caso del de «el servidor
+      no contestó», que es mucho menos grave porque la venta sí quedó guardada.
+    */
+    try {
+      await enqueueSale(
+        input,
+        user ? { userId: user.sub, businessId: user.businessId } : undefined,
+      );
+    } catch (e) {
+      const causa = e instanceof Error ? e.message : String(e);
+      throw new Error(`No se pudo guardar la venta en este dispositivo · ${causa}`);
+    }
     const locName = locations.find((l) => l.id === activeLocation)?.name ?? null;
     const custName = customers?.find((c) => c.id === customerId)?.name ?? null;
 
@@ -290,8 +333,17 @@ export function PosPage() {
       })),
     };
 
-    // Si hay conexión, intenta subir de inmediato para mostrar el correlativo real.
-    if (navigator.onLine) {
+    /*
+      Se intenta subir siempre, para enseñar el número de recibo real.
+
+      Antes iba tras un `if (navigator.onLine)`, y en una red sin salida a Internet eso
+      significaba que NINGUNA venta se subía aunque el servidor estuviera ahí: todas se
+      quedaban en la cola con el aviso de «se sincroniza luego», y ese luego no llegaba
+      nunca mientras el navegador siguiera creyéndose desconectado.
+
+      La venta ya está guardada en la cola, así que si el intento falla no se pierde nada.
+    */
+    {
       try {
         const r = await syncPending();
         if (r.synced > 0) {

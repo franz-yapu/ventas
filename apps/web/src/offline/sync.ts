@@ -129,7 +129,21 @@ let syncing = false;
  * Idempotente por UUID: 'ok' y 'duplicated' cuentan como subidas -> se borran de la cola.
  */
 export async function syncPending(): Promise<{ synced: number; failed: number }> {
-  if (syncing || !navigator.onLine) return { synced: 0, failed: 0 };
+  /*
+    Ya no se mira `navigator.onLine`, y es el arreglo de un fallo que dejaba ventas sin
+    subir indefinidamente.
+
+    Ese indicador da falsos negativos justo donde vive este producto: un equipo en el wifi
+    de la tienda SIN salida a Internet se declara «offline» aunque el servidor esté en la
+    misma red. Con la comprobación aquí, la cola no enviaba nada —ni al cobrar, ni en el
+    ping de cada 30 s— y las ventas se acumulaban con un «se sincroniza luego» que no
+    llegaba nunca.
+
+    Intentarlo cuando de verdad no hay red no cuesta nada: la petición falla, el backoff
+    reprograma cada venta, y desde que el cliente tiene tiempo límite ese fallo es rápido.
+    El candado `syncing` sí se queda: evita que dos ciclos se pisen.
+  */
+  if (syncing) return { synced: 0, failed: 0 };
   syncing = true;
   try {
     const pending = await dueSales();
