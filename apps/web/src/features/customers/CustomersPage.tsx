@@ -353,8 +353,20 @@ function DetalleCliente({ cliente, onCerrar }: { cliente: Customer; onCerrar: ()
 
         {data && (
           <div className="flex items-baseline justify-between rounded-theme bg-bg p-3">
+            {/*
+              La cuenta la da el SERVIDOR, no `compras.length`.
+
+              Contando las filas se contaba la página —el historial viene cortado en 50— y
+              se emparejaba con un gasto calculado sobre todas: un cliente de 137 compras
+              salía como «50 compras» con el dinero de las 137, y el ticket medio que se lee
+              de esas dos cifras juntas era 2,7 veces el real.
+
+              Va la de COMPLETADAS porque al lado está el gasto, que sólo suma completadas.
+              Si contara también las anuladas, dos compras devueltas darían «2 compras» y
+              «Bs. 0.00» en la misma línea.
+            */}
             <span className="text-[13px] text-muted">
-              {data.compras.length === 1 ? '1 compra' : `${data.compras.length} compras`}
+              {data.comprasCompletadas === 1 ? '1 compra' : `${data.comprasCompletadas} compras`}
             </span>
             <span className="text-[15px] font-bold">{money(data.totalGastado)}</span>
           </div>
@@ -402,6 +414,20 @@ function DetalleCliente({ cliente, onCerrar }: { cliente: Customer; onCerrar: ()
               </li>
             ))}
           </ul>
+        )}
+
+        {/*
+          Que el corte se vea.
+
+          El servidor devuelve las 50 más recientes, y hasta aquí no lo decía nadie: un
+          recibo más antiguo que el 50.º no aparecía y la pantalla no daba ninguna pista de
+          que existiera. Quien viene con algo en la mano seis meses después se llevaba un
+          "no le vendimos eso" que era mentira.
+        */}
+        {!!data && data.compras.length < data.comprasRegistradas && (
+          <p className="text-[12px] text-muted">
+            Mostrando las {data.compras.length} más recientes de {data.comprasRegistradas}.
+          </p>
         )}
 
         <Button variant="outline" onClick={onCerrar}>

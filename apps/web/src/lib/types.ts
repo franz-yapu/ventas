@@ -216,6 +216,14 @@ export interface Customer {
 export interface CustomerDetail extends Omit<Customer, 'compras' | 'ultimaCompra'> {
   /** Lo gastado en TODAS sus compras completadas, no sólo en las que caben abajo. */
   totalGastado: string;
+  /**
+   * Cuántas completó, para poner al lado del gasto: las dos cifras tienen que contar lo
+   * mismo o el ticket medio que se lee de ellas es falso.
+   */
+  comprasCompletadas: number;
+  /** Cuántas hay en el historial, anuladas incluidas. Es contra lo que se mide el corte. */
+  comprasRegistradas: number;
+  /** Las más recientes, cortadas por el servidor. Comparar con `comprasRegistradas`. */
   compras: Array<{
     id: string;
     receiptNumber: number | null;

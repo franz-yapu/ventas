@@ -133,6 +133,82 @@ describe('el detalle, que es la razón de la pantalla', () => {
     expect(screen.getByText('Recibo #43')).toBeTruthy();
     expect(screen.getByText('Anulada')).toBeTruthy();
   });
+
+  /**
+   * La cuenta de arriba y el historial de abajo responden preguntas distintas.
+   *
+   * La pantalla contaba `compras.length` —la página que devuelve el servidor, cortada en
+   * 50— y lo ponía al lado de un gasto calculado sobre todas. Un cliente de 137 compras
+   * salía como «50 compras» con el dinero de las 137: el ticket medio parecía 2,7 veces el
+   * real, y las dos cifras de la MISMA pantalla se contradecían con la tabla.
+   */
+  const conDetalle = (detalle: Record<string, unknown>) =>
+    vi
+      .mocked(api.get)
+      .mockImplementation(async (path: string) =>
+        path === '/customers' ? [ROSA] : { ...ROSA, ...detalle },
+      );
+
+  const UNA_COMPRA = {
+    id: 'v1',
+    receiptNumber: 42,
+    total: '300.00',
+    status: 'completed',
+    paymentMethod: 'cash',
+    locationName: 'Central',
+    clientCreatedAt: '2026-08-10T15:00:00.000Z',
+  };
+
+  async function abrirDetalle() {
+    conQuery(<CustomersPage />);
+    const nombres = await screen.findAllByText('Doña Rosa');
+    await userEvent.click(nombres[0]!);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/customers/c1'));
+  }
+
+  it('la cuenta de arriba es la del servidor, no la de las filas que caben', async () => {
+    conDetalle({
+      totalGastado: '4500.00',
+      comprasCompletadas: 137,
+      comprasRegistradas: 139,
+      compras: Array.from({ length: 50 }, (_, i) => ({ ...UNA_COMPRA, id: `v${i}` })),
+    });
+    await abrirDetalle();
+
+    expect(await screen.findByText('137 compras')).toBeTruthy();
+    expect(screen.queryByText('50 compras'), 'volvió a contar las filas').toBeNull();
+  });
+
+  /*
+    Y el corte se DICE. Sin esto, un recibo más antiguo que el 50.º simplemente no aparece
+    y la pantalla no da ninguna pista de que exista — que es justo la pregunta para la que
+    se hizo: "¿qué le vendí a este señor y cuándo?".
+  */
+  it('avisa de que el historial viene cortado, y de cuánto se queda fuera', async () => {
+    conDetalle({
+      totalGastado: '4500.00',
+      comprasCompletadas: 137,
+      comprasRegistradas: 139,
+      compras: Array.from({ length: 50 }, (_, i) => ({ ...UNA_COMPRA, id: `v${i}` })),
+    });
+    await abrirDetalle();
+
+    const aviso = await screen.findByText(/50 más recientes/);
+    expect(aviso.textContent).toContain('139');
+  });
+
+  it('cuando caben todas no avisa de nada, que sería ruido', async () => {
+    conDetalle({
+      totalGastado: '300.00',
+      comprasCompletadas: 1,
+      comprasRegistradas: 1,
+      compras: [UNA_COMPRA],
+    });
+    await abrirDetalle();
+
+    expect(await screen.findByText('1 compra')).toBeTruthy();
+    expect(screen.queryByText(/más recientes/)).toBeNull();
+  });
 });
 
 describe('crear y editar', () => {

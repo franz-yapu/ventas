@@ -41,6 +41,17 @@ import { filtroDeUbicacion } from '../lib/scope.js';
  * las demás sucursales. **Un comentario que justifica una excepción deja de justificarla
  * cuando cambia lo que hay debajo**, y el comentario no se entera.
  */
+
+/**
+ * Cuántas compras trae el detalle.
+ *
+ * El historial completo de un cliente de años son cientos de filas para un modal que se
+ * abre de un vistazo. Lo que NO puede pasar es que el corte sea invisible: el detalle
+ * devuelve también cuántas hay en total para que la pantalla pueda decir «las 50 más
+ * recientes de 137» en vez de dejar creer que ésas son todas.
+ */
+const MAX_COMPRAS_DETALLE = 50;
+
 export async function customerRoutes(app: FastifyInstance) {
   /**
    * GET /customers — la lista, con cuántas compras lleva cada uno y cuándo fue la última.
@@ -148,26 +159,46 @@ export async function customerRoutes(app: FastifyInstance) {
         .leftJoin(schema.location, eq(schema.location.id, schema.sale.locationId))
         .where(and(eq(schema.sale.customerId, id), eq(schema.sale.businessId, businessId), alcance))
         .orderBy(desc(schema.sale.clientCreatedAt))
-        .limit(50);
+        .limit(MAX_COMPRAS_DETALLE);
 
       /*
-        El total gastado se calcula sobre TODAS sus compras completadas, no sobre las 50
-        que se devuelven. Sumar sólo la página daría un número más pequeño que el real
-        justo para los compradores que más han comprado, que son los que se miran.
+        Las tres cifras del resumen, en UNA consulta y sobre TODAS sus compras.
+
+        Ninguna se calcula sobre las 50 que se devuelven: sumar sólo la página daría un
+        número más pequeño que el real justo para los compradores que más han comprado, que
+        son los que se miran. Y contar `compras.length` en la pantalla —que es lo que hacía—
+        dejaba a un cliente de 137 diciendo «50 compras» junto al gasto de las 137.
+
+        Son dos cuentas y no una porque responden dos preguntas distintas, y las dos están
+        en la pantalla:
+
+        - `comprasCompletadas` va al lado del gasto, así que tiene que contar lo mismo que
+          el gasto. Si no, dos anuladas dan «2 compras · Bs. 0.00».
+        - `comprasRegistradas` es el largo del historial de abajo, donde las anuladas SÍ
+          salen —son parte de lo que pasó con ese comprador—, y es contra lo que se compara
+          para saber si la lista se quedó corta.
+
+        En la misma consulta con `FILTER` en vez de en dos: así no puede pasar que el gasto
+        y su cuenta se calculen sobre conjuntos distintos.
       */
-      const [gasto] = await tx
-        .select({ total: sql<string>`COALESCE(SUM(${schema.sale.total}), 0)` })
+      const [resumen] = await tx
+        .select({
+          registradas: sql<number>`COUNT(*)::int`,
+          completadas: sql<number>`COUNT(*) FILTER (WHERE ${schema.sale.status} = 'completed')::int`,
+          gastado: sql<string>`COALESCE(SUM(${schema.sale.total}) FILTER (WHERE ${schema.sale.status} = 'completed'), 0)`,
+        })
         .from(schema.sale)
         .where(
-          and(
-            eq(schema.sale.customerId, id),
-            eq(schema.sale.businessId, businessId),
-            eq(schema.sale.status, 'completed'),
-            alcance,
-          ),
+          and(eq(schema.sale.customerId, id), eq(schema.sale.businessId, businessId), alcance),
         );
 
-      return { ...cliente, compras, totalGastado: gasto?.total ?? '0' };
+      return {
+        ...cliente,
+        compras,
+        totalGastado: resumen?.gastado ?? '0',
+        comprasCompletadas: resumen?.completadas ?? 0,
+        comprasRegistradas: resumen?.registradas ?? 0,
+      };
     });
 
     if (!detalle) return reply.code(404).send({ data: null, error: 'Comprador no encontrado' });

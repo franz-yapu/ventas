@@ -158,6 +158,30 @@ describe('el detalle, que es para lo que existe la pantalla', () => {
     expect(Number(d.totalGastado)).toBe(200);
   });
 
+  /**
+   * El historial se corta en 50, y el número de arriba NO.
+   *
+   * El modal contaba `compras.length` —o sea, la página— y lo emparejaba con un
+   * `totalGastado` calculado sobre TODAS. Un cliente de 52 compras salía como «50 compras»
+   * con el gasto de 52: el ticket medio parecía otro, y el corte no se decía en ninguna
+   * parte, así que un recibo más antiguo que el 50.º simplemente no aparecía — que es
+   * justo la pregunta para la que se hizo la pantalla.
+   */
+  it('devuelve cuántas compras hay DE VERDAD, aunque la lista venga cortada', async () => {
+    const id = await crearComprador('Cliente de toda la vida');
+    // 52 completadas y 2 anuladas: pasa del corte de 50 y además distingue las dos cifras.
+    for (let i = 0; i < 52; i++) await venderle(id, '10.00', 5000 + i);
+    await venderle(id, '99.00', 5100, 'cancelled');
+    await venderle(id, '99.00', 5101, 'cancelled');
+
+    const d = (await detalle(id)).json().data;
+    expect(d.compras, 'la lista sigue cortada, que es lo que la hace barata').toHaveLength(50);
+    expect(d.comprasRegistradas, 'la cuenta se quedó en la página').toBe(54);
+    // La cifra que se empareja con el gasto cuenta lo mismo que el gasto: sólo completadas.
+    expect(d.comprasCompletadas).toBe(52);
+    expect(Number(d.totalGastado)).toBe(520);
+  });
+
   it('el de otro negocio responde 404, no sus datos', async () => {
     expect((await detalle(otro.customerId)).statusCode).toBe(404);
   });
