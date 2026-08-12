@@ -1,4 +1,4 @@
-import { schema, withTenant } from '@ventafacil/db';
+import { schema, withTenant, type TenantTx } from '@ventafacil/db';
 import { and, count, eq, ne } from 'drizzle-orm';
 
 /**
@@ -109,18 +109,34 @@ export async function colgandoDeComprador(
   businessId: string,
   customerId: string,
 ): Promise<Colgando> {
-  return withTenant(businessId, async (tx) => {
-    const [ventas] = await tx
-      .select({ n: count() })
-      .from(schema.sale)
-      .where(eq(schema.sale.customerId, customerId));
+  return withTenant(businessId, (tx) => colgandoDeCompradorEn(tx, customerId));
+}
 
-    const n = ventas?.n ?? 0;
-    return {
-      detalle: n ? [plural(n, 'compra registrada', 'compras registradas')] : [],
-      total: n,
-    };
-  });
+/**
+ * Lo mismo, pero dentro de una transacción que ya está abierta.
+ *
+ * Existe porque contar y borrar tienen que ser la MISMA operación. Cuando cada una abría
+ * su transacción, entre las dos cabía una venta: un admin borra a «Recién llegado» (0
+ * compras) justo cuando un cajero cierra su primera venta — la cuenta ya devolvió 0, el
+ * comprador se borra en duro y `sale.customer_id` cae a NULL. El recibo recién emitido
+ * pierde para siempre a quién iba dirigido, y el API contesta «se eliminó» sin decir que
+ * dejó algo huérfano.
+ *
+ * Es la misma razón que estaba escrita en la ruta de abonos que se fue con el fiado:
+ * «comprobar el cliente y registrar el abono en la misma transacción, para que no pueda
+ * colarse un abono si el cliente desaparece entre una consulta y la otra».
+ */
+export async function colgandoDeCompradorEn(tx: TenantTx, customerId: string): Promise<Colgando> {
+  const [ventas] = await tx
+    .select({ n: count() })
+    .from(schema.sale)
+    .where(eq(schema.sale.customerId, customerId));
+
+  const n = ventas?.n ?? 0;
+  return {
+    detalle: n ? [plural(n, 'compra registrada', 'compras registradas')] : [],
+    total: n,
+  };
 }
 
 /** Qué cuelga de un USUARIO. */

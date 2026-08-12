@@ -1,4 +1,4 @@
-import { db, schema } from '@ventafacil/db';
+import { db, schema, withTenant } from '@ventafacil/db';
 import argon2 from 'argon2';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -354,6 +354,69 @@ describe('eliminar: borrar o desactivar', () => {
     const id = await crearComprador('Una vez');
     await venderle(id, '10.00', 920);
     expect((await eliminar(id)).json().data.mensaje).toContain('1 compra registrada');
+  });
+
+  /**
+   * Comprobar y borrar tienen que ser la MISMA operación, y con la fila tomada.
+   *
+   * `colgandoDeComprador()` contaba en su propia transacción y el `delete` corría en otra.
+   * Entre las dos cabe una venta: un admin borra a «Recién llegado» (0 compras) justo
+   * cuando un cajero cierra su primera venta — la cuenta ya devolvió 0, el comprador se
+   * borra en duro y `sale.customer_id` cae a NULL. El recibo recién emitido pierde para
+   * siempre a quién iba dirigido, que es exactamente la pérdida que la política de
+   * borrar-o-desactivar existe para evitar, y el API responde «se eliminó» sin decir que
+   * algo quedó huérfano.
+   *
+   * ⚠️ Juntarlas en una transacción NO bastaba. En READ COMMITTED —el modo de siempre— un
+   * `SELECT count(*)` no bloquea nada: la venta se puede confirmar justo después de contar
+   * y el `DELETE` sigue adelante igual. Lo que cierra la ventana es tomar la fila del
+   * comprador con `FOR UPDATE` antes de contar. Un INSERT en `sale` toma `FOR KEY SHARE`
+   * sobre la fila que referencia, así que los dos caminos se serializan: o esperamos a que
+   * la venta se confirme —y entonces la contamos, y el comprador se desactiva en vez de
+   * borrarse—, o llegamos antes y es la venta la que se encuentra con que ya no existe.
+   *
+   * El test fuerza esa carrera en vez de esperar a tener suerte: deja una venta insertada
+   * en una transacción SIN CONFIRMAR, lanza el borrado, y la confirma después.
+   */
+  it('una venta que llega a la vez NO deja el comprador borrado y el recibo huérfano', async () => {
+    const id = await crearComprador('Recién llegado a media venta');
+    const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    // La venta del cajero, abierta y sin confirmar: toma la fila del comprador y la
+    // mantiene tomada mientras el admin intenta borrarlo.
+    let confirmar!: () => void;
+    const venta = withTenant(t.businessId, async (tx) => {
+      await tx.insert(schema.sale).values({
+        id: crypto.randomUUID(),
+        businessId: t.businessId,
+        locationId: t.locationId,
+        userId: t.adminId,
+        customerId: id,
+        subtotal: '75.00',
+        total: '75.00',
+        paymentMethod: 'cash',
+        receiptNumber: 970,
+        clientCreatedAt: new Date(),
+      });
+      await new Promise<void>((res) => {
+        confirmar = res;
+      });
+    });
+    await esperar(150);
+
+    const borrado = eliminar(id); // sin `await`: se queda esperando la fila
+    await esperar(150);
+    confirmar();
+    await venta;
+
+    const res = await borrado;
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().data.eliminado, 'se borró con una venta suya en vuelo').toBe(false);
+    expect(res.json().data.mensaje).toContain('1 compra registrada');
+
+    // Y el recibo sigue sabiendo de quién es, que es todo el asunto.
+    const ventas = await db.select().from(schema.sale).where(eq(schema.sale.customerId, id));
+    expect(ventas, 'el recibo se quedó sin comprador').toHaveLength(1);
   });
 
   it('un VENDEDOR no elimina', async () => {

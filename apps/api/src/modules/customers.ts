@@ -2,7 +2,7 @@ import { schema, withTenant } from '@ventafacil/db';
 import { patchCustomerSchema, upsertCustomerSchema } from '@ventafacil/shared';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { colgandoDeComprador, mensajeDesactivado } from '../lib/borrado.js';
+import { colgandoDeCompradorEn, mensajeDesactivado } from '../lib/borrado.js';
 import { filtroDeUbicacion } from '../lib/scope.js';
 
 /**
@@ -291,21 +291,60 @@ export async function customerRoutes(app: FastifyInstance) {
       const { id } = req.params as { id: string };
       const businessId = req.authUser!.businessId;
 
-      const [cliente] = await withTenant(businessId, (tx) =>
-        tx
+      /**
+       * Buscar, contar y borrar: una sola transacción, y con la fila TOMADA.
+       *
+       * Iban en tres, y entre la cuenta y el borrado cabía una venta: un admin borra a
+       * «Recién llegado» (0 compras) justo cuando un cajero cierra su primera venta — la
+       * cuenta ya devolvió 0, el comprador se borra en duro y `sale.customer_id` cae a
+       * NULL. El recibo recién emitido pierde a quién iba dirigido, que es la pérdida
+       * exacta que la política de borrar-o-desactivar existe para evitar, y la respuesta
+       * dice «se eliminó» sin mencionar que dejó algo huérfano.
+       *
+       * ⚠️ Juntarlas no bastaba. En READ COMMITTED un `SELECT count(*)` no bloquea nada, así
+       * que la venta se puede confirmar justo después de contar y el `DELETE` sigue igual.
+       * Lo que cierra la ventana es el `FOR UPDATE` de aquí: insertar una venta toma
+       * `FOR KEY SHARE` sobre la fila del comprador que referencia, así que los dos caminos
+       * se serializan. O esperamos a que la venta se confirme —y entonces la contamos, y el
+       * comprador se desactiva en vez de borrarse—, o llegamos antes y es la venta la que se
+       * encuentra con que su comprador ya no existe.
+       */
+      const resultado = await withTenant(businessId, async (tx) => {
+        const [cliente] = await tx
           .select()
           .from(schema.customer)
           .where(and(eq(schema.customer.id, id), eq(schema.customer.businessId, businessId)))
-          .limit(1),
-      );
-      if (!cliente) return reply.code(404).send({ data: null, error: 'Comprador no encontrado' });
+          .limit(1)
+          .for('update');
+        if (!cliente) return null;
 
-      const colgando = await colgandoDeComprador(businessId, id);
+        const colgando = await colgandoDeCompradorEn(tx, id);
+        if (colgando.total === 0) {
+          await tx.delete(schema.customer).where(eq(schema.customer.id, id));
+          return { cliente, colgando, desactivado: null };
+        }
 
+        const [desactivado] = await tx
+          .update(schema.customer)
+          .set({ isActive: false })
+          .where(eq(schema.customer.id, id))
+          .returning();
+        return { cliente, colgando, desactivado: desactivado ?? null };
+      });
+
+      if (!resultado) {
+        return reply.code(404).send({ data: null, error: 'Comprador no encontrado' });
+      }
+      const { cliente, colgando, desactivado } = resultado;
+
+      /*
+        La bitácora va FUERA de la transacción, a propósito.
+
+        `app.audit` abre la suya; llamándola dentro, la transacción del borrado se quedaría
+        abierta —con la fila tomada— mientras se escribe la bitácora, y esa fila es justo la
+        que necesita el cajero para cerrar su venta.
+      */
       if (colgando.total === 0) {
-        await withTenant(businessId, (tx) =>
-          tx.delete(schema.customer).where(eq(schema.customer.id, id)),
-        );
         await app.audit(req, {
           action: 'delete',
           entity: 'customer',
@@ -318,13 +357,6 @@ export async function customerRoutes(app: FastifyInstance) {
         });
       }
 
-      const [desactivado] = await withTenant(businessId, (tx) =>
-        tx
-          .update(schema.customer)
-          .set({ isActive: false })
-          .where(eq(schema.customer.id, id))
-          .returning(),
-      );
       await app.audit(req, {
         action: 'update',
         entity: 'customer',
