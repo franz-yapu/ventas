@@ -35,6 +35,15 @@ export function SalesPage() {
   const [viewing, setViewing] = useState<SaleDetail | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  /**
+   * Si al anular se devolvió el efectivo al cliente.
+   *
+   * Va sin marcar a propósito. Es una AFIRMACIÓN de quien anula —el servidor registra un
+   * retiro de caja a su nombre—, y marcarla por defecto convertiría en automático justo lo
+   * que tiene que ser deliberado: el sistema no puede saber si el billete volvió al
+   * cliente, sólo quién dice que sí.
+   */
+  const [devolvio, setDevolvio] = useState(false);
 
   const { data: locations } = useQuery({
     queryKey: ['locations'],
@@ -54,14 +63,27 @@ export function SalesPage() {
     setViewing(await api.get<SaleDetail>(`/sales/${id}`));
   }
 
+  const ventaAAnular = items.find((s) => s.id === cancelId) ?? null;
+
   const cancel = useMutation({
-    mutationFn: () => api.post(`/sales/${cancelId}/cancel`, { reason }),
-    onSuccess: () => {
+    mutationFn: () =>
+      api.post<{ retiroRegistrado?: boolean; avisoCaja?: string | null }>(
+        `/sales/${cancelId}/cancel`,
+        { reason, devolvioEfectivo: devolvio },
+      ),
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['sales'] });
+      // La caja cambió: su desglose y el arqueo tienen que releerse, o el cajero seguiría
+      // viendo el esperado de antes de la devolución.
+      qc.invalidateQueries({ queryKey: ['cash'] });
+      setAvisoCaja(r?.avisoCaja ?? null);
       setCancelId(null);
       setReason('');
+      setDevolvio(false);
     },
   });
+  /** Lo que el servidor no pudo hacer con la caja, para decirlo en pantalla. */
+  const [avisoCaja, setAvisoCaja] = useState<string | null>(null);
 
   return (
     <Page>
@@ -79,6 +101,22 @@ export function SalesPage() {
           />
         }
       />
+
+      {/*
+        Lo que la anulación NO pudo hacer con la caja.
+
+        Pasa cuando se anula algo de un turno ya cerrado y no hay ninguno abierto: la venta
+        queda anulada igual —eso no se bloquea— pero el retiro no tiene dónde registrarse.
+        Callarlo dejaría al cajero creyendo que la caja ya está cuadrada.
+      */}
+      {avisoCaja && (
+        <div className="flex items-start gap-2 rounded-theme bg-warning-bg px-3.5 py-2.5 text-[13px] text-warning">
+          <span className="flex-1">{avisoCaja}</span>
+          <button onClick={() => setAvisoCaja(null)} className="font-bold underline">
+            Entendido
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {isCentral && (
@@ -313,6 +351,35 @@ export function SalesPage() {
             onChange={(e) => setReason(e.target.value)}
             placeholder="Ej. producto devuelto"
           />
+
+          {/*
+            La devolución del efectivo, en el mismo gesto.
+
+            Antes anular no tocaba la caja y aparecía un aviso pidiendo ir a registrar un
+            retiro a mano: el esperado seguía contando ese dinero «porque entró al cajón».
+            Era correcto y era confuso. Ahora se pregunta aquí, y si se dice que sí el
+            servidor registra el retiro con el nombre de quien anula y el número de la
+            venta.
+
+            Sólo para las ventas en efectivo: devolver una tarjeta es cosa del banco, y en
+            el cajón no hay ningún billete que sacar.
+          */}
+          {ventaAAnular?.paymentMethod === 'cash' && (
+            <label className="flex items-start gap-2 rounded-theme bg-bg p-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={devolvio}
+                onChange={(e) => setDevolvio(e.target.checked)}
+              />
+              <span>
+                Le devolví {money(ventaAAnular.total)} en efectivo al cliente
+                <span className="block text-[12px] text-muted">
+                  Se registrará como retiro de caja, para que el turno cuadre.
+                </span>
+              </span>
+            </label>
+          )}
           {cancel.isError && <p className="text-sm text-danger">No se pudo anular</p>}
           {/* Rojo de peligro, no el acento de la marca: anular una venta devuelve
               stock y no se deshace. Que llevara el color del negocio invitaba a

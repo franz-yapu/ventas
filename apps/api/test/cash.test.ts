@@ -21,6 +21,8 @@ let t: Tenant;
 let otro: Tenant;
 /** Vendedor de la misma ubicación: el arqueo lo hace quien está en la caja. */
 let vendedorToken: string;
+/** Su id, para comprobar a nombre de quién queda un retiro automático. */
+let vendedorId = '';
 
 function auth2(token: string) {
   return auth(token);
@@ -83,14 +85,18 @@ beforeAll(async () => {
   otro = await createTenant(app, 'caja-b');
 
   // Un vendedor en la misma ubicación que el admin.
-  await db.insert(schema.appUser).values({
-    businessId: t.businessId,
-    locationId: t.locationId,
-    name: 'Vendedora',
-    username: 'vendedora',
-    passwordHash: await argon2.hash('secreto123'),
-    role: 'seller',
-  });
+  const [vendedora] = await db
+    .insert(schema.appUser)
+    .values({
+      businessId: t.businessId,
+      locationId: t.locationId,
+      name: 'Vendedora',
+      username: 'vendedora',
+      passwordHash: await argon2.hash('secreto123'),
+      role: 'seller',
+    })
+    .returning();
+  vendedorId = vendedora!.id;
   const login = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/login',
@@ -354,6 +360,142 @@ describe('un vendedor no cuadra su caja anulando su venta', () => {
     expect((await actual(vendedorToken)).breakdown.expected).toBe('5410.00');
     const cierre = await cerrar(vendedorToken, '5410.00');
     expect(cierre.json().data.difference).toBe('0.00');
+  });
+
+  /**
+   * Devolver el dinero desde la propia anulación.
+   *
+   * El aviso de abajo existía, pero registrar el retiro seguía siendo un viaje aparte a
+   * Caja. Quien probó el sistema lo dijo así: «anulas y te dice que registres un
+   * movimiento; es confuso». Y tenía razón — el gesto natural es uno solo: anulo y
+   * devuelvo.
+   *
+   * Lo que NO se puede perder al arreglarlo es el control que costó entender: el sistema
+   * no sabe si el billete volvió al cliente. Por eso no se descuenta solo; se descuenta
+   * porque alguien AFIRMA que devolvió, y esa afirmación queda registrada como el retiro
+   * que es, con su motivo y su autor.
+   *
+   * Decisión de franz (12 de agosto de 2026).
+   */
+  it('anular devolviendo el dinero registra el retiro y cuadra la caja', async () => {
+    await abrir(vendedorToken, '1000.00');
+    const venta = await venderPorApi(vendedorToken, '120.00');
+    const saleId = venta.json().data.saleId;
+    expect((await actual(vendedorToken)).breakdown.expected).toBe('1120.00');
+
+    const anula = await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'el cliente se arrepintió', devolvioEfectivo: true },
+    });
+    expect(anula.statusCode, anula.body).toBe(200);
+    expect(anula.json().data.retiroRegistrado).toBe(true);
+
+    // El esperado vuelve solo, sin que nadie vaya a Caja.
+    expect((await actual(vendedorToken)).breakdown.expected).toBe('1000.00');
+    const cierre = await cerrar(vendedorToken, '1000.00');
+    expect(cierre.json().data.difference).toBe('0.00');
+  });
+
+  it('el retiro dice de qué venta viene y quién lo hizo', async () => {
+    // Sin eso sería un retiro anónimo más en la lista, y el dueño no podría atarlo a nada.
+    await abrir(vendedorToken, '500.00');
+    const venta = await venderPorApi(vendedorToken, '75.00');
+    const recibo = venta.json().data.receiptNumber;
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${venta.json().data.saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'devuelto', devolvioEfectivo: true },
+    });
+
+    const movs = await db
+      .select()
+      .from(schema.cashMovement)
+      .where(eq(schema.cashMovement.businessId, t.businessId));
+    const suyo = movs.find((m) => m.reason.includes(String(recibo)));
+    expect(suyo, 'el retiro no menciona la venta').toBeTruthy();
+    expect(suyo!.type).toBe('out');
+    expect(suyo!.amount).toBe('75.00');
+    expect(suyo!.userId).toBe(vendedorId);
+  });
+
+  it('sin decir que se devolvió, NO se toca la caja', async () => {
+    // El control sigue en pie: el descuento nace de una afirmación, no de la anulación.
+    await abrir(vendedorToken, '300.00');
+    const venta = await venderPorApi(vendedorToken, '60.00');
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${venta.json().data.saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'me equivoqué' },
+    });
+    expect((await actual(vendedorToken)).breakdown.expected).toBe('360.00');
+    await cerrar(vendedorToken, '360.00');
+  });
+
+  /*
+    Una venta que no se cobró en efectivo no deja billete en el cajón: no hay nada que
+    retirar, aunque se marque la casilla. Devolver una tarjeta es cosa del banco.
+  */
+  it('una venta con tarjeta no genera retiro aunque se diga que se devolvió', async () => {
+    await abrir(vendedorToken, '200.00');
+    const venta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/sales',
+      headers: auth(vendedorToken),
+      payload: {
+        id: crypto.randomUUID(),
+        locationId: t.locationId,
+        total: '90.00',
+        subtotal: '90.00',
+        discount: '0.00',
+        paymentMethod: 'card',
+        clientCreatedAt: new Date().toISOString(),
+        items: [
+          {
+            productId: t.productId,
+            productNameSnapshot: 'Producto',
+            unitPriceSnapshot: '90.00',
+            quantity: 1,
+            lineTotal: '90.00',
+          },
+        ],
+      },
+    });
+    const anula = await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${venta.json().data.saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'devuelto', devolvioEfectivo: true },
+    });
+    expect(anula.json().data.retiroRegistrado).toBe(false);
+    expect((await actual(vendedorToken)).breakdown.expected).toBe('200.00');
+    await cerrar(vendedorToken, '200.00');
+  });
+
+  /*
+    Y si no hay caja abierta, la anulación NO se bloquea: la venta tiene que quedar
+    anulada igual. Lo que se hace es decirlo, para que el retiro se registre al abrir.
+  */
+  it('sin caja abierta se anula igual, y avisa de que el retiro quedó pendiente', async () => {
+    const venta = await (async () => {
+      await abrir(vendedorToken, '100.00');
+      const v = await venderPorApi(vendedorToken, '40.00');
+      await cerrar(vendedorToken, '140.00');
+      return v;
+    })();
+
+    const anula = await app.inject({
+      method: 'POST',
+      url: `/api/v1/sales/${venta.json().data.saleId}/cancel`,
+      headers: auth(vendedorToken),
+      payload: { reason: 'devuelto al día siguiente', devolvioEfectivo: true },
+    });
+    expect(anula.statusCode, anula.body).toBe(200);
+    expect(anula.json().data.retiroRegistrado).toBe(false);
+    expect(anula.json().data.avisoCaja).toMatch(/caja/i);
   });
 
   it('la anulación de una venta en efectivo avisa de que hay que devolver', async () => {

@@ -124,6 +124,61 @@ describe('el estado de una venta en la pantalla', () => {
     expect(screen.queryAllByTitle('Cancelar')).toHaveLength(0);
   });
 
+  /**
+   * Devolver el efectivo desde la propia anulación.
+   *
+   * Antes, anular no tocaba la caja: el esperado seguía contando ese dinero «porque entró
+   * al cajón» y aparecía un aviso pidiendo ir a Caja a registrar un retiro a mano. Es
+   * correcto —el sistema no sabe si el billete volvió al cliente— y es confuso, que fue
+   * justo la palabra de quien lo probó.
+   *
+   * La casilla va SIN marcar a propósito: es una afirmación de quien anula, y el servidor
+   * registra un retiro a su nombre. Marcarla por defecto haría automático lo que tiene que
+   * ser deliberado.
+   */
+  it('en una venta en efectivo ofrece registrar la devolución', async () => {
+    conQuery(<SalesPage />);
+    await userEvent.click((await screen.findAllByTitle('Anular'))[0]!);
+
+    const casilla = screen.getByRole('checkbox');
+    expect(casilla).toBeTruthy();
+    expect((casilla as HTMLInputElement).checked, 'viene marcada de fábrica').toBe(false);
+    expect(screen.getByText(/Se registrará como retiro de caja/)).toBeTruthy();
+  });
+
+  it('y sólo manda la devolución si se marca', async () => {
+    vi.mocked(api.post).mockResolvedValue({ retiroRegistrado: true } as never);
+    conQuery(<SalesPage />);
+    await userEvent.click((await screen.findAllByTitle('Anular'))[0]!);
+    await userEvent.type(screen.getByPlaceholderText(/producto devuelto/i), 'se arrepintió');
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar anulación' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const cuerpo = vi.mocked(api.post).mock.calls[0]![1] as Record<string, unknown>;
+    expect(cuerpo.devolvioEfectivo).toBe(true);
+  });
+
+  /*
+    Una venta con tarjeta no deja billete en el cajón: no hay nada que devolver desde la
+    caja, y ofrecerlo sólo confundiría.
+  */
+  it('en una venta con tarjeta no ofrece nada de caja', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.startsWith('/locations')) return [{ id: 'loc-1', name: 'Caranavi', isCentral: true }];
+      return {
+        items: [{ ...ANULADA, id: 'v9', status: 'completed', paymentMethod: 'card' }],
+        total: 1,
+        page: 1,
+        limit: 30,
+        sumTotal: '320.00',
+      };
+    });
+    conQuery(<SalesPage />);
+    await userEvent.click((await screen.findAllByTitle('Anular'))[0]!);
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
   /*
     Y el diálogo entero, que es donde vivía el resto del vocabulario viejo: se titulaba
     «Cancelar venta» y su botón decía «Confirmar cancelación». Va aquí porque es lo único

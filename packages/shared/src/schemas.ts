@@ -258,6 +258,19 @@ export const syncSalesSchema = z.object({
 
 export const cancelSaleSchema = z.object({
   reason: z.string().min(3),
+  /**
+   * Quien anula AFIRMA que devolvió el efectivo al cliente.
+   *
+   * Con esto el servidor registra el retiro de caja por él, en el mismo gesto. Antes había
+   * que ir a Caja a anotarlo a mano y era, en palabras de quien lo probó, «confuso»: se
+   * anulaba y aparecía un aviso pidiendo registrar un movimiento.
+   *
+   * Es una AFIRMACIÓN y no una consecuencia automática de anular, y esa diferencia es todo
+   * el control: el sistema no puede saber si el billete volvió al cliente. Descontarlo solo
+   * por anular reabriría el agujero de cobrar en efectivo, anular, quedarse el dinero y
+   * cerrar la caja cuadrada.
+   */
+  devolvioEfectivo: z.boolean().optional(),
 });
 
 // ── Perfil propio (auto-edición) ───────────────────────────────

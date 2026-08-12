@@ -1,6 +1,6 @@
 import { schema, withTenant } from '@ventafacil/db';
 import { cancelSaleSchema, createSaleSchema, syncSalesSchema } from '@ventafacil/shared';
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, sql, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { sinCostosLista } from '../lib/costos.js';
@@ -378,19 +378,70 @@ export async function saleRoutes(app: FastifyInstance) {
     /*
       Si era en efectivo, hay un billete que sacar del cajón.
 
-      Anular ya NO devuelve el dinero por su cuenta en el arqueo (ver `calcularDesglose`):
-      el efectivo que entró sigue contando y devolverlo es un retiro de caja, registrado
-      como cualquier otro. Eso es lo que impide cuadrar la caja anulando la propia venta.
+      Anular NO devuelve el dinero por su cuenta en el arqueo (ver `calcularDesglose`): el
+      efectivo que entró sigue contando, y devolverlo es un retiro de caja registrado como
+      cualquier otro. Eso es lo que impide cuadrar la caja anulando la propia venta.
 
-      El API no crea el retiro solo —hacerlo sería volver al punto de partida, con el
-      esperado cuadrando sin que nadie haya tocado un billete—, pero sí avisa, para que
-      el POS pueda ofrecer el retiro en el mismo gesto en lugar de dejarlo a la memoria
-      de quien está atendiendo.
+      Lo que sí hace el servidor es registrar ese retiro POR QUIEN LO AFIRMA, en el mismo
+      gesto. La diferencia con descontarlo automáticamente es todo el control: aquí hay
+      alguien diciendo «devolví el dinero», y esa afirmación queda con su nombre, su hora y
+      la venta a la que corresponde. Antes había que ir a Caja a anotarlo a mano, y quien
+      probó el sistema lo resumió bien: «es confuso».
     */
     const devolverEfectivo = before.status === 'completed' && before.paymentMethod === 'cash';
 
+    let retiroRegistrado = false;
+    let avisoCaja: string | null = null;
+    if (devolverEfectivo && parsed.data.devolvioEfectivo) {
+      /*
+        El retiro va al turno ABIERTO de esa sucursal, que no tiene por qué ser el de la
+        venta: anular algo de ayer saca el billete del cajón de HOY. El turno de ayer ya se
+        contó y se firmó, y reabrirlo cambiaría un arqueo cerrado.
+      */
+      const turno = await withTenant(businessId, async (tx) => {
+        const [abierto] = await tx
+          .select({ id: schema.cashRegister.id })
+          .from(schema.cashRegister)
+          .where(
+            and(
+              eq(schema.cashRegister.businessId, businessId),
+              eq(schema.cashRegister.locationId, before.locationId),
+              isNull(schema.cashRegister.closedAt),
+            ),
+          )
+          .limit(1);
+        if (!abierto) return null;
+
+        await tx.insert(schema.cashMovement).values({
+          businessId,
+          // Sin `locationId`: el movimiento cuelga del TURNO, que ya sabe de qué sucursal
+          // es. Duplicarlo aquí abriría la puerta a que los dos dejaran de coincidir.
+          cashRegisterId: abierto.id,
+          userId: req.authUser!.sub,
+          type: 'out',
+          amount: before.total,
+          reason: `Devolución de la venta #${before.receiptNumber ?? id.slice(0, 8)}`,
+        });
+        return abierto.id;
+      });
+
+      retiroRegistrado = !!turno;
+      if (!turno) {
+        // No se bloquea la anulación por esto: la venta tiene que quedar anulada igual.
+        avisoCaja =
+          'No hay una caja abierta en esta sucursal, así que la devolución no se registró. ' +
+          'Anótala como retiro al abrir la caja.';
+      }
+    }
+
     return reply.send({
-      data: { ...after, devolverEfectivo, montoADevolver: devolverEfectivo ? before.total : null },
+      data: {
+        ...after,
+        devolverEfectivo,
+        montoADevolver: devolverEfectivo ? before.total : null,
+        retiroRegistrado,
+        avisoCaja,
+      },
       error: null,
     });
   });
