@@ -236,7 +236,9 @@ export async function customerRoutes(app: FastifyInstance) {
       */
       const d = parsed.data;
       const cambios: Record<string, unknown> = {};
-      if (d.name !== undefined) cambios.name = d.name.trim();
+      // Sin `.trim()` aquí: lo recorta el esquema, ANTES de validar. Hacerlo después era el
+      // fallo — `{ name: "   " }` pasaba el `.min(1)` y se guardaba vacío.
+      if (d.name !== undefined) cambios.name = d.name;
       if (d.phone !== undefined) cambios.phone = d.phone || null;
       if (d.notes !== undefined) cambios.notes = d.notes || null;
       if (d.isActive !== undefined) cambios.isActive = d.isActive;

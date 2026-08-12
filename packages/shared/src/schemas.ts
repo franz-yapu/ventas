@@ -308,8 +308,21 @@ export const cashMovementSchema = z.object({
 });
 
 // ── Compradores ────────────────────────────────────────────────
+/**
+ * El nombre se recorta AQUÍ, antes del `.min(1)`, y no en la ruta.
+ *
+ * `z.string().min(1)` acepta `"   "`: son tres caracteres. La ruta recortaba después de
+ * validar, así que lo que se guardaba era `""` y a partir de ahí el cliente salía con la
+ * celda Nombre en blanco en la tabla, la confirmación de borrado decía «¿Eliminar a ?», y
+ * la columna «Cliente» del recibo y de la exportación de ventas quedaba vacía en todas sus
+ * ventas — sin forma de saber desde la lista de quién se trataba.
+ *
+ * En el esquema queda arreglado de una vez en los dos caminos que lo usan, el alta rápida
+ * del mostrador y la edición. En la ruta habría que acordarse dos veces, y acordarse es
+ * justo lo que falló.
+ */
 export const upsertCustomerSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1, 'Ponle un nombre'),
   phone: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
 });

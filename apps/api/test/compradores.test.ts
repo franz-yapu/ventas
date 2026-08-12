@@ -236,6 +236,30 @@ describe('editar', () => {
     expect((await editar(id, { name: '' })).statusCode).toBe(400);
   });
 
+  /**
+   * Ni uno hecho sólo de espacios, que es el que se colaba.
+   *
+   * El recorte se hacía en la ruta —`cambios.name = d.name.trim()`— DESPUÉS de validar, así
+   * que `{ name: "   " }` cumplía el `.min(1)` de zod y lo que se guardaba era `""`. A
+   * partir de ahí el cliente salía con la celda Nombre en blanco en la tabla, la
+   * confirmación de borrado decía «¿Eliminar a ?», y la columna «Cliente» del recibo y de
+   * la exportación de ventas salían vacías en TODAS sus ventas — sin forma de saber desde
+   * la lista de quién se trataba.
+   */
+  it('ni uno hecho sólo de espacios, que acababa guardándose vacío', async () => {
+    const id = await crearComprador('Con nombre de verdad');
+    expect((await editar(id, { name: '   ' })).statusCode).toBe(400);
+
+    // Y el que había sigue intacto: un 400 no puede dejar el registro a medias.
+    const [c] = await db.select().from(schema.customer).where(eq(schema.customer.id, id));
+    expect(c!.name).toBe('Con nombre de verdad');
+  });
+
+  it('el nombre se guarda recortado, no con los espacios de los lados', async () => {
+    const id = await crearComprador('Sin recortar');
+    expect((await editar(id, { name: '  María Quispe  ' })).json().data.name).toBe('María Quispe');
+  });
+
   it('un VENDEDOR no edita: es un registro enlazado desde ventas cerradas', async () => {
     const id = await crearComprador('Intocable');
     expect((await editar(id, { name: 'Otro' }, vendedorToken)).statusCode).toBe(403);
@@ -323,6 +347,31 @@ describe('el alta rápida del mostrador', () => {
       payload: { name: '' },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  /*
+    El alta va por el MISMO esquema que la edición, así que el arreglo del recorte tiene
+    que cubrir las dos puertas. Ésta es la que más se usa: es el alta rápida del mostrador,
+    con alguien tecleando deprisa mientras cobra.
+  */
+  it('un nombre de sólo espacios tampoco crea un cliente sin nombre', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/customers',
+      headers: auth(vendedorToken),
+      payload: { name: '   ' },
+    });
+    expect(res.statusCode, res.body).toBe(400);
+  });
+
+  it('y el que sí tiene nombre se guarda recortado', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/customers',
+      headers: auth(vendedorToken),
+      payload: { name: '  Doña Rosa  ' },
+    });
+    expect(res.json().data.name).toBe('Doña Rosa');
   });
 });
 
