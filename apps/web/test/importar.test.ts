@@ -143,22 +143,22 @@ describe('la vista previa: qué entra y qué no', () => {
     expect(f!.errores[0]).toContain('consultar');
   });
 
-  it('detecta el código repetido DENTRO del archivo, y dice en qué fila estaba', () => {
+  it('un código repetido dentro del archivo ya NO es un error de la fila', () => {
     /*
-      Esto no lo puede ver el servidor: los recibe de uno en uno, así que el primero
-      entraría y el segundo daría un error que parece del sistema cuando en realidad es
-      que el archivo trae el código dos veces. Aquí se ve antes de escribir nada.
+      Lo era, y se descartaba la segunda sin preguntar. Ahora es una decisión —cuál de las
+      dos filas vale— y de eso se encarga `clasificar`, no `interpretar`: aquí sólo se
+      comprueba que la fila repetida sigue siendo válida por sí misma, que es lo que
+      permite ofrecerla como opción en vez de tirarla.
     */
     const filas = interpretar(
       [
         { CODIGO: 'A1', DESCRIPCION: 'Uno', 'P. VENTA': '10' },
-        { CODIGO: 'B2', DESCRIPCION: 'Dos', 'P. VENTA': '20' },
         { CODIGO: 'a1', DESCRIPCION: 'Uno otra vez', 'P. VENTA': '30' },
       ],
       mapeo,
     );
     expect(filas[0]!.errores).toEqual([]);
-    expect(filas[2]!.errores[0]).toContain('fila 2');
+    expect(filas[1]!.errores).toEqual([]);
   });
 
   it('el número de fila es el DEL ARCHIVO, contando la cabecera', () => {

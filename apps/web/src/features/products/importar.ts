@@ -197,8 +197,6 @@ export function interpretar(
   const colPrecio = columnaDe('price');
   const colSku = columnaDe('sku');
 
-  const skusVistos = new Map<string, number>();
-
   return filas.map((original, i) => {
     const fila = base + i;
     const errores: string[] = [];
@@ -219,12 +217,7 @@ export function interpretar(
 
     if (colSku) {
       const sku = String(original[colSku] ?? '').trim();
-      if (sku) {
-        valores.sku = sku;
-        const antes = skusVistos.get(sku.toLowerCase());
-        if (antes) errores.push(`El código "${sku}" ya está en la fila ${antes} del archivo`);
-        else skusVistos.set(sku.toLowerCase(), fila);
-      }
+      if (sku) valores.sku = sku;
     }
 
     for (const campo of ['barcode', 'description'] as const) {
@@ -250,6 +243,269 @@ export function interpretar(
 
     return { fila, valores, errores, original };
   });
+}
+
+// ── Repetidos ────────────────────────────────────────────────────────────────
+/*
+  Un producto puede estar repetido de dos maneras, y las dos se deciden, no se rechazan.
+
+  Antes el código repetido DENTRO del archivo era un error de validación —la segunda fila
+  se descartaba sin más— y el que ya existía en el catálogo ni se miraba: se subía, el
+  servidor lo rechazaba por la restricción única y aparecía en el informe final, cuando ya
+  no se podía hacer nada. Las dos cosas dejan a la persona sin la decisión que sólo ella
+  puede tomar: cuál de las dos filas vale, y si pisar o no lo que ya tenía guardado.
+*/
+
+/** Un producto del catálogo, tal como lo devuelve `POST /products/lookup`. */
+export interface ProductoExistente {
+  id: string;
+  sku: string;
+  name: string;
+  barcode: string | null;
+  description: string | null;
+  price: string;
+  cost: string | null;
+  stock: number | null;
+  minStock: number | null;
+}
+
+export interface Cambio {
+  campo: string;
+  etiqueta: string;
+  de: string;
+  a: string;
+}
+
+export interface Repetido {
+  /** Clave estable del grupo. La usa la pantalla para recordar la decisión. */
+  clave: string;
+  /** `archivo` = viene dos veces en el Excel. `catalogo` = ya está guardado. */
+  motivo: 'archivo' | 'catalogo';
+  /** Qué coincidió. */
+  por: 'sku' | 'nombre';
+  /** Filas del archivo implicadas. Con `catalogo` es una; con `archivo`, dos o más. */
+  filas: FilaInterpretada[];
+  /** El producto guardado. Sólo en `catalogo`. */
+  existente?: ProductoExistente;
+  /** Qué cambiaría al actualizar. Vacío = los datos ya son iguales. */
+  cambios: Cambio[];
+}
+
+/** Sin tildes no: «Café» y «Cafe» son distintos, igual que en el servidor. */
+function claveNombre(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+/**
+ * Con qué se identifica una fila para buscarle pareja.
+ *
+ * El código manda cuando lo hay: es el que tiene restricción única en la base, o sea el
+ * que provoca el rechazo seguro. Sin código se usa el nombre, que es lo único que queda
+ * para pillar al cliente que sube dos veces la misma planilla.
+ */
+export function claveDe(f: FilaInterpretada): { clave: string; por: 'sku' | 'nombre' } | null {
+  const sku = typeof f.valores.sku === 'string' ? f.valores.sku.trim() : '';
+  if (sku) return { clave: `sku:${sku.toLowerCase()}`, por: 'sku' };
+  const nombre = typeof f.valores.name === 'string' ? f.valores.name : '';
+  return nombre ? { clave: `nombre:${claveNombre(nombre)}`, por: 'nombre' } : null;
+}
+
+const ETIQUETA_CAMBIO: Record<string, string> = {
+  name: 'Nombre',
+  price: 'Precio',
+  cost: 'Costo',
+  barcode: 'Código de barras',
+  description: 'Descripción',
+  initialStock: 'Existencias',
+  minStock: 'Stock mínimo',
+};
+
+/**
+ * Qué cambiaría si esta fila pisara al producto guardado.
+ *
+ * Sólo se comparan los campos que el archivo TRAE: los que no vienen no se van a tocar,
+ * así que listarlos como «cambio» sería mentir. Y si no cambia nada se devuelve vacío,
+ * que es lo que permite a la pantalla decir «sin cambios» y ahorrarle a la persona una
+ * decisión que no lo es.
+ */
+export function diferencias(
+  valores: Record<string, unknown>,
+  existente: ProductoExistente,
+): Cambio[] {
+  const actual: Record<string, unknown> = {
+    name: existente.name,
+    price: existente.price,
+    cost: existente.cost,
+    barcode: existente.barcode,
+    description: existente.description,
+    initialStock: existente.stock,
+    minStock: existente.minStock,
+  };
+  const cambios: Cambio[] = [];
+  for (const [campo, etiqueta] of Object.entries(ETIQUETA_CAMBIO)) {
+    if (!(campo in valores)) continue;
+    const a = valores[campo];
+    const de = actual[campo];
+    // Comparado como texto: el precio viaja como "18.00" y el stock como número.
+    if (String(de ?? '') === String(a ?? '')) continue;
+    cambios.push({ campo, etiqueta, de: String(de ?? '—'), a: String(a ?? '—') });
+  }
+  return cambios;
+}
+
+export interface Clasificacion {
+  /** Filas limpias y sin pareja: entran sin preguntar nada. */
+  entran: FilaInterpretada[];
+  /** Grupos que necesitan una decisión. */
+  repetidos: Repetido[];
+  /** Filas que no entran por venir mal. */
+  noEntran: FilaInterpretada[];
+}
+
+/**
+ * Reparte las filas en las tres cosas que la pantalla enseña.
+ *
+ * El orden importa: primero se agrupan los repetidos DEL ARCHIVO y sólo el representante
+ * del grupo se busca en el catálogo. Al revés, una fila que viene tres veces y además ya
+ * existe saldría cuatro veces en la pantalla pidiendo cuatro decisiones que en realidad
+ * son una.
+ */
+export function clasificar(
+  interpretadas: FilaInterpretada[],
+  existentes: ProductoExistente[] = [],
+): Clasificacion {
+  const noEntran = interpretadas.filter((f) => f.errores.length > 0);
+  const buenas = interpretadas.filter((f) => f.errores.length === 0);
+
+  const porSku = new Map<string, ProductoExistente>();
+  const porNombre = new Map<string, ProductoExistente>();
+  for (const p of existentes) {
+    porSku.set(p.sku.trim().toLowerCase(), p);
+    // El primero gana: dos productos guardados con el mismo nombre son cosa del catálogo,
+    // no del archivo, y elegir uno cualquiera es mejor que no ofrecer actualizar ninguno.
+    if (!porNombre.has(claveNombre(p.name))) porNombre.set(claveNombre(p.name), p);
+  }
+
+  // Agrupar por clave, conservando el orden en que aparecen en el archivo.
+  const grupos = new Map<string, { por: 'sku' | 'nombre'; filas: FilaInterpretada[] }>();
+  const sinClave: FilaInterpretada[] = [];
+  for (const f of buenas) {
+    const k = claveDe(f);
+    if (!k) {
+      sinClave.push(f);
+      continue;
+    }
+    const g = grupos.get(k.clave);
+    if (g) g.filas.push(f);
+    else grupos.set(k.clave, { por: k.por, filas: [f] });
+  }
+
+  const entran: FilaInterpretada[] = [...sinClave];
+  const repetidos: Repetido[] = [];
+
+  for (const [clave, g] of grupos) {
+    const valor = clave.slice(clave.indexOf(':') + 1);
+    const existente = g.por === 'sku' ? porSku.get(valor) : porNombre.get(valor);
+
+    if (g.filas.length > 1) {
+      // Repetido dentro del archivo. La decisión es cuál de las filas vale; si además ya
+      // existe, la pantalla ofrece después actualizar con la elegida.
+      repetidos.push({
+        clave,
+        motivo: 'archivo',
+        por: g.por,
+        filas: g.filas,
+        existente,
+        cambios: existente ? diferencias(g.filas[0]!.valores, existente) : [],
+      });
+      continue;
+    }
+    if (existente) {
+      repetidos.push({
+        clave,
+        motivo: 'catalogo',
+        por: g.por,
+        filas: g.filas,
+        existente,
+        cambios: diferencias(g.filas[0]!.valores, existente),
+      });
+      continue;
+    }
+    entran.push(g.filas[0]!);
+  }
+
+  // Devueltas en el orden del archivo: quien revisa mira su hoja de cálculo, no la
+  // nuestra, y una lista desordenada obliga a buscar cada fila a mano.
+  entran.sort((a, b) => a.fila - b.fila);
+  repetidos.sort((a, b) => a.filas[0]!.fila - b.filas[0]!.fila);
+  return { entran, repetidos, noEntran };
+}
+
+/** Qué se decidió para un grupo de repetidos. */
+export type Decision =
+  | { tipo: 'omitir' }
+  /** Pisar el producto guardado con los datos del archivo. */
+  | { tipo: 'actualizar' }
+  /** Cuál de las filas repetidas del archivo es la que vale. */
+  | { tipo: 'fila'; fila: number };
+
+/**
+ * Qué se hace con cada grupo si nadie toca nada.
+ *
+ * **Omitir** cuando el producto ya está en el catálogo: pisar precios y costos es
+ * irreversible, y un valor por defecto que sobrescribe datos convierte un descuido en una
+ * pérdida. Un botón «Actualizar todos» lo resuelve en un clic para quien viene a eso.
+ *
+ * Cuando el repetido es sólo del ARCHIVO —viene dos veces y no existe todavía— el defecto
+ * es la PRIMERA fila, no omitir. Omitir ahí no sería prudente sino inútil: la persona
+ * quiere ese producto, lo único dudoso es cuál de las dos filas vale.
+ */
+export function decisionPorDefecto(r: Repetido): Decision {
+  return r.existente ? { tipo: 'omitir' } : { tipo: 'fila', fila: r.filas[0]!.fila };
+}
+
+/**
+ * Las filas que se le mandan al servidor, ya con su modo.
+ *
+ * Función aparte del componente porque es donde una equivocación no se ve y sí se paga:
+ * mandar como «crear» algo que había que actualizar choca contra la restricción única, y
+ * mandar como «actualizar» algo que se decidió omitir pisa datos que nadie quiso tocar.
+ */
+export interface FilaAEnviar {
+  /** Línea del ARCHIVO de la que salió. Es lo que se enseña si el servidor la rechaza. */
+  fila: number;
+  datos: Record<string, unknown>;
+}
+
+export function filasParaEnviar(
+  c: Clasificacion,
+  decisiones: Record<string, Decision>,
+): FilaAEnviar[] {
+  const salida: FilaAEnviar[] = c.entran.map((f) => ({ fila: f.fila, datos: { ...f.valores } }));
+  for (const rep of c.repetidos) {
+    const d = decisiones[rep.clave] ?? decisionPorDefecto(rep);
+    if (d.tipo === 'omitir') continue;
+    if (d.tipo === 'actualizar') {
+      // Sin producto guardado no hay nada que actualizar. Mandarlo igual sería un
+      // «actualizar» sin `productId`, que el servidor rechaza con un 400 y se llevaría por
+      // delante el lote entero.
+      if (!rep.existente) continue;
+      salida.push({
+        fila: rep.filas[0]!.fila,
+        datos: { ...rep.filas[0]!.valores, modo: 'actualizar', productId: rep.existente.id },
+      });
+      continue;
+    }
+    const elegida = rep.filas.find((f) => f.fila === d.fila) ?? rep.filas[0]!;
+    salida.push({ fila: elegida.fila, datos: { ...elegida.valores } });
+  }
+  /*
+    Cada fila se lleva SU número de línea del archivo pegado, en vez de deducirlo después
+    comparando nombres y códigos. Con repetidos, esa deducción puede señalar la fila
+    equivocada — y un informe que manda a corregir una fila que está bien, mientras la que
+    de verdad falló no aparece, hace que se deje de creer el informe entero.
+  */
+  return salida;
 }
 
 /** ¿Falta algún campo obligatorio por mapear? Se comprueba antes de dejar continuar. */
