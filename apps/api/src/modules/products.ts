@@ -411,18 +411,124 @@ export async function productRoutes(app: FastifyInstance) {
     },
   );
 
+  /**
+   * POST /products/lookup — ¿cuáles de estos productos ya tengo?
+   *
+   * Lo usa el importador ANTES de subir nada, para poder enseñar los repetidos y dejar
+   * que la persona decida uno por uno. Hasta ahora un producto repetido sólo se descubría
+   * después: se enviaba, la restricción única lo rechazaba y aparecía en el informe final
+   * como un error, cuando ya no se podía decidir nada.
+   *
+   * Se compara por CÓDIGO y por NOMBRE. El código es el que tiene restricción única en la
+   * base, o sea el que provoca el rechazo seguro; el nombre pilla al cliente que sube dos
+   * veces la misma planilla sin códigos. El nombre se compara en minúsculas y sin espacios
+   * de sobra, pero CON tildes: «Café» y «Cafe» se consideran distintos, porque unirlos
+   * daría por repetido lo que a lo mejor no lo es.
+   *
+   * Devuelve también precio, costo y existencias actuales: son los que la pantalla enseña
+   * como «18,00 → 21,50» para que nadie acepte una actualización a ciegas.
+   */
+  app.post(
+    '/products/lookup',
+    { preHandler: [app.requireAuth, app.requireAdmin] },
+    async (req, reply) => {
+      const body = z
+        .object({
+          skus: z.array(z.string().trim().min(1)).max(2000).default([]),
+          nombres: z.array(z.string().trim().min(1)).max(2000).default([]),
+          locationId: z.string().uuid().optional(),
+        })
+        .safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ data: null, error: 'Consulta invalida' });
+
+      const user = req.authUser!;
+      const { skus, nombres } = body.data;
+      if (skus.length === 0 && nombres.length === 0) {
+        return reply.send({ data: { encontrados: [] }, error: null });
+      }
+      const locationId = body.data.locationId ?? user.locationId;
+      const enMinusculas = nombres.map((n) => n.trim().toLowerCase());
+
+      const filas = await withTenant(user.businessId, (tx) =>
+        tx
+          .select({
+            id: schema.product.id,
+            sku: schema.product.sku,
+            name: schema.product.name,
+            barcode: schema.product.barcode,
+            description: schema.product.description,
+            price: schema.product.price,
+            cost: schema.product.cost,
+            stock: schema.inventory.quantity,
+            minStock: schema.inventory.minStock,
+          })
+          .from(schema.product)
+          /*
+          `leftJoin` y no `innerJoin`: un producto puede no tener fila de inventario en
+          esta sucursal, y dejarlo fuera de la respuesta lo haría parecer inexistente —
+          justo el error que en agosto emitió recibos de mercadería que no había.
+        */
+          .leftJoin(
+            schema.inventory,
+            and(
+              eq(schema.inventory.productId, schema.product.id),
+              locationId ? eq(schema.inventory.locationId, locationId) : sql`false`,
+            ),
+          )
+          .where(
+            and(
+              eq(schema.product.businessId, user.businessId),
+              eq(schema.product.isActive, true),
+              or(
+                skus.length ? inArray(schema.product.sku, skus) : sql`false`,
+                enMinusculas.length
+                  ? inArray(sql`lower(trim(${schema.product.name}))`, enMinusculas)
+                  : sql`false`,
+              ),
+            ),
+          )
+          .limit(4000),
+      );
+
+      return reply.send({ data: { encontrados: filas }, error: null });
+    },
+  );
+
   // POST /products/import (sólo central) — la central importa asignando a una ubicación.
   app.post(
     '/products/import',
     { preHandler: [app.requireAuth, app.requireAdmin] },
     async (req, reply) => {
+      /*
+        Cada fila dice si viene a CREAR o a ACTUALIZAR uno que ya existe, y en el segundo
+        caso cuál. La decisión la toma la persona en la pantalla de revisión, con el
+        cambio delante («18,00 → 21,50»), no el servidor por su cuenta: pisar el precio de
+        un producto es exactamente la clase de cosa que no se hace en silencio.
+
+        `productId` viaja explícito en vez de resolverse aquí por el código. Si lo
+        resolviera el servidor, entre la revisión y el envío podría haber cambiado —otra
+        persona editando a la vez— y se actualizaría un producto distinto del que se
+        aceptó ver.
+      */
       const body = z
         .object({
-          rows: z.array(upsertProductSchema).max(1000),
+          rows: z
+            .array(
+              upsertProductSchema.extend({
+                modo: z.enum(['crear', 'actualizar']).default('crear'),
+                productId: z.string().uuid().optional(),
+              }),
+            )
+            .max(1000),
           locationId: z.string().uuid().optional(),
         })
         .safeParse(req.body);
       if (!body.success) return reply.code(400).send({ data: null, error: 'Filas invalidas' });
+      if (body.data.rows.some((r) => r.modo === 'actualizar' && !r.productId)) {
+        return reply
+          .code(400)
+          .send({ data: null, error: 'Falta indicar qué producto se actualiza' });
+      }
       const user = req.authUser!;
       if (!user.isCentral)
         return reply
@@ -446,7 +552,10 @@ export async function productRoutes(app: FastifyInstance) {
         cortando a mitad — dejar 500 productos dentro y 100 fuera, sin decir cuáles, es
         peor que no importar.
       */
-      if (!(await permiteCrear(user.businessId, 'products', reply, body.data.rows.length))) {
+      // Sólo cuentan las que CREAN. Actualizar un producto que ya está no ocupa un hueco
+      // nuevo del plan, y contarlo dejaría fuera una lista de precios que no añade nada.
+      const aCrear = body.data.rows.filter((r) => r.modo !== 'actualizar').length;
+      if (aCrear > 0 && !(await permiteCrear(user.businessId, 'products', reply, aCrear))) {
         return reply;
       }
 
@@ -461,10 +570,11 @@ export async function productRoutes(app: FastifyInstance) {
         corrigiendo mira una hoja de cálculo, no nuestro JSON.
       */
       let created = 0;
+      let updated = 0;
       const errores: Array<{ fila: number; sku?: string; nombre?: string; motivo: string }> = [];
 
       for (const [i, row] of body.data.rows.entries()) {
-        const { locationId: _l, initialStock, minStock, ...productData } = row;
+        const { locationId: _l, initialStock, minStock, modo, productId, ...productData } = row;
         /*
           Posición DENTRO DEL LOTE, base 1. La traducción a la fila del archivo la hace
           quien envía: es el único que sabe qué filas se saltó por venir mal, y por tanto
@@ -472,6 +582,74 @@ export async function productRoutes(app: FastifyInstance) {
         */
         const fila = i + 1;
         try {
+          if (modo === 'actualizar') {
+            const tocadas = await withTenant(user.businessId, async (tx) => {
+              /*
+                Sólo se pisa lo que el archivo TRAE. Las columnas que la persona no mapeó
+                llegan como `undefined`, y drizzle deja fuera del `SET` lo que vale
+                `undefined`, así que se quedan como estaban: importar una lista con dos
+                columnas —código y precio— no puede borrar las descripciones ni los
+                códigos de barras del catálogo entero.
+
+                Aquí hubo un `filter(v !== undefined)` que parecía ser quien lo protegía.
+                No lo era —drizzle ya lo hacía— y quitarlo no rompía ni un test, así que
+                se fue: una línea que aparenta defender algo y no defiende nada engaña al
+                siguiente que la lea. Quien vigila esto de verdad es el test «pisa lo que
+                trae el archivo y CONSERVA lo que no», que falla en cuanto alguien escriba
+                un `?? null` por aquí.
+              */
+              const filasProducto = await tx
+                .update(schema.product)
+                .set({ ...productData, updatedAt: new Date() })
+                .where(
+                  and(
+                    eq(schema.product.id, productId!),
+                    eq(schema.product.businessId, user.businessId),
+                  ),
+                )
+                .returning({ id: schema.product.id });
+              /*
+                Cero filas = el producto ya no está (lo borraron entre la revisión y el
+                envío). Se avisa en vez de contarlo como actualizado: un `UPDATE` que no
+                afecta a nada y sigue como si nada es justo el fallo que en agosto emitió
+                recibos de mercadería inexistente.
+              */
+              if (filasProducto.length === 0) return 0;
+
+              // Las existencias sólo se tocan si el archivo trae esa columna.
+              if (initialStock != null || minStock != null) {
+                await tx
+                  .insert(schema.inventory)
+                  .values({
+                    businessId: user.businessId,
+                    productId: productId!,
+                    locationId,
+                    quantity: initialStock ?? 0,
+                    minStock: minStock ?? null,
+                  })
+                  .onConflictDoUpdate({
+                    target: [schema.inventory.productId, schema.inventory.locationId],
+                    set: {
+                      ...(initialStock != null ? { quantity: initialStock } : {}),
+                      ...(minStock != null ? { minStock } : {}),
+                    },
+                  });
+              }
+              return 1;
+            });
+            if (tocadas === 0) {
+              errores.push({
+                fila,
+                sku: productData.sku,
+                nombre: productData.name,
+                motivo: 'Ese producto ya no existe: se habrá eliminado mientras revisabas.',
+              });
+            } else {
+              updated++;
+            }
+            continue;
+          }
+
           await withTenant(user.businessId, async (tx) => {
             const sku = productData.sku ?? (await nextProductSku(tx, user.businessId));
             const [p] = await tx
@@ -501,13 +679,16 @@ export async function productRoutes(app: FastifyInstance) {
         }
       }
 
+      // `updated` va al registro de actividad aparte de `created`: actualizar pisa datos
+      // que ya existían, y quien audite un cambio de precios necesita distinguirlo de un
+      // alta. Es la diferencia entre "entraron 300 productos" y "se repreciaron 300".
       await app.audit(req, {
         action: 'import',
         entity: 'product',
-        after: { created, saltadas: errores.length },
+        after: { created, updated, saltadas: errores.length },
       });
       return reply.send({
-        data: { created, skipped: errores.length, errores },
+        data: { created, updated, skipped: errores.length, errores },
         error: null,
       });
     },
