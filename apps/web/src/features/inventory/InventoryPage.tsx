@@ -173,6 +173,7 @@ export function InventoryPage() {
                         </button>
                         {r.canAdjust && (
                           <button
+                            data-tour="inventario-movimiento"
                             onClick={() => setAdjust(r)}
                             className="text-muted hover:text-primary"
                             title="Ajustar"

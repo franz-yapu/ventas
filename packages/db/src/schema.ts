@@ -250,6 +250,18 @@ export const appUser = pgTable(
      * entero no tiene ese hueco.
      */
     tokenVersion: integer('token_version').notNull().default(0),
+    /**
+     * Cuántas veces ha entrado esta persona. Lo usa el tour guiado, que se ofrece solo
+     * en los dos primeros inicios de sesión y después sólo si lo piden desde Ayuda.
+     *
+     * Es del USUARIO y no del navegador a propósito: guardado en el navegador, el tour
+     * volvería a saltar al cambiar de equipo o al limpiar la caché, justo a quien ya lo
+     * había despachado. Y quien vende desde el móvil y desde el mostrador es la misma
+     * persona con las mismas dudas.
+     */
+    loginCount: integer('login_count').notNull().default(0),
+    /** Cuándo dijo «no mostrar más» o terminó el tour. Con fecha, no vuelve a salir solo. */
+    tourDismissedAt: timestamp('tour_dismissed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

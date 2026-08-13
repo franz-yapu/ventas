@@ -194,7 +194,7 @@ export function SalesPage() {
         </Card>
       )}
 
-      <Card className={items.length ? 'hidden md:block' : 'hidden'}>
+      <Card data-tour="ventas-lista" className={items.length ? 'hidden md:block' : 'hidden'}>
         <CardContent className="overflow-x-auto p-0">
           <table className="ds-table w-full">
             <thead className="border-b border-border text-left text-muted">

@@ -129,7 +129,11 @@ export function CashPage() {
               )}
 
               <div className="flex flex-wrap gap-2 pt-1">
-                <Button variant="outline" onClick={() => setMovimiento(true)}>
+                <Button
+                  variant="outline"
+                  data-tour="caja-movimientos"
+                  onClick={() => setMovimiento(true)}
+                >
                   Registrar movimiento
                 </Button>
                 <Button onClick={() => setCerrando(true)}>

@@ -26,6 +26,8 @@ import { EmailVerifyBanner } from '@/features/auth/EmailVerifyBanner';
 import { AvisoDeTerminos } from '@/features/legal/AvisoDeTerminos';
 import { SubscriptionBanner } from '@/features/subscription/SubscriptionBanner';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
+import { BotonAyuda } from '@/features/tour/BotonAyuda';
+import { TourProvider } from '@/features/tour/TourProvider';
 import { startSyncWorker } from '@/offline/sync';
 import { cn } from '@/lib/utils';
 
@@ -113,119 +115,123 @@ export function Layout({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-full flex-col md:flex-row">
-      {/* ===== Sidebar (sólo escritorio) ===== */}
-      <aside className="no-print hidden bg-surface md:sticky md:top-0 md:flex md:h-screen md:w-[230px] md:shrink-0 md:flex-col md:border-r md:border-border">
-        <div className="flex items-center gap-3 px-[18px] pb-4 pt-5">
-          <Marca size="sm" />
-          <NombreDeMarca className="truncate text-[15px] font-bold tracking-[-0.02em]" />
-        </div>
-        <nav className="flex-1 space-y-0.5 overflow-auto px-3 py-1">
+    <TourProvider>
+      <div className="flex min-h-full flex-col md:flex-row">
+        {/* ===== Sidebar (sólo escritorio) ===== */}
+        <aside className="no-print hidden bg-surface md:sticky md:top-0 md:flex md:h-screen md:w-[230px] md:shrink-0 md:flex-col md:border-r md:border-border">
+          <div className="flex items-center gap-3 px-[18px] pb-4 pt-5">
+            <Marca size="sm" />
+            <NombreDeMarca className="truncate text-[15px] font-bold tracking-[-0.02em]" />
+          </div>
+          <nav className="flex-1 space-y-0.5 overflow-auto px-3 py-1">
+            {items.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.end}
+                className={({ isActive }) => sideItem(isActive)}
+              >
+                <n.icon size={19} className="shrink-0" />
+                <span className="truncate">{n.label}</span>
+              </NavLink>
+            ))}
+
+            {isAdmin && (
+              <>
+                <div className={SECTION_LABEL}>Análisis</div>
+                {analytics.map((n) => (
+                  <NavLink key={n.to} to={n.to} className={({ isActive }) => sideItem(isActive)}>
+                    <n.icon size={19} className="shrink-0" />
+                    <span className="truncate">{n.label}</span>
+                  </NavLink>
+                ))}
+                <div className={SECTION_LABEL}>Administración</div>
+                {adminChildren.map((c) => (
+                  <NavLink key={c.to} to={c.to} className={({ isActive }) => sideItem(isActive)}>
+                    <c.icon size={19} className="shrink-0" />
+                    <span className="truncate">{c.label}</span>
+                  </NavLink>
+                ))}
+              </>
+            )}
+          </nav>
+          {/* Bloque de usuario (-> Mi perfil) + salir (pie del sidebar). */}
+          <div className="border-t border-border p-3">
+            <NavLink
+              to="/perfil"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-[10px] px-2 py-2 transition-colors',
+                  isActive ? 'ds-nav-tint' : 'hover:bg-fg/[0.05]',
+                )
+              }
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-track text-sm font-bold text-muted">
+                {userInitial}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold">{user?.name ?? 'Usuario'}</div>
+                <div className="text-[11px] text-muted">{roleLabel}</div>
+              </div>
+            </NavLink>
+            {/* Ayuda ANTES de Salir: son dos botones iguales uno encima del otro, y el que
+              se pulsa por error tiene que ser el que no echa a nadie de su sesión. */}
+            <BotonAyuda className="mt-2" />
+            <button
+              onClick={logout}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-theme border border-field p-2.5 text-[13px] font-semibold text-muted hover:bg-muted/10"
+            >
+              <LogOut size={16} /> Salir
+            </button>
+          </div>
+        </aside>
+
+        {/* ===== Barra inferior fija (sólo móvil) =====
+          Rejilla de 5 columnas EXACTAS y no un flex que reparte: con `flex-1` cada
+          destino cambiaba de ancho según lo larga que fuera su palabra, y el dedo
+          aprende dónde está un botón por su posición, no por su etiqueta. Alto de 72px
+          con el área segura debajo, para que no lo tape la barra del teléfono. */}
+        <nav
+          className="no-print fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-surface pt-2 md:hidden"
+          style={{
+            // Tantas columnas como destinos haya: un vendedor ve 5 y un admin 6 (con
+            // "Admin"). Fijar 5 partía la barra en dos filas justo para el admin.
+            gridTemplateColumns: `repeat(${destinosMoviles}, minmax(0, 1fr))`,
+            height: 'calc(72px + env(safe-area-inset-bottom))',
+            paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))',
+          }}
+        >
           {items.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
               end={n.end}
-              className={({ isActive }) => sideItem(isActive)}
+              className={({ isActive }) => bottomItem(isActive)}
             >
-              <n.icon size={19} className="shrink-0" />
-              <span className="truncate">{n.label}</span>
+              <n.icon size={22} className="shrink-0" />
+              <span>{n.label}</span>
             </NavLink>
           ))}
-
           {isAdmin && (
-            <>
-              <div className={SECTION_LABEL}>Análisis</div>
-              {analytics.map((n) => (
-                <NavLink key={n.to} to={n.to} className={({ isActive }) => sideItem(isActive)}>
-                  <n.icon size={19} className="shrink-0" />
-                  <span className="truncate">{n.label}</span>
-                </NavLink>
-              ))}
-              <div className={SECTION_LABEL}>Administración</div>
-              {adminChildren.map((c) => (
-                <NavLink key={c.to} to={c.to} className={({ isActive }) => sideItem(isActive)}>
-                  <c.icon size={19} className="shrink-0" />
-                  <span className="truncate">{c.label}</span>
-                </NavLink>
-              ))}
-            </>
+            <NavLink to="/administracion" className={cn(bottomItem(adminActive))}>
+              <Shield size={22} className="shrink-0" />
+              <span>Admin</span>
+            </NavLink>
           )}
         </nav>
-        {/* Bloque de usuario (-> Mi perfil) + salir (pie del sidebar). */}
-        <div className="border-t border-border p-3">
-          <NavLink
-            to="/perfil"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-2.5 rounded-[10px] px-2 py-2 transition-colors',
-                isActive ? 'ds-nav-tint' : 'hover:bg-fg/[0.05]',
-              )
-            }
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-track text-sm font-bold text-muted">
-              {userInitial}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold">{user?.name ?? 'Usuario'}</div>
-              <div className="text-[11px] text-muted">{roleLabel}</div>
-            </div>
-          </NavLink>
-          <button
-            onClick={logout}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-theme border border-field p-2.5 text-[13px] font-semibold text-muted hover:bg-muted/10"
-          >
-            <LogOut size={16} /> Salir
-          </button>
-        </div>
-      </aside>
 
-      {/* ===== Barra inferior fija (sólo móvil) =====
-          Rejilla de 5 columnas EXACTAS y no un flex que reparte: con `flex-1` cada
-          destino cambiaba de ancho según lo larga que fuera su palabra, y el dedo
-          aprende dónde está un botón por su posición, no por su etiqueta. Alto de 72px
-          con el área segura debajo, para que no lo tape la barra del teléfono. */}
-      <nav
-        className="no-print fixed inset-x-0 bottom-0 z-30 grid border-t border-border bg-surface pt-2 md:hidden"
-        style={{
-          // Tantas columnas como destinos haya: un vendedor ve 5 y un admin 6 (con
-          // "Admin"). Fijar 5 partía la barra en dos filas justo para el admin.
-          gridTemplateColumns: `repeat(${destinosMoviles}, minmax(0, 1fr))`,
-          height: 'calc(72px + env(safe-area-inset-bottom))',
-          paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))',
-        }}
-      >
-        {items.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            end={n.end}
-            className={({ isActive }) => bottomItem(isActive)}
-          >
-            <n.icon size={22} className="shrink-0" />
-            <span>{n.label}</span>
-          </NavLink>
-        ))}
-        {isAdmin && (
-          <NavLink to="/administracion" className={cn(bottomItem(adminActive))}>
-            <Shield size={22} className="shrink-0" />
-            <span>Admin</span>
-          </NavLink>
-        )}
-      </nav>
-
-      {/* ===== Contenido ===== */}
-      {/* El hueco de abajo sale de la barra real (72px) más el área segura, en vez de
+        {/* ===== Contenido ===== */}
+        {/* El hueco de abajo sale de la barra real (72px) más el área segura, en vez de
           un pb-24 a ojo que en algunos teléfonos tapaba la última fila. Va como clase y
           no en línea para que `md:pb-0` pueda ganarle en escritorio. */}
-      <main className="order-1 flex-1 pb-[calc(72px+env(safe-area-inset-bottom)+12px)] md:order-2 md:pb-0">
-        <div className="no-print sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-4">
-          {/* En móvil no hay barra lateral: la marca vive aquí. */}
-          <div className="flex min-w-0 items-center gap-2 md:hidden">
-            <Marca size="sm" className="h-7 w-7 rounded-[8px]" />
-            <NombreDeMarca className="truncate font-semibold" />
-          </div>
-          {/*
+        <main className="order-1 flex-1 pb-[calc(72px+env(safe-area-inset-bottom)+12px)] md:order-2 md:pb-0">
+          <div className="no-print sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-4">
+            {/* En móvil no hay barra lateral: la marca vive aquí. */}
+            <div className="flex min-w-0 items-center gap-2 md:hidden">
+              <Marca size="sm" className="h-7 w-7 rounded-[8px]" />
+              <NombreDeMarca className="truncate font-semibold" />
+            </div>
+            {/*
             En qué sucursal se está trabajando.
 
             Ocupa el hueco que antes era un separador vacío. En un negocio con dos locales,
@@ -233,37 +239,38 @@ export function Layout({ children }: { children: ReactNode }) {
             ellos, y hasta ahora nada en la pantalla lo decía. Se enseña también en móvil
             —truncado— porque ahí es donde se vende.
           */}
-          {user?.locationName ? (
-            <span
-              className="ml-2 flex min-w-0 items-center gap-1.5 text-[13px] text-muted md:ml-0"
-              title={`Estás en ${user.locationName}`}
-            >
-              <MapPin size={14} className="shrink-0" />
-              <span className="truncate font-medium">{user.locationName}</span>
-            </span>
-          ) : (
-            <span className="hidden md:block" />
-          )}
-          <div className="flex items-center gap-3">
-            <SyncIndicator />
-            {/* Avatar (sólo móvil): acceso a Mi perfil, que incluye "Cerrar sesión". */}
-            <NavLink
-              to="/perfil"
-              aria-label="Mi perfil"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-fg md:hidden"
-            >
-              {userInitial}
-            </NavLink>
+            {user?.locationName ? (
+              <span
+                className="ml-2 flex min-w-0 items-center gap-1.5 text-[13px] text-muted md:ml-0"
+                title={`Estás en ${user.locationName}`}
+              >
+                <MapPin size={14} className="shrink-0" />
+                <span className="truncate font-medium">{user.locationName}</span>
+              </span>
+            ) : (
+              <span className="hidden md:block" />
+            )}
+            <div className="flex items-center gap-3">
+              <SyncIndicator />
+              {/* Avatar (sólo móvil): acceso a Mi perfil, que incluye "Cerrar sesión". */}
+              <NavLink
+                to="/perfil"
+                aria-label="Mi perfil"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-fg md:hidden"
+              >
+                {userInitial}
+              </NavLink>
+            </div>
           </div>
-        </div>
-        <AvisoDeError />
-        <SubscriptionBanner />
-        <EmailVerifyBanner />
-        {/* El último de los tres a propósito: el de la suscripción y el del correo piden
+          <AvisoDeError />
+          <SubscriptionBanner />
+          <EmailVerifyBanner />
+          {/* El último de los tres a propósito: el de la suscripción y el del correo piden
             algo que hay que hacer para no quedarse fuera; éste sólo pide leer. */}
-        <AvisoDeTerminos />
-        {children}
-      </main>
-    </div>
+          <AvisoDeTerminos />
+          {children}
+        </main>
+      </div>
+    </TourProvider>
   );
 }

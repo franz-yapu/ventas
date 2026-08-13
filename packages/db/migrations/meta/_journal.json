@@ -141,6 +141,13 @@
       "when": 1786465994746,
       "tag": "0019_fuera_el_fiado",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786650840453,
+      "tag": "0020_tour_guiado",
+      "breakpoints": true
     }
   ]
 }

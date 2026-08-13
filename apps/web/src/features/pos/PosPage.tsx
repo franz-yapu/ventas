@@ -440,7 +440,7 @@ export function PosPage() {
           </div>
         )}
         <div className="flex gap-2">
-          <div className="relative flex-1">
+          <div className="relative flex-1" data-tour="pos-buscar">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
             <Input
               className="h-12 pl-10 text-lg"
@@ -631,7 +631,7 @@ export function PosPage() {
           </button>
         </div>
         <CardContent className="flex max-h-[70vh] flex-col gap-3 pt-4">
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto" data-tour="pos-carrito">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-12 text-center text-muted">
                 <ShoppingCart size={28} className="opacity-40" />
@@ -772,6 +772,7 @@ export function PosPage() {
 
           <Button
             size="xl"
+            data-tour="pos-cobrar"
             className="h-14 w-full text-base"
             disabled={!canCheckout}
             onClick={alPulsarCobrar}

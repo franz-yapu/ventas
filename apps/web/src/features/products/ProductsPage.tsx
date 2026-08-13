@@ -88,7 +88,7 @@ export function ProductsPage() {
             {puedeGestionarCatalogo && (
               <>
                 <ImportarProductos onDone={reload} />
-                <Button onClick={() => setEditing('new')}>
+                <Button data-tour="productos-nuevo" onClick={() => setEditing('new')}>
                   <Plus size={18} /> Nuevo
                 </Button>
               </>

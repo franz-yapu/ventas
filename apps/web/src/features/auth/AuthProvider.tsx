@@ -24,6 +24,12 @@ export interface AuthUser {
    * cobra son de uno o del otro. `null` para quien no tiene ubicación asignada.
    */
   locationName?: string | null;
+  /**
+   * Si el tour guiado tiene que salir solo. Lo decide el SERVIDOR, que es el único que
+   * sabe cuántas veces ha entrado esta persona —también desde otros equipos— y si ya
+   * dijo que no se lo mostrara más. Lo añade `GET /auth/me`, como el correo.
+   */
+  mostrarTour?: boolean;
 }
 
 interface LoginResponse {
@@ -50,6 +56,11 @@ interface AuthContextValue {
   updateProfile: (input: ProfileUpdate) => Promise<void>;
   /** Relee /auth/me. Se usa tras confirmar el correo para quitar el aviso. */
   refresh: () => Promise<void>;
+  /**
+   * «Ya vi el tour»: al terminarlo o al decir «no mostrar más». Apaga el aviso en esta
+   * pantalla al instante y lo guarda en el servidor para las próximas entradas.
+   */
+  marcarTourVisto: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -178,9 +189,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const marcarTourVisto = useCallback(async () => {
+    /*
+      Primero la pantalla, después el servidor. Quien pulsa «no mostrar más» quiere que
+      el recuadro desaparezca YA; esperar a la red dejaría el tour encima medio segundo,
+      y sin red no se iría nunca. Si la petición falla, lo peor que pasa es que vuelva a
+      salir en la próxima entrada — y eso ya lo sabe hacer.
+    */
+    setUser((u) => (u ? { ...u, mostrarTour: false } : u));
+    await api.post('/auth/tour-seen').catch(() => undefined);
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, logoutEverywhere, updateProfile, refresh }}
+      value={{
+        user,
+        loading,
+        login,
+        logout,
+        logoutEverywhere,
+        updateProfile,
+        refresh,
+        marcarTourVisto,
+      }}
     >
       {children}
     </AuthContext.Provider>

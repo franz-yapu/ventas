@@ -7,7 +7,7 @@ import {
   verifyEmailSchema,
 } from '@ventafacil/shared';
 import argon2 from 'argon2';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { env, ttlRefreshMs } from '../env.js';
 import { buscarToken, emitirToken, marcarUsado } from '../lib/auth-tokens.js';
@@ -25,6 +25,20 @@ import {
   vigenciaDelUsuario,
 } from '../lib/sessions.js';
 import type { AuthUser } from '../types.js';
+
+/** Cuántas entradas se ofrece el tour guiado por su cuenta. Después, sólo desde Ayuda. */
+export const LOGINS_CON_TOUR = 2;
+
+/**
+ * ¿Toca ofrecer el tour solo?
+ *
+ * Dos condiciones, y las dos importan: que no lo haya despachado nunca, y que sea de sus
+ * primeras entradas. Sin la segunda, quien nunca pulsa nada lo vería cada mañana durante
+ * un año; sin la primera, «no mostrar más» no querría decir nada.
+ */
+export function ofrecerTour(loginCount: number, tourDismissedAt: Date | null): boolean {
+  return !tourDismissedAt && loginCount <= LOGINS_CON_TOUR;
+}
 
 /**
  * Resuelve el negocio por su slug. `business` queda fuera de RLS justamente porque hay
@@ -94,6 +108,24 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user || !(await argon2.verify(user.passwordHash, password))) {
       return reply.code(401).send({ data: null, error: 'Usuario o contraseña incorrectos' });
     }
+
+    /*
+      Una entrada más. Es lo que decide si se ofrece el tour guiado, que sale solo las dos
+      primeras veces.
+
+      Se cuenta AQUÍ y no en `/auth/refresh`: refrescar el token pasa solo, muchas veces al
+      día y sin que nadie entre a nada. Contarlo ahí gastaría las dos oportunidades del
+      tour en la primera tarde, sin que la persona hubiera vuelto a entrar ni una vez.
+
+      Y se suma en SQL (`login_count + 1`) en vez de leer y escribir: dos sesiones abiertas
+      a la vez leerían el mismo número y guardarían el mismo, perdiendo una entrada.
+    */
+    await withTenant(businessId, (tx) =>
+      tx
+        .update(schema.appUser)
+        .set({ loginCount: sql`${schema.appUser.loginCount} + 1` })
+        .where(eq(schema.appUser.id, user.id)),
+    );
 
     // ¿Su ubicación es la central? -> puede ver todas las ubicaciones.
     let isCentral = false;
@@ -252,6 +284,8 @@ export async function authRoutes(app: FastifyInstance) {
             vez de dejarlo fuera de la respuesta.
           */
           locationName: schema.location.name,
+          loginCount: schema.appUser.loginCount,
+          tourDismissedAt: schema.appUser.tourDismissedAt,
         })
         .from(schema.appUser)
         .leftJoin(schema.location, eq(schema.location.id, schema.appUser.locationId))
@@ -264,9 +298,37 @@ export async function authRoutes(app: FastifyInstance) {
         email: row?.email ?? null,
         emailVerified: !!row?.emailVerifiedAt,
         locationName: row?.locationName ?? null,
+        /*
+          Si el tour tiene que salir SOLO. La regla se decide aquí, en un sitio, y no en
+          la web: el navegador no sabe cuántas veces ha entrado esta persona desde otro
+          equipo, que es justo lo que la regla mira.
+        */
+        mostrarTour: ofrecerTour(row?.loginCount ?? 0, row?.tourDismissedAt ?? null),
       },
       error: null,
     });
+  });
+
+  /**
+   * POST /auth/tour-seen — «ya lo vi»: al terminarlo o al decir «no mostrar más».
+   *
+   * Es el mismo endpoint para las dos cosas a propósito. Terminar el tour y saltárselo
+   * significan lo mismo de cara al futuro —esta persona ya no quiere que le salga solo—,
+   * y darles endpoints distintos invitaría a que un día uno de los dos se olvidara.
+   *
+   * Idempotente: sólo escribe si no había fecha, así repetirlo no mueve el día en que se
+   * despachó. Y responde 200 igualmente, porque para quien llama no cambia nada.
+   */
+  app.post('/auth/tour-seen', { preHandler: app.requireAuth }, async (req, reply) => {
+    await withTenant(req.authUser!.businessId, (tx) =>
+      tx
+        .update(schema.appUser)
+        .set({ tourDismissedAt: new Date() })
+        .where(
+          and(eq(schema.appUser.id, req.authUser!.sub), isNull(schema.appUser.tourDismissedAt)),
+        ),
+    );
+    return reply.send({ data: { mostrarTour: false }, error: null });
   });
 
   // PATCH /auth/me — el usuario edita SU propio nombre y/o contraseña.

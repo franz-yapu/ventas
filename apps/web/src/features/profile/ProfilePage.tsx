@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/ui/page';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { BotonAyuda } from '@/features/tour/BotonAyuda';
 import { ApiError } from '@/lib/api';
 import { ModoSelector } from '@/theme/ModoSelector';
 
@@ -188,6 +189,15 @@ export function ProfilePage() {
       <Card>
         <CardContent className="p-4">
           <ModoSelector />
+        </CardContent>
+      </Card>
+
+      {/* La puerta de vuelta al recorrido guiado. Aquí, y no sólo en el pie del menú,
+          porque en un teléfono no hay barra lateral: ésta es la única pantalla desde la
+          que un vendedor puede volver a pedirlo. */}
+      <Card>
+        <CardContent className="p-4">
+          <BotonAyuda />
         </CardContent>
       </Card>
 
