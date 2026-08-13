@@ -38,12 +38,27 @@ grep -E 'JWT_ACCESS_SECRET' /home/franz/deploy-ventafacil/.env
 
 - **Si es propio y largo**, no hay nada que hacer.
 
-### `RESEND_API_KEY`
+### `RESEND_API_KEY` — o, desde el 13 de agosto, las cuatro `GMAIL_*`
 
-Pasa a ser obligatoria en producción. Sin ella los correos **no se envían**: se escriben
-en el log del servidor. En desarrollo eso es un buzón cómodo; en producción es una avería
-silenciosa — quien se registra nunca recibe el enlace de verificación y quien olvida su
-contraseña nunca recibe el de restablecimiento, y ninguno de los dos sabe por qué.
+En producción hace falta **un** driver de correo, y el API no arranca sin ninguno. Sin
+driver los correos **no se envían**: se escriben en el log del servidor. En desarrollo eso
+es un buzón cómodo; en producción es una avería silenciosa — quien se registra nunca
+recibe el enlace de verificación y quien olvida su contraseña nunca recibe el de
+restablecimiento, y ninguno de los dos sabe por qué.
+
+Los dos que valen:
+
+- **`RESEND_API_KEY`** — lo que va en el VPS. Dominio propio y remitente transaccional.
+- **`GMAIL_CLIENT_ID` + `GMAIL_CLIENT_SECRET` + `GMAIL_REFRESH_TOKEN` + `GMAIL_USER`** —
+  el suplente para probar, sin dominio verificado ni cuenta de pago. Las cuatro o
+  ninguna. Resend gana si están las dos configuraciones.
+
+Con Gmail, `EMAIL_FROM` tiene que llevar la **misma dirección** que `GMAIL_USER`: Gmail
+envía siempre como la cuenta autenticada, y el API prefiere no arrancar a dejar que el
+remitente se reescriba en silencio. Y ojo con lo que se aprendió probándolo: **una cuenta
+personal de Gmail entrega en la carpeta de spam** —así llegó el correo de verificación en
+la prueba del 13 de agosto, entregado pero escondido—, de modo que sirve para comprobar
+que el circuito funciona, no para saber si un cliente lo verá.
 
 ### `JWT_REFRESH_SECRET` se puede borrar del `.env`
 

@@ -145,19 +145,88 @@ export function resolvePlatformSecret(entorno: string = nodeEnv): string {
 }
 
 /**
- * Variable obligatoria en producción, opcional fuera.
+ * Credenciales de Gmail (OAuth2) para el driver de correo alternativo a Resend.
  *
- * Para las que no son secretos pero cuya ausencia rompe algo en silencio.
+ * Son las cuatro o ninguna: con tres de las cuatro no se envía nada, y el motivo
+ * —«falta el refresh token»— sólo se descubriría al primer registro fallido. Se
+ * comprueba al arrancar, en cualquier entorno, porque una configuración a medias es
+ * casi siempre un olvido, no una decisión.
  */
-function exigirEnProduccion(nombre: string, valor: string | undefined): string {
-  if (nodeEnv === 'production' && !valor) {
+const gmail = {
+  clientId: process.env.GMAIL_CLIENT_ID ?? '',
+  clientSecret: process.env.GMAIL_CLIENT_SECRET ?? '',
+  refreshToken: process.env.GMAIL_REFRESH_TOKEN ?? '',
+  user: process.env.GMAIL_USER ?? '',
+};
+const partesGmail = Object.entries(gmail);
+const gmailCompleto = partesGmail.every(([, v]) => v !== '');
+if (!gmailCompleto && partesGmail.some(([, v]) => v !== '')) {
+  const faltan = partesGmail
+    .filter(([, v]) => v === '')
+    .map(([k]) => 'GMAIL_' + k.replace(/[A-Z]/g, (c) => '_' + c).toUpperCase())
+    .join(', ');
+  throw new Error(
+    `Configuracion de Gmail incompleta: falta ${faltan}. Con las cuatro variables el ` +
+      'correo sale por Gmail; sin ninguna, por Resend o por el log. A medias no sale, y ' +
+      'no se nota hasta que alguien se registra.',
+  );
+}
+
+const resendApiKey = process.env.RESEND_API_KEY ?? '';
+
+/**
+ * Qué driver de correo va a usarse. Resend manda si está configurado; Gmail es el
+ * suplente para pruebas. Se decide aquí, una vez, en vez de en cada envío, para poder
+ * anunciarlo al arrancar: si no, saber por dónde salen los correos exige leer código.
+ */
+export const correoDriver: 'resend' | 'gmail' | 'consola' = resendApiKey
+  ? 'resend'
+  : gmailCompleto
+    ? 'gmail'
+    : 'consola';
+
+/**
+ * Sin driver de correo, los mensajes se escriben en el log en vez de enviarse.
+ *
+ * En producción eso no es un modo de desarrollo, es una avería silenciosa: quien se
+ * registra nunca recibe el enlace de verificación, quien olvida su contraseña nunca
+ * recibe el de restablecimiento, y ninguno de los dos sabe por qué. Se comprueba al
+ * arrancar, igual que CORS_ORIGINS y los secretos.
+ */
+if (nodeEnv === 'production' && correoDriver === 'consola') {
+  throw new Error(
+    'Falta configurar el correo: define RESEND_API_KEY, o las cuatro GMAIL_* ' +
+      '(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, USER). Sin ninguna de las dos los ' +
+      'correos NO se envian, se escriben en el log del servidor, y quien se registre o ' +
+      'pida restablecer su contrasena esperara un correo que nunca sale.',
+  );
+}
+
+/*
+  `||` y no `??`: en Docker, una variable declarada y sin valor llega como cadena VACÍA,
+  no como ausente. Con `??` esa cadena ganaría al valor por defecto y el remitente sería
+  la nada — que con Gmail ni siquiera arranca, y con Resend manda un `from` vacío.
+*/
+const emailFrom =
+  process.env.EMAIL_FROM ||
+  (correoDriver === 'gmail' ? `VentaFácil <${gmail.user}>` : 'VentaFácil <no-responder@localhost>');
+
+/*
+  Gmail no deja mentir en el remitente: manda SIEMPRE como la cuenta autenticada, y si
+  el `From:` dice otra cosa lo reescribe sin avisar. Un EMAIL_FROM que no coincida con
+  GMAIL_USER, entonces, no es una preferencia que se ignora: es un valor que parece
+  aplicarse y no se aplica. Mejor no arrancar que descubrirlo mirando la cabecera de un
+  correo que ya recibió un cliente.
+*/
+if (correoDriver === 'gmail') {
+  const direccion = (/<([^>]+)>/.exec(emailFrom)?.[1] ?? emailFrom).trim().toLowerCase();
+  if (direccion !== gmail.user.trim().toLowerCase()) {
     throw new Error(
-      `${nombre} es obligatoria en produccion: sin ella los correos NO se envian, se ` +
-        'escriben en el log del servidor, y quien se registre o pida restablecer su ' +
-        'contrasena esperara un correo que nunca sale.',
+      `EMAIL_FROM (${direccion}) no coincide con GMAIL_USER (${gmail.user}). Gmail envia ` +
+        'siempre como la cuenta autenticada y reescribiria el remitente en silencio. Usa ' +
+        `EMAIL_FROM="Nombre <${gmail.user}>" o una direccion de "enviar como" de esa cuenta.`,
     );
   }
-  return valor ?? '';
 }
 
 export const env = {
@@ -233,15 +302,14 @@ export const env = {
 
   // ── Correo transaccional ─────────────────────────────────────
   /**
-   * Sin clave, los correos se escriben en el log en vez de enviarse. Ver `mailer.ts`.
-   *
-   * En producción eso no es un modo de desarrollo, es una avería silenciosa: quien se
-   * registra nunca recibe el enlace de verificación, quien olvida su contraseña nunca
-   * recibe el de restablecimiento, y ninguno de los dos sabe por qué. Se comprueba al
-   * arrancar, igual que CORS_ORIGINS y los secretos.
+   * Cuál de los tres drivers de `mailer.ts` está activo, y con qué credenciales. La
+   * elección y las comprobaciones están arriba, junto a las variables: aquí sólo se
+   * exponen ya resueltas.
    */
-  resendApiKey: exigirEnProduccion('RESEND_API_KEY', process.env.RESEND_API_KEY),
-  emailFrom: process.env.EMAIL_FROM ?? 'VentaFácil <no-responder@localhost>',
+  correoDriver,
+  resendApiKey,
+  gmail,
+  emailFrom,
   /**
    * URL de la app de un negocio. `{slug}` se sustituye por su subdominio.
    *
