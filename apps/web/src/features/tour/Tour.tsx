@@ -44,8 +44,75 @@ function mismaCaja(a: DOMRect | null, b: DOMRect | null): boolean {
   return a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height;
 }
 
+/** Lo que se necesita del elemento resaltado. Un `DOMRect` encaja tal cual. */
+export interface CajaMedida {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  bottom: number;
+}
+
+/**
+ * Dónde va la tarjeta: debajo del hueco si cabe, encima si no, y centrada cuando no hay
+ * nada que señalar o cuando no cabe en ninguno de los dos lados.
+ *
+ * Es una función aparte, y no unas líneas dentro del componente, porque es la única parte
+ * del tour que puede fallar en silencio: jsdom no tiene maquetación —todo mide cero—, así
+ * que montar el componente no dice nada sobre dónde acaba el recuadro. Suelta se puede
+ * probar con pantallas de todos los tamaños, que es donde aparece el fallo de verdad: la
+ * tarjeta saliéndose por abajo en un teléfono.
+ *
+ * El resultado NUNCA se sale de la pantalla. Ése es el contrato.
+ */
+export function colocarTarjeta(
+  caja: CajaMedida | null,
+  alto: number,
+  vw: number,
+  vh: number,
+): { top: number; left: number; ancho: number } {
+  const ancho = Math.min(ANCHO_MAX, vw - 2 * MARGEN);
+  const centrada = { top: Math.max(MARGEN, (vh - alto) / 2), left: (vw - ancho) / 2, ancho };
+  if (!caja) return centrada;
+
+  // Alineada con el centro del elemento, pero sin pasarse de ninguno de los dos bordes.
+  const left = Math.min(
+    Math.max(MARGEN, caja.left + caja.width / 2 - ancho / 2),
+    Math.max(MARGEN, vw - ancho - MARGEN),
+  );
+  if (caja.bottom + HOLGURA + MARGEN + alto + MARGEN <= vh) {
+    return { top: caja.bottom + HOLGURA + MARGEN, left, ancho };
+  }
+  if (caja.top - HOLGURA - MARGEN - alto >= MARGEN) {
+    return { top: caja.top - HOLGURA - MARGEN - alto, left, ancho };
+  }
+  /*
+    No cabe ni encima ni debajo: pantalla baja, o el elemento ocupa casi toda la altura.
+    Se centra. La versión anterior la clavaba al borde de arriba, que TAMBIÉN cabía —eso
+    lo dejó claro una mutación que no logró romper ningún test—, pero pegada al filo se
+    lee peor y parece un error de maquetación. Centrada tapa parte de lo que señala; a
+    cambio se lee entera y no aparenta estar rota.
+  */
+  return { ...centrada, left };
+}
+
+/**
+ * El hueco REALMENTE visible.
+ *
+ * `visualViewport` y no `innerHeight` porque en un teléfono no miden lo mismo: al abrirse
+ * el teclado —y el primer paso del POS enfoca el buscador, así que se abre solo—,
+ * `innerHeight` sigue diciendo la altura de antes y la tarjeta se coloca contra un trozo
+ * de pantalla que ya está tapado. Es el «se come los botones» de toda la vida.
+ */
+function medirPantalla(): { vw: number; vh: number } {
+  if (typeof window === 'undefined') return { vw: 1024, vh: 768 };
+  const vv = window.visualViewport;
+  return { vw: vv?.width ?? window.innerWidth, vh: vv?.height ?? window.innerHeight };
+}
+
 export function Tour({ paso, indice, total, onAnterior, onSiguiente, onCerrar }: Props) {
   const [caja, setCaja] = useState<DOMRect | null>(null);
+  const [pantalla, setPantalla] = useState(medirPantalla);
   const tarjeta = useRef<HTMLDivElement>(null);
   const [alto, setAlto] = useState(0);
   const primero = indice === 0;
@@ -60,27 +127,50 @@ export function Tour({ paso, indice, total, onAnterior, onSiguiente, onCerrar }:
     let yaMirado = false;
     const medir = () => {
       const el = document.querySelector<HTMLElement>(`[data-tour="${paso.ancla}"]`);
-      if (!el) {
+      /*
+        Estar en el DOM no es estar en pantalla.
+
+        En el móvil, la tarjeta del carrito del POS no se desmonta: se esconde con
+        `hidden md:flex`, o sea `display:none`. El elemento se encuentra igual, y un
+        elemento oculto mide 0×0 en la esquina superior izquierda — el foco saldría como
+        un puntito arriba a la izquierda, con el velo alrededor y la tarjeta señalando a
+        la nada. Medir cero es no estar: se trata igual que si no existiera y el paso sale
+        centrado, que es lo que se quiere en una pantalla donde esa parte no se dibuja.
+      */
+      const r0 = el?.getBoundingClientRect();
+      if (!el || !r0 || (r0.width === 0 && r0.height === 0)) {
         setCaja(null);
         return;
       }
       // Sólo la primera vez que aparece: después, desplazar en cada medición pelearía
-      // con la persona si decide mover la pantalla ella misma.
+      // con la persona si decide mover la pantalla ella misma. La medida de después del
+      // desplazamiento la trae la vuelta siguiente del intervalo, 150 ms más tarde.
       if (!yaMirado) {
         yaMirado = true;
         el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
-      const r = el.getBoundingClientRect();
-      setCaja((previa) => (mismaCaja(previa, r) ? previa : r));
+      setCaja((previa) => (mismaCaja(previa, r0) ? previa : r0));
     };
     medir();
     const id = setInterval(medir, 150);
     return () => clearInterval(id);
   }, [paso.ancla, paso.id]);
 
+  // Girar el teléfono, abrir el teclado o cambiar el tamaño de la ventana recoloca la
+  // tarjeta. Sin esto, el tour se queda con la medida de cuando se abrió.
+  useEffect(() => {
+    const alCambiar = () => setPantalla(medirPantalla());
+    window.addEventListener('resize', alCambiar);
+    window.visualViewport?.addEventListener('resize', alCambiar);
+    return () => {
+      window.removeEventListener('resize', alCambiar);
+      window.visualViewport?.removeEventListener('resize', alCambiar);
+    };
+  }, []);
+
   useLayoutEffect(() => {
     if (tarjeta.current) setAlto(tarjeta.current.offsetHeight);
-  }, [paso.id, caja]);
+  }, [paso.id, caja, pantalla]);
 
   // Teclado: avanzar, retroceder y salir sin tocar la pantalla.
   useEffect(() => {
@@ -93,30 +183,15 @@ export function Tour({ paso, indice, total, onAnterior, onSiguiente, onCerrar }:
     return () => window.removeEventListener('keydown', onKey);
   }, [onCerrar, onSiguiente, onAnterior, primero]);
 
-  const vw = typeof window === 'undefined' ? 1024 : window.innerWidth;
-  const vh = typeof window === 'undefined' ? 768 : window.innerHeight;
-  const ancho = Math.min(ANCHO_MAX, vw - 2 * MARGEN);
+  const { vw, vh } = pantalla;
 
   /*
-    Dónde cabe el recuadro: debajo del hueco si hay sitio, arriba si no, y centrado
-    cuando no hay nada que señalar. El `alto` sale de medir la propia tarjeta y no de un
-    número inventado, porque los textos no miden todos lo mismo y en un teléfono la
-    diferencia es la que decide si el botón "Siguiente" queda fuera de la pantalla.
+    El `alto` sale de medir la propia tarjeta y no de un número inventado: los textos no
+    miden todos lo mismo, y en un teléfono esa diferencia es la que decide si el botón
+    «Siguiente» queda dentro o fuera de la pantalla.
   */
-  let estilo: React.CSSProperties;
-  if (!caja) {
-    estilo = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: ancho };
-  } else {
-    const debajo = caja.bottom + HOLGURA + MARGEN + alto <= vh;
-    const top = debajo
-      ? caja.bottom + HOLGURA + MARGEN
-      : Math.max(MARGEN, caja.top - HOLGURA - MARGEN - alto);
-    const left = Math.min(
-      Math.max(MARGEN, caja.left + caja.width / 2 - ancho / 2),
-      vw - ancho - MARGEN,
-    );
-    estilo = { top, left, width: ancho };
-  }
+  const { top, left, ancho } = colocarTarjeta(caja, alto, vw, vh);
+  const estilo: React.CSSProperties = { top, left, width: ancho };
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Tour: ${paso.titulo}`}>

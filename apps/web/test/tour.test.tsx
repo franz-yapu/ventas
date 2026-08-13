@@ -56,6 +56,25 @@ function conRouter(ui: ReactNode) {
 const tarjeta = () => screen.queryByTestId('tour-tarjeta');
 
 /**
+ * Da a un elemento un tamaño de verdad.
+ *
+ * jsdom no maqueta: `getBoundingClientRect` devuelve ceros para TODO, esté visible o no.
+ * Sin esto no se puede distinguir «está en pantalla» de «está oculto», que es justo lo
+ * que decide si el tour lo señala.
+ */
+function medirComo(el: Element, r: { top: number; left: number; width: number; height: number }) {
+  el.getBoundingClientRect = () =>
+    ({
+      ...r,
+      bottom: r.top + r.height,
+      right: r.left + r.width,
+      x: r.left,
+      y: r.top,
+      toJSON: () => r,
+    }) as DOMRect;
+}
+
+/**
  * Envoltorio con un botón que redibuja al PROVEEDOR, para simular que la sesión se
  * releyó.
  *
@@ -262,9 +281,34 @@ describe('cuando el elemento a señalar no está', () => {
       </TourProvider>,
     );
     await waitFor(() => expect(tarjeta()).not.toBeNull());
+    // jsdom no maqueta: sin esto TODO mide 0×0 y el tour lo trataría —con razón— como
+    // un elemento que no está en pantalla. Este test pasaba antes por casualidad.
+    medirComo(screen.getByRole('textbox'), { top: 100, left: 40, width: 300, height: 44 });
 
     await userEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
 
     await waitFor(() => expect(screen.queryByTestId('tour-foco')).not.toBeNull());
+  });
+
+  it('un elemento OCULTO no se señala: en el móvil mide cero y el foco iría a la esquina', async () => {
+    /*
+      El caso real: la tarjeta del carrito del POS no se desmonta en el teléfono, se
+      esconde con `display:none`. Sigue estando en el DOM, así que el tour la encuentra;
+      pero mide 0×0 en (0,0), y el foco saldría como un puntito arriba a la izquierda con
+      el velo alrededor.
+    */
+    conRouter(
+      <TourProvider>
+        <input data-tour="pos-buscar" style={{ display: 'none' }} />
+      </TourProvider>,
+    );
+    await waitFor(() => expect(tarjeta()).not.toBeNull());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+
+    // El paso se enseña igual, centrado, pero sin señalar nada.
+    expect(screen.getByText('Busca por nombre o por código')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 200)); // dos vueltas del intervalo de medición
+    expect(screen.queryByTestId('tour-foco')).toBeNull();
   });
 });
