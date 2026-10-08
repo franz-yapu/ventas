@@ -74,6 +74,15 @@ describe('comprobación del subdominio', () => {
     expect(res.json().data.disponible).toBe(true);
   });
 
+  it('rechaza los servicios de VertexAll que comparten el dominio', async () => {
+    // Un negocio llamado "subasta" se quedaría con subasta.vertexall.com.
+    for (const slug of ['subasta', 'panel', 'ventafacil', 'webmail', 'autodiscover']) {
+      const res = await app.inject({ method: 'GET', url: `/api/v1/register/slug?slug=${slug}` });
+      expect(res.json().data.disponible, slug).toBe(false);
+      expect(res.json().data.motivo, slug).toMatch(/reservada/);
+    }
+  });
+
   it('rechaza los reservados de la plataforma', async () => {
     for (const slug of ['admin', 'api', 'www', 'plataforma']) {
       const res = await app.inject({ method: 'GET', url: `/api/v1/register/slug?slug=${slug}` });

@@ -31,6 +31,34 @@ export const SUBDOMINIOS_RESERVADOS = new Set([
   'demo',
   'registro',
   'plataforma',
+  // VentaFácil vive en vertexall.com, junto a los demás servicios de VertexAll: un
+  // negocio llamado así se quedaría con la dirección de ese servicio (2026-10-08).
+  'subasta',
+  'panel',
+  'ventafacil',
+  'vertexall',
+  'vertex',
+  'landing',
+  'qa',
+  'prueba',
+  'beta',
+  'docs',
+  'portal',
+  'cuenta',
+  'pagos',
+  'facturacion',
+  'login',
+  'auth',
+  // Los que buscan solos los programas de correo y los servicios de DNS.
+  'webmail',
+  'smtp',
+  'imap',
+  'pop',
+  'autodiscover',
+  'autoconfig',
+  'ftp',
+  'ns1',
+  'ns2',
 ]);
 
 export const SLUG_MIN = 3;
