@@ -38,4 +38,8 @@ else
 fi
 
 echo "[deploy] Iniciando API…"
-exec pnpm --filter @ventafacil/api exec tsx src/index.ts
+# Node directamente como proceso principal del contenedor (no pnpm ni el CLI de tsx,
+# que lanzan un hijo): así el SIGTERM de cada despliegue le llega al API y este
+# cierra ordenadamente (ver src/index.ts) en vez de morir a mitad de una venta.
+cd /app/apps/api
+exec node --import tsx src/index.ts

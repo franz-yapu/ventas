@@ -93,6 +93,12 @@ el proceso—, pero en el VPS significa que cada despliegue corta las peticiones
 que estuviera cobrando una venta en ese instante se pierde a medias. Vale la pena mirarlo
 antes de desplegar.
 
+> ✅ **Resuelto el 8 de octubre.** `src/index.ts` atiende SIGTERM/SIGINT (deja de aceptar,
+> termina lo que está en curso, cierra la base; plazo de 8 s) y el entrypoint arranca con
+> `exec node --import tsx` para que la señal le llegue a Node y no a pnpm. Probado con
+> `docker stop` y una petición a medio enviar: la petición recibe su respuesta y el
+> contenedor sale con código 0 en ~3 s.
+
 ## Lo que queda del proyecto
 
 1. **El VPS.** ⛔ Leer `docs/DESPLIEGUE_TRAS_REVISION.md` antes. Y añadir a esa lista:
