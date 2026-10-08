@@ -328,10 +328,50 @@ export const env = {
   /** Ventana de agrupación: un correo por ventana, con la cuenta de lo que pasó. */
   alertWindowMin: Number(process.env.ALERT_WINDOW_MIN ?? 10),
 
+  /**
+   * Cuántos proxies hay delante del API (`TRUST_PROXY`). En el servidor el API está
+   * detrás de Traefik y del nginx de la web; sin esto, Fastify ve la IP del proxy en
+   * todas las peticiones y los límites por IP pasan a ser de TODA la plataforma: cinco
+   * altas por hora en total, veinte intentos de login cada cinco minutos para todos
+   * los negocios juntos. En el servidor: `TRUST_PROXY=loopback,uniquelocal`. Ver
+   * `leerTrustProxy`.
+   */
+  trustProxy: leerTrustProxy(process.env.TRUST_PROXY),
+
   /** Cuánto valen los enlaces que van por correo. */
   resetTokenTtlMin: Number(process.env.RESET_TOKEN_TTL_MIN ?? 60),
   verifyTokenTtlHours: Number(process.env.VERIFY_TOKEN_TTL_HOURS ?? 72),
 };
+
+/**
+ * `TRUST_PROXY` → la opción `trustProxy` de Fastify: de qué direcciones vienen los
+ * proxies en los que se confía para leer X-Forwarded-For.
+ *
+ * - vacía o `false`: no se confía en nadie (desarrollo, o el API expuesto directo).
+ * - lista de IPs, rangos o nombres de `proxy-addr`, separados por coma. En el servidor
+ *   Traefik y el nginx de la web llegan por la red interna de Docker, así que
+ *   **`loopback,uniquelocal`** (127/8, 10/8, 172.16/12, 192.168/16…). Un cliente de
+ *   Internet nunca llega desde una dirección privada, así que no puede colarse por ahí:
+ *   Fastify recorre la cabecera de derecha a izquierda y se queda con la primera IP que
+ *   no es de un proxy de confianza, que es la que puso Traefik.
+ * - `true`: se confía en cualquier X-Forwarded-For. **No usar en producción**: el
+ *   cliente podría inventarse la IP en la cabecera y saltarse los límites.
+ *
+ * Un número (saltos de proxy) se rechaza al arrancar: desde Fastify 5.12 la cuenta de
+ * saltos "falla cerrada" y no confía en nadie, así que parecería configurado sin estarlo.
+ */
+export function leerTrustProxy(valor: string | undefined): boolean | string {
+  const v = (valor ?? '').trim();
+  if (v === '' || v === 'false') return false;
+  if (v === 'true') return true;
+  if (/^\d+$/.test(v)) {
+    throw new Error(
+      `TRUST_PROXY=${v}: Fastify ya no acepta un número de saltos (no confiaría en nadie). ` +
+        'Usa la lista de redes de los proxies, p. ej. TRUST_PROXY=loopback,uniquelocal',
+    );
+  }
+  return v;
+}
 
 /**
  * Convierte la duración del refresh ('30d', '12h', '90m') a milisegundos, para que la

@@ -3,7 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { API_PREFIX } from '@ventafacil/shared';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { resolve } from 'node:path';
 import { db } from '@ventafacil/db';
 import { sql } from 'drizzle-orm';
@@ -39,16 +39,24 @@ import './types.js';
  * levantarla en memoria (app.inject) sin abrir un puerto.
  */
 export async function buildApp(
-  opts: { logger?: boolean; loginRateLimitMax?: number; exportRateLimitMax?: number } = {},
+  opts: {
+    logger?: boolean;
+    loginRateLimitMax?: number;
+    exportRateLimitMax?: number;
+    trustProxy?: boolean | string;
+  } = {},
 ): Promise<FastifyInstance> {
-  const app = Fastify({
+  const opciones: FastifyServerOptions = {
+    // Detrás de proxies, sin esto todas las IPs son la del proxy (ver env.trustProxy).
+    trustProxy: opts.trustProxy ?? env.trustProxy,
     logger:
       opts.logger === false
         ? false
         : env.nodeEnv === 'development'
           ? { transport: { target: 'pino-pretty' } }
           : true,
-  });
+  };
+  const app = Fastify(opciones);
 
   // Tope del login de esta instancia. Por defecto el de la configuración; los tests que
   // prueban el limitador levantan su propia app con el valor real.

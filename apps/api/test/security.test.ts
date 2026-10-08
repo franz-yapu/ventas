@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
-import { originPermitido, resolverSecreto } from '../src/env.js';
+import { leerTrustProxy, originPermitido, resolverSecreto } from '../src/env.js';
 import { createTenant, makeApp, resetDb, type Tenant } from './helpers.js';
 
 /**
@@ -119,6 +119,61 @@ describe('límite del login (fuerza bruta)', () => {
     } finally {
       await solo.close();
     }
+  });
+});
+
+describe('detrás de proxies (TRUST_PROXY)', () => {
+  // En el servidor: cliente → Traefik → nginx de la web → API. Traefik pone la IP del
+  // cliente en X-Forwarded-For, nginx añade la de Traefik, y el API ve llegar la
+  // conexión desde nginx. Confiando en las redes privadas, el límite va por cliente.
+  const PROXIES = 'loopback,uniquelocal';
+  const intentar = (app: FastifyInstance, xff: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      headers: { 'x-forwarded-for': xff },
+      payload: { username: 'admin', password: 'incorrecta', business: 'seguridad' },
+    });
+
+  it('dos clientes distintos ya no comparten el límite del login', async () => {
+    const app = await buildApp({ logger: false, loginRateLimitMax: 5, trustProxy: PROXIES });
+    await app.ready();
+    try {
+      let ultimo = 0;
+      for (let i = 0; i < 8; i++) ultimo = (await intentar(app, '203.0.113.7, 10.0.1.2')).statusCode;
+      expect(ultimo, 'el primer cliente debería estar bloqueado').toBe(429);
+
+      const otro = await intentar(app, '198.51.100.20, 10.0.1.2');
+      expect(otro.statusCode, 'el bloqueo de un cliente alcanzó a otro').toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('inventarse IPs en la cabecera no salta el límite', async () => {
+    const app = await buildApp({ logger: false, loginRateLimitMax: 5, trustProxy: PROXIES });
+    await app.ready();
+    try {
+      let ultimo = 0;
+      // El atacante manda su propio X-Forwarded-For distinto cada vez; Traefik añade
+      // detrás su IP real, y es esa la que cuenta.
+      for (let i = 0; i < 8; i++) {
+        ultimo = (await intentar(app, `1.2.3.${i}, 203.0.113.99, 10.0.1.2`)).statusCode;
+      }
+      expect(ultimo).toBe(429);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('TRUST_PROXY se interpreta como lista de redes, todo o nada', () => {
+    expect(leerTrustProxy(undefined)).toBe(false);
+    expect(leerTrustProxy('')).toBe(false);
+    expect(leerTrustProxy('false')).toBe(false);
+    expect(leerTrustProxy('true')).toBe(true);
+    expect(leerTrustProxy(' loopback,uniquelocal ')).toBe('loopback,uniquelocal');
+    // Un número de saltos ya no lo acepta Fastify: se rechaza en vez de quedar inerte.
+    expect(() => leerTrustProxy('2')).toThrow(/loopback,uniquelocal/);
   });
 });
 
