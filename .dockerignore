@@ -6,3 +6,12 @@
 **/*.log
 apps/web/dev-dist
 scratchpad
+# Nunca dentro de una imagen: el Dockerfile hace `COPY . .` y, sin estas líneas, el
+# .env de desarrollo (claves JWT) y los volcados de backups/ acababan horneados en la
+# imagen del API (visto el 2026-10-08 en ventafacil-api:staging). Las variables llegan
+# por el entorno del contenedor; el .env.example sí puede ir.
+.env
+.env.*
+!.env.example
+backups
+**/coverage
