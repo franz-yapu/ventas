@@ -10,21 +10,26 @@ allowBuilds:
 # Versiones forzadas de dependencias que no son nuestras.
 #
 # `fast-uri` y `find-my-way` entran por dentro de Fastify, así que no se arreglan
-# subiendo lo que declaramos: la última Fastify (5.11.2) sigue trayendo las versiones
-# con fallo. Hasta que Fastify las suba, se fuerzan aquí.
+# subiendo lo que declaramos. Revisado el 2026-10-08 al subir Fastify a 5.12.5: sigue
+# aceptando fast-uri con fallos (ajv pide ^3, fast-json-stringify ^4), así que se
+# mantienen y se suben los mínimos.
 #
-#   fast-uri     confusión de host por barra invertida (alta)
+#   fast-uri     confusión de host por barra invertida, IDN y mayúsculas (alta)
 #   find-my-way  denegación de servicio con HTTP/2 (alta)
 #
 # Se revisa cuando se suba Fastify: si ya trae versiones parcheadas, esto sobra y hay
 # que quitarlo — un override olvidado congela una dependencia y termina estorbando.
 overrides:
-  fast-uri@^3: ^3.1.5
-  fast-uri@^4: ^4.1.2
+  fast-uri@^3: ^3.1.8
+  fast-uri@^4: ^4.1.5
   find-my-way: ^9.6.1
   # `brace-expansion` entra por dentro de @fastify/static y de exceljs (denegación de
   # servicio por expansión sin límite). Ninguno de los dos la ha subido todavía.
-  brace-expansion@^2: ^2.1.4
-  brace-expansion@^5: ^5.0.9
+  # La 1.x llega por exceljs > archiver > glob > minimatch (2026-10-08).
+  brace-expansion@^1: ^1.1.21
+  brace-expansion@^2: ^2.1.7
+  brace-expansion@^5: ^5.0.12
   # `uuid` viejo dentro de exceljs.
   uuid@^8: ^11.1.1
+  # `dompurify` dentro de jspdf (export a PDF): fallo en el hook afterSanitize (baja).
+  dompurify@^3: ^3.4.16
