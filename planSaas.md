@@ -542,6 +542,27 @@ offline-first genera pocas peticiones por tienda (el catálogo va en el disposit
 ventas se sincronizan en lote). **Lo que hay que vigilar es el p95, no el contador de
 clientes.**
 
+#### En el servidor nuevo (Contabo, 4 vCPU / 8 GB), 8 de octubre de 2026
+
+Medido con la versión de prueba desplegada al lado de la subasta y de vertexall.com, con
+el SaaS **limitado a 2 núcleos** (API 1, base 0,75, web 0,25) y el generador dentro del
+propio servidor (0,5 núcleos), para que el internet de casa no ensucie la medida. Cada
+caja hace 2 lecturas + 1 venta cada ~15 s (`--pausa 15 --azar`): una caja muy ocupada.
+
+| Cajas a la vez | req/s | p95 (cliente) | Errores | Subasta p95 | vertexall.com p95 |
+| -------------- | ----- | ------------- | ------- | ----------- | ----------------- |
+| 200            | 33    | 20 ms         | 0       | 45 ms       | 33 ms             |
+| 400            | 65    | 26 ms         | 0       | 50 ms       | 36 ms             |
+| 800            | 129   | 68 ms         | 0       | 54 ms       | 35 ms             |
+| 1600           | 172   | **5,3 s**     | 1,2 %   | 252 ms      | 41 ms             |
+
+**Hasta 800 cajas a la vez va sobrado, y la subasta y la web no se enteran.** A 1600 el
+SaaS se satura (la base topa con su 0,75 de CPU), pero gracias a los límites la subasta
+sigue respondiendo (252 ms) y vertexall.com ni se mueve. Espacio: ~1 KB por venta con su
+historial. Sin los límites de CPU, en la primera pasada la subasta sí sufrió: **los
+límites no son opcionales en producción.** Ojo aparte: el propio contenedor de Coolify
+tiene picos de hasta 2 núcleos por sus tareas, ajenos a VentaFácil.
+
 > Para repetir la medición: `node scripts/load-test.mjs --cajas 3,5,10,20,40`.
 > Necesita `RATE_LIMIT_MAX` alto en staging, o mide el limitador en vez del servidor:
 > toda la carga sale de una sola IP.

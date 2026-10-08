@@ -33,6 +33,13 @@ const SEGUNDOS = Number(arg('segundos', 20));
  * cajas simultáneas aguanta sin que nadie note lentitud. Son dos preguntas distintas.
  */
 const PAUSA = Number(arg('pausa', 0));
+/**
+ * Con `--azar`, cada caja empieza en un momento al azar dentro de la primera pausa y la
+ * pausa varía ±50 %. Sin esto, todas las cajas cobran en el mismo segundo y la prueba
+ * mide ráfagas sincronizadas que en tiendas de verdad no ocurren (visto el 2026-10-08:
+ * p50 de 12 ms y p95 de 2,8 s a sólo 60 req/s).
+ */
+const AZAR = process.argv.includes('--azar');
 const PREFIJO = 'carga';
 
 async function json(path, { method = 'GET', body, token } = {}) {
@@ -152,13 +159,17 @@ async function fase(cajas, segundos) {
   const t0 = performance.now();
   await Promise.all(
     cajas.map(async (caja) => {
+      if (AZAR && PAUSA > 0) await new Promise((r) => setTimeout(r, Math.random() * PAUSA * 1000));
       while (Date.now() < hasta) {
         try {
           await ciclo(caja, medir);
         } catch {
           medir({ status: 0, ms: 0 });
         }
-        if (PAUSA > 0) await new Promise((r) => setTimeout(r, PAUSA * 1000));
+        if (PAUSA > 0) {
+          const pausa = AZAR ? PAUSA * (0.5 + Math.random()) : PAUSA;
+          await new Promise((r) => setTimeout(r, pausa * 1000));
+        }
       }
     }),
   );
